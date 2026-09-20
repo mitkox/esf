@@ -62,6 +62,13 @@ verification, one verified patch out.`,
 
 	root.AddCommand(
 		newRunCommand(&configPath),
+		newGetCommand(&configPath),
+		newDescribeCommand(&configPath),
+		newApplyCommand(&configPath),
+		newDeleteCommand(&configPath),
+		newReviewCommand(&configPath),
+		newAttachCommand(&configPath),
+		newPreviewCommand(&configPath),
 		newStatusCommand(&configPath),
 		newLogsCommand(&configPath),
 		newWorkerCommand(&configPath),
@@ -110,6 +117,12 @@ func newRunCommand(configPath *string) *cobra.Command {
 		runID     string
 		wait      bool
 		agentTO   time.Duration
+		scope     string
+		workspace string
+		egress    string
+		changeID  string
+		parentRun string
+		review    bool
 	)
 
 	cmd := &cobra.Command{
@@ -173,6 +186,9 @@ execute an arbitrary program.`,
 
 			req := factory.RunRequest{
 				RunID:               runID,
+				ChangeID:            changeID,
+				ParentRunID:         parentRun,
+				Scope:               scope,
 				Repository:          repo,
 				LocalPath:           localPath,
 				Revision:            rev,
@@ -180,10 +196,21 @@ execute an arbitrary program.`,
 				SandboxTemplate:     template,
 				AgentHarness:        agent,
 				AgentModel:          model,
+				Workspace:           workspace,
+				EgressPolicy:        egress,
 				VerificationProfile: profile,
 				AgentTimeout:        cfg.Limits.AgentTimeout.Std(),
 				VerificationTimeout: cfg.Limits.VerificationTimeout.Std(),
 				TotalTimeout:        cfg.Limits.TotalTimeout.Std(),
+			}
+			// --model accepts either a declared model NAME or a raw model id, as it
+			// always has. Only a declared name is resolved as a resource and pinned
+			// in evidence; a raw id is passed through to the harness unchanged.
+			if _, declared := cfg.Models[model]; declared {
+				req.Model = model
+			}
+			if cmd.Flags().Changed("review") {
+				req.Review = &review
 			}
 			if agentTO > 0 {
 				req.AgentTimeout = agentTO
@@ -241,6 +268,12 @@ execute an arbitrary program.`,
 	cmd.Flags().StringVar(&runID, "run-id", "", "explicit run id (default: generated)")
 	cmd.Flags().BoolVar(&wait, "wait", true, "wait for the run to finish")
 	cmd.Flags().DurationVar(&agentTO, "agent-timeout", 0, "override the agent timeout")
+	cmd.Flags().StringVar(&scope, "scope", "", "tenancy scope (defaults to the default scope)")
+	cmd.Flags().StringVar(&workspace, "workspace", "", "named pre-warmed workspace")
+	cmd.Flags().StringVar(&egress, "egress", "", "named egress policy")
+	cmd.Flags().StringVar(&changeID, "change", "", "attach the run to a durable change (default: the run itself)")
+	cmd.Flags().StringVar(&parentRun, "parent-run", "", "run this one reworks (lineage evidence)")
+	cmd.Flags().BoolVar(&review, "review", false, "pause for human review before finalizing")
 	return cmd
 }
 
@@ -273,6 +306,30 @@ func printRunResult(runtime *factory.Runtime, manifest factory.RunManifest, runI
 	fmt.Println()
 	fmt.Printf("FACTORY RESULT: %s\n", manifest.FactoryResult)
 	fmt.Printf("AGENT RESULT:   %s\n", manifest.AgentResult)
+	if manifest.ChangeID != "" {
+		fmt.Printf("CHANGE:         %s\n", manifest.ChangeID)
+	}
+	if manifest.Scope != "" {
+		fmt.Printf("SCOPE:          %s\n", manifest.Scope)
+	}
+	if manifest.Workspace != "" {
+		fmt.Printf("WORKSPACE:      %s\n", manifest.Workspace)
+	}
+	if manifest.EgressPolicy != "" {
+		fmt.Printf("EGRESS:         %s (%s)\n", manifest.EgressPolicy, manifest.EgressSummary)
+	}
+	if manifest.Model != "" {
+		fmt.Printf("MODEL:          %s/%s\n", manifest.ModelProvider, manifest.Model)
+	}
+	if manifest.ReviewConfigured {
+		fmt.Printf("REVIEW:         %s (sandbox %s)\n", manifest.ReviewOutcome, manifest.SuspendResult)
+		for _, preview := range manifest.Previews {
+			fmt.Printf("PREVIEW:        %d -> %s\n", preview.Port, preview.URL)
+		}
+	}
+	if len(manifest.BudgetExceeded) > 0 {
+		fmt.Printf("BUDGET:         EXCEEDED (%s)\n", strings.Join(manifest.BudgetExceeded, "; "))
+	}
 	if manifest.VerificationResult != "" {
 		if manifest.VerificationResult == factory.OutcomeSuccess {
 			fmt.Printf("VERIFICATION:   PASSED\n")
@@ -290,6 +347,16 @@ func printRunResult(runtime *factory.Runtime, manifest factory.RunManifest, runI
 	}
 	if manifest.Error != "" {
 		fmt.Printf("ERROR:          %s\n", manifest.Error)
+	}
+	if len(manifest.Conditions) > 0 {
+		fmt.Println("\nConditions:")
+		for _, c := range manifest.Conditions {
+			detail := c.Reason
+			if c.Message != "" {
+				detail = orDash(c.Reason) + " — " + c.Message
+			}
+			fmt.Printf("  %-22s %-7s %s\n", c.Type, c.Status, detail)
+		}
 	}
 
 	// A gate that rewrites tracked files is worth shouting about: the
@@ -319,7 +386,10 @@ func printRunResult(runtime *factory.Runtime, manifest factory.RunManifest, runI
 // ── status ──────────────────────────────────────────────────────────────────
 
 func newStatusCommand(configPath *string) *cobra.Command {
-	var asJSON bool
+	var (
+		asJSON bool
+		watch  bool
+	)
 	cmd := &cobra.Command{
 		Use:          "status <run-id>",
 		Short:        "Show a run's status and result",
@@ -356,21 +426,15 @@ func newStatusCommand(configPath *string) *cobra.Command {
 			defer c.Close()
 
 			workflowID := factory.WorkflowIDForRun(runID)
+			if watch {
+				return watchRunStatus(ctx, c, workflowID, runID)
+			}
 			status, err := factory.QueryRunStatus(ctx, c, workflowID, "")
 			if err == nil {
 				if asJSON {
 					return printJSON(status)
 				}
-				fmt.Printf("Run ID:      %s\n", status.RunID)
-				fmt.Printf("State:       %s\n", status.State)
-				fmt.Printf("Step:        %s\n", status.CurrentStep)
-				if status.SandboxID != "" {
-					fmt.Printf("Sandbox:     %s\n", status.SandboxID)
-				}
-				if status.BaselineSHA != "" {
-					fmt.Printf("Baseline:    %s\n", status.BaselineSHA)
-				}
-				fmt.Printf("Agent:       %s\n", status.AgentOutcome)
+				printRunStatus(status)
 				return nil
 			}
 
@@ -393,7 +457,84 @@ func newStatusCommand(configPath *string) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "emit JSON")
+	cmd.Flags().BoolVar(&watch, "watch", false, "stream condition transitions until the run finishes")
 	return cmd
+}
+
+// printRunStatus renders a live workflow status, including conditions.
+func printRunStatus(status factory.RunStatus) {
+	fmt.Printf("Run ID:      %s\n", status.RunID)
+	if status.ChangeID != "" {
+		fmt.Printf("Change:      %s\n", status.ChangeID)
+	}
+	if status.Scope != "" {
+		fmt.Printf("Scope:       %s\n", status.Scope)
+	}
+	fmt.Printf("State:       %s\n", status.State)
+	fmt.Printf("Step:        %s\n", status.CurrentStep)
+	if status.SandboxID != "" {
+		fmt.Printf("Sandbox:     %s\n", status.SandboxID)
+	}
+	if status.BaselineSHA != "" {
+		fmt.Printf("Baseline:    %s\n", status.BaselineSHA)
+	}
+	fmt.Printf("Agent:       %s\n", status.AgentOutcome)
+	if len(status.Conditions) > 0 {
+		fmt.Println("Conditions:")
+		for _, c := range status.Conditions {
+			fmt.Printf("  %-22s %-7s %s\n", c.Type, c.Status, c.Reason)
+		}
+	}
+}
+
+// watchRunStatus streams condition transitions until the workflow closes.
+//
+// It polls the workflow query rather than opening a long-lived connection: the
+// status query is cheap, and a watcher that survives a dropped connection
+// (which polling does) is more useful in a terminal than a stream that dies
+// with the network.
+func watchRunStatus(ctx context.Context, c client.Client, workflowID, runID string) error {
+	seen := map[factory.ConditionType]factory.ConditionStatus{}
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		status, err := factory.QueryRunStatus(ctx, c, workflowID, "")
+		if err != nil {
+			// The workflow may have closed between polls; the manifest is then
+			// the record to read, and the caller can re-run `status`.
+			return fmt.Errorf("run %s is no longer queryable (it may have finished): %w", runID, err)
+		}
+		for _, cond := range status.Conditions {
+			if seen[cond.Type] == cond.Status {
+				continue
+			}
+			seen[cond.Type] = cond.Status
+			fmt.Printf("%s %-22s %-7s %s\n", time.Now().Format("15:04:05"), cond.Type, cond.Status, cond.Reason)
+		}
+		if status.State == factory.StatePaused {
+			fmt.Printf("%s %-22s %-7s %s\n", time.Now().Format("15:04:05"), "PAUSED", "", "awaiting `factory review "+runID+" --approve|--reject`")
+		}
+		if isTerminalRunState(status.State) {
+			fmt.Printf("%s final state: %s\n", time.Now().Format("15:04:05"), status.State)
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
+// isTerminalRunState reports whether a state ends a run.
+func isTerminalRunState(state factory.RunState) bool {
+	switch state {
+	case factory.StateAgentFailed, factory.StateVerificationFailed, factory.StateSucceeded,
+		factory.StateCancelled, factory.StateInfrastructureFailed, factory.StateInvalidRequest:
+		return true
+	default:
+		return false
+	}
 }
 
 // ── logs ────────────────────────────────────────────────────────────────────

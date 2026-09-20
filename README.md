@@ -69,7 +69,27 @@ In another terminal, submit a task for an allowed repository:
 
 The default profile expects repository-owned `build.sh` and `test.sh` scripts.
 Configure gates appropriate to your project. Inspect results with
-`factory status RUN_ID` and `factory logs RUN_ID`.
+`factory status RUN_ID` and `factory logs RUN_ID`:
+
+```sh
+./bin/factory describe run RUN_ID       # manifest + conditions + inventory + audit
+./bin/factory status RUN_ID --watch     # stream condition transitions
+./bin/factory get changes               # durable work items and their spend
+```
+
+With `[review] enabled = true`, a run pauses after the gates report:
+
+```sh
+./bin/factory review RUN_ID --approve
+./bin/factory review RUN_ID --reject --note "use the formal greeting"
+./bin/factory run --change CHANGE_ID --parent-run RUN_ID ...   # rework activation
+```
+
+A run can also be submitted from a reviewed manifest:
+
+```sh
+./bin/factory apply -f run.toml
+```
 
 Build the inherited CLI separately with
 `go build -trimpath -o bin/machinist ./cmd/machinist`, then run

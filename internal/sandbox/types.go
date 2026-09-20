@@ -58,12 +58,12 @@ type Limits struct {
 // sites.
 type Network struct {
 	// AllowOut lists explicitly permitted destinations (host, CIDR or domain).
-	AllowOut []string
+	AllowOut []string `json:"allow_out,omitempty"`
 	// DenyOut lists explicitly denied destinations.
-	DenyOut []string
+	DenyOut []string `json:"deny_out,omitempty"`
 	// AllowInternet, when non-nil, requests that public egress be enabled or
 	// disabled.
-	AllowInternet *bool
+	AllowInternet *bool `json:"allow_internet,omitempty"`
 }
 
 // Info is a point-in-time description of a live sandbox, used for leak
@@ -161,6 +161,16 @@ type Capabilities struct {
 	// CloneMultiple reports whether one call can produce several clones, which
 	// Phase 2's fan-out relies on.
 	CloneMultiple bool
+
+	// Suspend reports that the provider implements Suspender, so the factory may
+	// checkpoint an idle sandbox instead of paying for it through a review gate.
+	Suspend bool
+	// Resume reports that the provider implements Suspender and can bring a
+	// checkpointed sandbox back.
+	Resume bool
+	// Preview reports that the provider implements Previewer, so an operator may
+	// expose a port in a running sandbox for human review.
+	Preview bool
 }
 
 // Snapshotter is the Phase 2 snapshot seam. It is declared but NOT implemented

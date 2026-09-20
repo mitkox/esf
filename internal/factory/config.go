@@ -36,6 +36,25 @@ type Config struct {
 	// Harnesses are the agent registrations, keyed by harness name.
 	Harnesses map[string]HarnessConfig `toml:"harnesses"`
 
+	// Models are the named model endpoints a harness may use.
+	Models map[string]ModelConfig `toml:"models"`
+
+	// Egress holds the named network policies a run may execute under.
+	Egress map[string]EgressPolicyConfig `toml:"egress"`
+
+	// Workspaces are the named pre-warmed execution environments.
+	Workspaces map[string]WorkspaceConfig `toml:"workspaces"`
+
+	// Budgets are the named spending ceilings.
+	Budgets map[string]BudgetConfig `toml:"budgets"`
+
+	// Scopes are the tenancy boundaries. A caller names one; it can only
+	// narrow the operator's global policy, never widen it.
+	Scopes map[string]ScopeConfig `toml:"scopes"`
+
+	// Review configures the human review gate.
+	Review ReviewConfig `toml:"review"`
+
 	// Verification holds the deterministic gate profiles.
 	Verification map[string]verification.Profile `toml:"verification"`
 
@@ -64,6 +83,17 @@ type SandboxConfig struct {
 	// must never contain task-derived text. It runs before the repository is
 	// cloned, so it can only prepare the image, not the checkout.
 	SetupScript string `toml:"setup_script"`
+
+	// AllowAttach permits `factory attach`, which executes an operator-supplied
+	// command inside a run's sandbox. It is DEFAULT CLOSED for the same reason a
+	// debug port is: attach is remote code execution with the factory's
+	// credentials, and it must be an explicit operator decision, never a
+	// caller's. Every attach is audited in the run's evidence directory.
+	AllowAttach bool `toml:"allow_attach"`
+
+	// AllowPreview permits `factory preview`, which publishes a port from a
+	// run's sandbox through the deployment ingress. Default closed.
+	AllowPreview bool `toml:"allow_preview"`
 }
 
 // TemporalConfig locates the Temporal cluster.
@@ -208,6 +238,20 @@ func Default() Config {
 		},
 		Verification: defaultVerificationProfiles(),
 		Repositories: RepositoriesConfig{},
+		Models:       map[string]ModelConfig{},
+		Egress:       map[string]EgressPolicyConfig{},
+		Workspaces:   map[string]WorkspaceConfig{},
+		Budgets: map[string]BudgetConfig{
+			DefaultBudget: {},
+		},
+		Scopes: map[string]ScopeConfig{
+			DefaultScope: {},
+		},
+		Review: ReviewConfig{
+			Enabled: false,
+			Timeout: tomlx.FromStd(DefaultReviewTimeout),
+			Suspend: true,
+		},
 		Observability: ObservabilityConfig{
 			OTLPEndpoint: envOr("FACTORY_OTEL_ENDPOINT", ""),
 			ServiceName:  "factory",
@@ -301,6 +345,56 @@ func (c Config) Validate() error {
 		}
 		if err := profile.Validate(); err != nil {
 			problems = append(problems, fmt.Sprintf("verification %q: %v", name, err))
+		}
+	}
+	for name, model := range c.Models {
+		if err := model.Validate(name); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
+	for name, workspace := range c.Workspaces {
+		if err := workspace.Validate(name); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
+	for name, budget := range c.Budgets {
+		if err := budget.Validate(name); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
+	for name, scope := range c.Scopes {
+		if scope.Egress != "" {
+			if _, ok := c.Egress[scope.Egress]; !ok {
+				problems = append(problems, fmt.Sprintf("scope %q: unknown egress policy %q", name, scope.Egress))
+			}
+		}
+		if scope.Model != "" {
+			if _, ok := c.Models[scope.Model]; !ok {
+				problems = append(problems, fmt.Sprintf("scope %q: unknown model %q", name, scope.Model))
+			}
+		}
+		if scope.Workspace != "" {
+			if _, ok := c.Workspaces[scope.Workspace]; !ok {
+				problems = append(problems, fmt.Sprintf("scope %q: unknown workspace %q", name, scope.Workspace))
+			}
+		}
+		if scope.Budget != "" {
+			if _, ok := c.Budgets[scope.Budget]; !ok {
+				problems = append(problems, fmt.Sprintf("scope %q: unknown budget %q", name, scope.Budget))
+			}
+		}
+		for _, h := range scope.Harnesses {
+			if _, ok := c.Harnesses[h]; !ok {
+				problems = append(problems, fmt.Sprintf("scope %q: unknown harness %q", name, h))
+			}
+		}
+	}
+	if c.Review.Timeout < 0 {
+		problems = append(problems, "review.timeout must not be negative")
+	}
+	for _, port := range c.Review.PreviewPorts {
+		if port <= 0 || port > 65535 {
+			problems = append(problems, fmt.Sprintf("review.preview_ports: %d is out of range", port))
 		}
 	}
 	if c.Limits.AgentTimeout <= 0 {

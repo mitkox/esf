@@ -1,0 +1,40 @@
+# Example run manifest for `factory apply -f run.example.toml`.
+#
+# Everything here is a caller-controlled value: task text, an approved
+# repository, an exact revision, and REFERENCES to operator-declared resources.
+# It cannot express an executable, a host path or a credential — those live in
+# factory.toml, which this file cannot override.
+#
+# Unknown fields are rejected, so a typo fails loudly instead of silently
+# dropping the setting it was meant to change.
+
+run_id    = "example-run-0001"
+# change_id = "PAY-1234"      # omit to make the run its own change
+# parent_run_id = "run-…"     # set when this run reworks a reviewed run
+
+scope     = "payments"        # tenancy boundary; the scope's resources apply
+repository = "https://github.com/your-org/your-repo"
+revision   = "0123456789abcdef0123456789abcdef01234567"
+
+task = """
+Change the greeting from hello to hello factory.
+Acceptance criteria:
+  - the greeting is configurable
+  - ./build.sh and ./test.sh pass
+"""
+
+agent_harness        = "opencode2"
+# Must name a [models.<name>] entry to be pinned as a resource; an undeclared
+# value is passed to the harness as a raw model id (it is not policy).
+model                = "default"
+workspace            = "python"
+egress_policy        = "restricted"
+verification_profile = "default"
+
+# Pause for a human after the deterministic gates report. The decision is sent
+# with `factory review <run-id> --approve|--reject`.
+review = true
+
+# Optional per-run ceilings; omitted values come from configuration.
+# agent_timeout = "30m"
+# total_timeout = "90m"
