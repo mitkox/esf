@@ -136,16 +136,47 @@ Inspect a run:
 
 ```
 .factory/runs/<run-id>/
-  task.json          the request as accepted, with a task hash
+  task.json          the request as accepted, with a task hash and resolved resources
   baseline.json      source, requested revision, resolved SHA, branch, status
   git-before.txt     exactly what the agent started from
   changes.patch      the deliverable
   git-after.txt      post-run SHA and status
-  run.json           the manifest: identity, environment, timing, three outcomes
+  run.json           the manifest: identity, environment, resources, conditions, three outcomes
+  inventory.json     the exact environment document the agent was given
   cleanup.json       destroy outcome, independently verified
+  audit/actions.jsonl  operator actions (attach, preview, review decisions)
   agent/             prompt, stdout, stderr, result (all redacted)
   verification/      per-gate result, stdout and stderr (all redacted)
 ```
+
+Changes are stored beside the runs, not inside them:
+
+```
+.factory/changes/<change-id>.json   identity, activations, lineage, aggregates
+```
+
+## Resources and the work item
+
+Three ideas from Google's AX shape the factory layer (see
+[ADR 0001](adr/0001-ax-inspired-resources.md)):
+
+1. **Runs reference declared resources.** `[workspaces]`, `[models]`,
+   `[egress]`, `[budgets]` and `[scopes]` are operator policy; a run names them
+   and the resolved set with its digest lands in `run.json`. A scope can only
+   narrow the global policy.
+2. **A change owns identity.** Runs are activations of a durable change, so
+   rework carries lineage and spend aggregates instead of starting from zero.
+3. **The sandbox inventory is the harness contract.** Every agent starts with
+   `/workspace/.factory/inventory.json` describing its repository, revision,
+   workspace, egress policy and model — names and digests, never credentials
+   and never the task text.
+
+A run pauses for a human review gate when `[review] enabled = true`; the
+sandbox is checkpointed while paused (recorded as `suspend_result`), preview
+URLs are published (or `preview_result = SKIPPED` explains why they were not),
+and a timeout is recorded as `timeout` rather than implied. Rejection notes are
+redacted into the manifest and carried to the durable change as its rework note.
+Attach and preview are default closed and audited.
 
 ## Security model in one table
 

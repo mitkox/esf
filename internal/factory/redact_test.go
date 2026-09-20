@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/mitkox/esf/internal/agentharness"
 	"github.com/mitkox/esf/internal/artifacts"
 	"testing"
 )
@@ -69,6 +70,18 @@ func TestRedactorScrubsPatterns(t *testing.T) {
 				t.Fatalf("expected the redaction mask in %q", got)
 			}
 		})
+	}
+}
+
+func TestCollectSecretsIncludesNamedModelCredential(t *testing.T) {
+	secret := "named-model-secret-value"
+	t.Setenv("FACTORY_NAMED_MODEL_KEY", secret)
+	cfg := Config{Models: map[string]ModelConfig{
+		"fast": {Provider: "test", Model: "model", APIKeyEnv: "FACTORY_NAMED_MODEL_KEY"},
+	}}
+	values := collectSecrets(cfg, agentharness.NewRegistry())
+	if len(values) != 1 || values[0] != secret {
+		t.Fatalf("collectSecrets = %v, want named model credential", values)
 	}
 }
 

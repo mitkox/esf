@@ -114,3 +114,77 @@ argv        = ["./test.sh"]
 mandatory   = true
 timeout     = "10m"
 description = "repository test script"
+
+# ── Named resources ──────────────────────────────────────────────────────────
+# A run REFERENCES these by name; it can never define one. Every resolved
+# resource is recorded in the run manifest with a content digest, so a run is
+# reproducible from its own evidence.
+
+# [sandbox]
+# attach and preview are privileged operator actions against a live sandbox.
+# Both are DEFAULT CLOSED and audited in the run's evidence directory.
+# allow_attach  = false
+# allow_preview = false
+
+# [models.<name>] — model endpoints, separate from harnesses so a model can be
+# changed in one place and accounted for across harnesses. Credentials are
+# referenced by environment variable NAME; the value never enters configuration
+# or evidence.
+#
+# [models.default]
+# provider    = "anthropic"
+# model       = "claude-sonnet-4-5"
+# api_key_env = "ANTHROPIC_API_KEY"
+# base_url    = ""            # optional gateway
+# scopes      = []            # empty = available to every scope
+
+# [egress.<name>] — network policy. A zero-value policy means "deployment
+# default"; allow_internet = false is the strong form. Deny wins.
+#
+# [egress.restricted]
+# allow_internet = false
+# allow_out      = ["api.anthropic.com", "github.com", "registry.npmjs.org"]
+# deny_out       = []
+
+# [workspaces.<name>] — a pre-warmed execution environment. snapshot_id records
+# a pre-built CubeSandbox snapshot containing the preparation below.
+#
+# [workspaces.python]
+# template          = ""       # optional override of cube.template_id
+# base_packages     = ["git", "ca-certificates", "python3", "python3-pip"]
+# setup_script      = ""
+# snapshot_id       = ""
+# repository_cache  = false
+
+# [budgets.<name>] — spending ceilings. A budget is EVIDENCE, not enforcement:
+# the factory records usage reported by the harness and flags a crossing; it
+# never rewrites a result because a ceiling was hit.
+#
+# [budgets.cheap]
+# max_cost_usd   = 1.50
+# max_tokens     = 100000
+# max_wall_clock = "30m"
+
+# [scopes.<name>] — tenancy boundaries. A scope can only NARROW the operator's
+# policy: its repository list is intersected with [repositories].allowed, and a
+# scope entry that no global prefix covers is dropped.
+#
+# [scopes.payments]
+# repositories = ["https://github.com/acme/payments"]
+# harnesses    = ["opencode2"]
+# egress       = "restricted"
+# model        = "default"
+# workspace    = "python"
+# budget       = "cheap"
+# review       = false        # overrides the global review gate
+
+# [review] — the human review gate. When enabled, a run pauses after the
+# deterministic gates report, optionally checkpoints its sandbox, publishes
+# preview URLs, and waits for a decision or the timeout. A timeout is recorded
+# as "timeout" and the run finishes normally.
+#
+# [review]
+# enabled       = false
+# timeout       = "24h"
+# preview_ports = [3000]
+# suspend       = true

@@ -17,6 +17,11 @@ const (
 	StateRequested RunState = "REQUESTED"
 	// StateRunning means the workflow is executing.
 	StateRunning RunState = "RUNNING"
+	// StatePaused means the run is waiting on a human review gate. The sandbox
+	// may be checkpointed (SuspendResult reports whether it actually was). The
+	// run is NOT finished: it resumes, or the gate times out and it continues
+	// down the normal path.
+	StatePaused RunState = "PAUSED"
 	// StateAgentFailed means the coding agent exited non-zero or timed out.
 	StateAgentFailed RunState = "AGENT_FAILED"
 	// StateVerificationFailed means the agent reported success but a mandatory
@@ -39,7 +44,7 @@ const (
 // Valid reports whether s is a known state.
 func (s RunState) Valid() bool {
 	switch s {
-	case StateRequested, StateRunning, StateAgentFailed, StateVerificationFailed,
+	case StateRequested, StateRunning, StatePaused, StateAgentFailed, StateVerificationFailed,
 		StateSucceeded, StateCancelled, StateInfrastructureFailed, StateInvalidRequest:
 		return true
 	default:
@@ -74,6 +79,15 @@ type CleanupResult struct {
 	FinishedAt time.Time     `json:"finished_at"`
 }
 
+// PreviewLink is an ingress URL exposed for human review.
+//
+// It is evidence, not configuration: publishing a port is a deliberate act by
+// an operator, and the record of it belongs with the run.
+type PreviewLink struct {
+	Port int    `json:"port"`
+	URL  string `json:"url"`
+}
+
 // RunManifest is the durable record of one factory run.
 //
 // Field groups below the MVP fields are the explicit Phase 2 extension points
@@ -86,6 +100,16 @@ type RunManifest struct {
 	FactoryVersion string `json:"factory_version"`
 	WorkflowID     string `json:"workflow_id"`
 	WorkflowRunID  string `json:"workflow_run_id"`
+
+	// ── Durable work item ───────────────────────────────────────────────────
+	//
+	// A run is an activity of a Change. A run with no ChangeID is its own
+	// change, which preserves the one-run-per-task behaviour.
+	ChangeID string `json:"change_id,omitempty"`
+	// ParentRunID is the run this one reworks, when a review asked for changes.
+	ParentRunID string `json:"parent_run_id,omitempty"`
+	// Scope is the tenancy boundary the run executed under.
+	Scope string `json:"scope,omitempty"`
 
 	// ── Input ───────────────────────────────────────────────────────────────
 	Repository        string `json:"repository"`
@@ -103,6 +127,51 @@ type RunManifest struct {
 	SandboxTemplate     string `json:"sandbox_template"`
 	SandboxID           string `json:"sandbox_id,omitempty"`
 	VerificationProfile string `json:"verification_profile"`
+
+	// ── Resolved resources (AX-style) ───────────────────────────────────────
+	//
+	// Digests, not just names, so a run is reproducible from its own evidence:
+	// "workspace=default" is not reproducible, "workspace=default@sha256:..."
+	// is. The credential VALUE is never recorded, only the variable name.
+	Workspace       string `json:"workspace,omitempty"`
+	WorkspaceDigest string `json:"workspace_digest,omitempty"`
+	EgressPolicy    string `json:"egress_policy,omitempty"`
+	EgressDigest    string `json:"egress_digest,omitempty"`
+	EgressSummary   string `json:"egress_summary,omitempty"`
+	ModelDigest     string `json:"model_digest,omitempty"`
+	ResourceDigest  string `json:"resource_digest,omitempty"`
+
+	// ── Lifecycle ───────────────────────────────────────────────────────────
+	//
+	// Conditions are the per-step outcomes. They exist because a single run
+	// state cannot answer "which step failed" without reading Temporal history.
+	Conditions []Condition `json:"conditions,omitempty"`
+	// SuspendResult records whether the review gate actually checkpointed the
+	// sandbox. It is OutcomeSkipped when the provider has no suspend capability,
+	// which is the difference between "free while paused" and "live but idle".
+	SuspendResult Outcome `json:"suspend_result,omitempty"`
+	SuspendError  string  `json:"suspend_error,omitempty"`
+	// PreviewResult records whether requested review previews were published,
+	// skipped for lack of capability, or failed.
+	PreviewResult Outcome `json:"preview_result,omitempty"`
+	// ReviewConfigured reports that a human gate was part of this run, so an
+	// operator can tell "reviewed and approved" from "no review was configured".
+	ReviewConfigured bool `json:"review_configured,omitempty"`
+	// ReviewOutcome records how the gate ended: approved, rejected, or timeout.
+	ReviewOutcome string `json:"review_outcome,omitempty"`
+	// ReviewNote is the redacted human instruction attached to a rejection. It
+	// is carried into the durable Change as its rework note.
+	ReviewNote string `json:"review_note,omitempty"`
+	// ReviewError records a non-fatal review-gate problem, such as a preview
+	// port that could not be published. It is kept separate from SuspendError so
+	// "the sandbox was not checkpointed" and "a preview was unavailable" are
+	// never conflated.
+	ReviewError string `json:"review_error,omitempty"`
+	// Previews are the ingress URLs exposed for human review, recorded as
+	// evidence because they were a deliberate exposure of the sandbox.
+	Previews []PreviewLink `json:"previews,omitempty"`
+	// BudgetExceeded lists the ceilings this run crossed, if any.
+	BudgetExceeded []string `json:"budget_exceeded,omitempty"`
 
 	// ── Timing ──────────────────────────────────────────────────────────────
 	StartedAt   time.Time     `json:"started_at"`
@@ -150,6 +219,7 @@ const (
 	ArtifactTask               = "task.json"
 	ArtifactRun                = "run.json"
 	ArtifactEnvironment        = "environment.json"
+	ArtifactInventory          = "inventory.json"
 	ArtifactGitBefore          = "git-before.txt"
 	ArtifactGitAfter           = "git-after.txt"
 	ArtifactPatch              = "changes.patch"
@@ -160,6 +230,10 @@ const (
 	ArtifactAgentPrompt        = "agent/prompt.txt"
 	ArtifactVerificationResult = "verification/result.json"
 	ArtifactBaseline           = "baseline.json"
+	// ArtifactAudit is the append-only audit trail for operator actions that
+	// touch a live sandbox (attach, preview). It exists because those actions
+	// are privileged and must be attributable after the fact.
+	ArtifactAudit = "audit/actions.jsonl"
 	// ArtifactPostVerificationPatch records the repository state AFTER the
 	// deterministic gates ran. If it is non-empty, a gate mutated the working
 	// tree — recorded as evidence rather than silently folded into the
@@ -188,6 +262,34 @@ type RunRequest struct {
 	AgentHarness        string `json:"agent_harness"`
 	AgentModel          string `json:"agent_model,omitempty"`
 	VerificationProfile string `json:"verification_profile"`
+
+	// ── Declarative resources (AX-style) ────────────────────────────────────
+	//
+	// These name operator-declared resources. A caller may only name what the
+	// scope it runs under grants; it can never define a resource, and an empty
+	// name falls back to the scope's default rather than to "no policy".
+
+	// Scope selects the tenancy boundary. Empty means the default scope.
+	Scope string `json:"scope,omitempty"`
+	// Workspace names a pre-warmed execution environment.
+	Workspace string `json:"workspace,omitempty"`
+	// Model names a model endpoint, overriding the harness default.
+	Model string `json:"model,omitempty"`
+	// EgressPolicy names the network policy the sandbox runs under.
+	EgressPolicy string `json:"egress_policy,omitempty"`
+	// Review, when set, overrides the factory-wide review gate for this run.
+	// A pointer is used so "unset" inherits instead of silently disabling.
+	Review *bool `json:"review,omitempty"`
+
+	// ── Durable work item ───────────────────────────────────────────────────
+
+	// ChangeID links this run to a durable Change. Empty creates a new change
+	// whose identity is the run itself, which keeps the MVP's one-run-per-task
+	// behaviour working unchanged.
+	ChangeID string `json:"change_id,omitempty"`
+	// ParentRunID records the run this one reworks, when a review asked for
+	// changes. It is lineage evidence, never an authority.
+	ParentRunID string `json:"parent_run_id,omitempty"`
 
 	// Timeouts.
 	AgentTimeout        time.Duration `json:"agent_timeout"`

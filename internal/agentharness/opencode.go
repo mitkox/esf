@@ -1,10 +1,13 @@
 package agentharness
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/mitkox/esf/internal/sandbox"
 )
 
 // OpenCode harness defaults.
@@ -148,6 +151,23 @@ func NewOpenCode(opts OpenCodeOptions) (*GenericCommandHarness, error) {
 	}
 	if opts.ReadFile != nil {
 		h.readFile = opts.ReadFile
+	}
+	h.configureModelEndpoint = func(ctx context.Context, sb sandbox.Sandbox, endpoint ModelEndpoint) error {
+		if endpoint.BaseURL == "" {
+			return nil
+		}
+		cfg, err := defaultOpenCodeConfig(endpoint.BaseURL, endpoint.APIKeyEnv)
+		if err != nil {
+			return err
+		}
+		data, err := json.MarshalIndent(cfg, "", "  ")
+		if err != nil {
+			return fmt.Errorf("agentharness: encode resolved opencode model config: %w", err)
+		}
+		if err := sb.WriteFile(ctx, OpenCodeConfigPath, data); err != nil {
+			return fmt.Errorf("agentharness: write resolved opencode model config: %w", err)
+		}
+		return nil
 	}
 	return h, nil
 }

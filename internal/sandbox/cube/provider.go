@@ -74,11 +74,123 @@ func (p *Provider) Name() string { return ProviderName }
 
 // Capabilities reports the optional features this provider exposes.
 //
-// CubeSandbox demonstrably supports snapshot, clone and rollback in its SDK,
-// but the MVP does not exercise them, so they are advertised as false until the
-// factory actually implements the Phase 2 seams and tests them.
+// Snapshots and clones exist in the Cube SDK but are not wired into the factory
+// yet, so they stay false until the factory implements and tests the Phase 2
+// seams. Suspend, resume and preview ARE implemented here and are advertised,
+// because the factory's review gate and operator tooling depend on knowing
+// whether the capability is real.
 func (p *Provider) Capabilities() sandbox.Capabilities {
-	return sandbox.Capabilities{Snapshot: false, Clone: false, Rollback: false, CloneMultiple: false}
+	return sandbox.Capabilities{
+		Snapshot:      false,
+		Clone:         false,
+		Rollback:      false,
+		CloneMultiple: false,
+		Suspend:       true,
+		Resume:        true,
+		Preview:       true,
+	}
+}
+
+// Suspend checkpoints a sandbox so it can be resumed instead of rebuilt.
+//
+// The call waits for the sandbox to reach the paused state, because the
+// factory's cost-control claim is only true once the checkpoint exists; a
+// fire-and-forget pause would report success while the microVM is still live.
+func (p *Provider) Suspend(ctx context.Context, sandboxID string) error {
+	if strings.TrimSpace(sandboxID) == "" {
+		return fmt.Errorf("%w: empty sandbox id", ErrInvalidSpec)
+	}
+	sb, err := p.client.Connect(ctx, sandboxID)
+	if err != nil {
+		return fmt.Errorf("connect to sandbox %s for suspend: %w", sandboxID, classify(err))
+	}
+	wait := true
+	if err := sb.Pause(ctx, cubesandbox.PauseOptions{
+		Wait:    &wait,
+		Timeout: p.cfg.RequestTimeout.Std(),
+	}); err != nil {
+		return fmt.Errorf("suspend sandbox %s: %w", sandboxID, classify(err))
+	}
+	p.log.InfoContext(ctx, "cube sandbox suspended", slog.String("sandbox.id", sandboxID))
+	return nil
+}
+
+// Resume brings a suspended sandbox back to running.
+func (p *Provider) Resume(ctx context.Context, sandboxID string) error {
+	if strings.TrimSpace(sandboxID) == "" {
+		return fmt.Errorf("%w: empty sandbox id", ErrInvalidSpec)
+	}
+	sb, err := p.client.Connect(ctx, sandboxID)
+	if err != nil {
+		return fmt.Errorf("connect to sandbox %s for resume: %w", sandboxID, classify(err))
+	}
+	// Client.Connect auto-resumes a paused sandbox; an explicit resume call
+	// makes the intent observable and covers deployments where Connect does not.
+	//
+	// The timeout is left to the server (nil): the factory's own wall-clock and
+	// its verified cleanup are the real bounds on a run, and imposing the
+	// configured idle timeout here would let a long run's sandbox expire
+	// mid-flight after a review.
+	if err := sb.Resume(ctx, nil); err != nil {
+		return fmt.Errorf("resume sandbox %s: %w", sandboxID, classify(err))
+	}
+	p.log.InfoContext(ctx, "cube sandbox resumed", slog.String("sandbox.id", sandboxID))
+	return nil
+}
+
+// PreviewURL returns the ingress URL for a port inside a sandbox.
+//
+// It refuses to invent an address: a deployment without a sandbox domain has no
+// routable hostname, and returning a malformed URL would be worse than
+// reporting that preview is unavailable.
+func (p *Provider) PreviewURL(ctx context.Context, sandboxID string, port int) (string, error) {
+	if strings.TrimSpace(sandboxID) == "" {
+		return "", fmt.Errorf("%w: empty sandbox id", ErrInvalidSpec)
+	}
+	if port <= 0 || port > 65535 {
+		return "", fmt.Errorf("%w: port %d out of range", ErrInvalidSpec, port)
+	}
+	// Refuse to preview a checkpointed sandbox. The Cube SDK auto-resumes on
+	// connect, which would make "show me the app" silently resume a sandbox the
+	// operator had deliberately suspended. Waking a sandbox must be an explicit
+	// decision, so the state is checked through the read-only list path first.
+	state, err := p.SandboxState(ctx, sandboxID)
+	if err != nil {
+		return "", err
+	}
+	if state == sandbox.StatePaused {
+		return "", fmt.Errorf("sandbox %s is suspended; resume it first (factory resume %s)", sandboxID, sandboxID)
+	}
+	sb, err := p.client.Connect(ctx, sandboxID)
+	if err != nil {
+		return "", fmt.Errorf("connect to sandbox %s for preview: %w", sandboxID, classify(err))
+	}
+	host := sb.GetHost(port)
+	if !strings.Contains(host, ".") {
+		return "", fmt.Errorf("%w: deployment has no sandbox domain; preview URLs are unavailable", ErrNotConfigured)
+	}
+	scheme := "http"
+	if strings.EqualFold(p.cfg.ProxyScheme, "https") {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s", scheme, host), nil
+}
+
+// SandboxState reports a sandbox's lifecycle state without transitioning it.
+//
+// It reads through the list endpoint rather than connecting, because connecting
+// to a suspended sandbox resumes it in the Cube SDK.
+func (p *Provider) SandboxState(ctx context.Context, sandboxID string) (string, error) {
+	infos, err := p.client.List(ctx)
+	if err != nil {
+		return "", fmt.Errorf("list sandboxes: %w", classify(err))
+	}
+	for _, info := range infos {
+		if info.SandboxID == sandboxID {
+			return info.State, nil
+		}
+	}
+	return "", fmt.Errorf("sandbox %s: %w", sandboxID, cubesandbox.ErrSandboxNotFound)
 }
 
 // Close releases idle HTTP connections. It does not destroy any sandbox.

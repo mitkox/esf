@@ -86,6 +86,9 @@ type GenericCommandHarness struct {
 	hostEnv func(string) (string, bool)
 	// readFile allows tests to supply a fake agent binary.
 	readFile func(string) ([]byte, error)
+	// configureModelEndpoint is set by harness families such as OpenCode that
+	// need a configuration file in addition to the model command-line flag.
+	configureModelEndpoint func(context.Context, sandbox.Sandbox, ModelEndpoint) error
 }
 
 // NewGeneric builds a generic harness from its spec.
@@ -120,6 +123,19 @@ func NewGeneric(spec Spec) (*GenericCommandHarness, error) {
 
 func (h *GenericCommandHarness) Name() string  { return h.spec.Name }
 func (h *GenericCommandHarness) Model() string { return h.spec.Model }
+
+// ConfigureModelEndpoint applies a resolved model endpoint when this harness
+// family needs one. A plain generic command has no endpoint-specific config;
+// its model ID and approved environment are still supplied to Run.
+func (h *GenericCommandHarness) ConfigureModelEndpoint(ctx context.Context, sb sandbox.Sandbox, endpoint ModelEndpoint) error {
+	if h.configureModelEndpoint == nil {
+		if endpoint.BaseURL != "" {
+			return fmt.Errorf("%s: model base_url is unsupported by this harness", h.Name())
+		}
+		return nil
+	}
+	return h.configureModelEndpoint(ctx, sb, endpoint)
+}
 
 // Spec returns a copy of the operator specification.
 func (h *GenericCommandHarness) Spec() Spec {
