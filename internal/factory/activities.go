@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -109,6 +110,11 @@ type ValidateOutput struct {
 	Kind                string        `json:"kind"`
 	Revision            string        `json:"revision"`
 	TaskHash            string        `json:"task_hash"`
+	// Resources is the fully-resolved resource set for the run. It is resolved
+	// exactly once, here, and carried through the workflow as data: workflow
+	// code must never resolve a name, because a config change during a run
+	// would make Temporal replay non-deterministic.
+	Resources ResolvedResources `json:"resources"`
 }
 
 // CreateSandboxInput creates the run's microVM.
@@ -119,6 +125,9 @@ type CreateSandboxInput struct {
 	Harness     string         `json:"harness"`
 	IdleTimeout time.Duration  `json:"idle_timeout"`
 	Limits      sandbox.Limits `json:"limits"`
+	// Network is the effective egress policy resolved from the run's named
+	// EgressPolicy. A zero value leaves the deployment default untouched.
+	Network sandbox.Network `json:"network,omitempty"`
 	// Env is operator-approved environment injected at creation.
 	Env map[string]string `json:"env,omitempty"`
 }
@@ -135,6 +144,18 @@ type PrepareSandboxInput struct {
 	RunID     string `json:"run_id"`
 	SandboxID string `json:"sandbox_id"`
 	Harness   string `json:"harness"`
+	// BasePackages overrides the factory-wide list when the run resolved a
+	// named Workspace. Empty inherits the factory setting.
+	BasePackages []string `json:"base_packages,omitempty"`
+	// SetupScript overrides the factory-wide script when the run resolved a
+	// named Workspace. Empty inherits the factory setting.
+	SetupScript string `json:"setup_script,omitempty"`
+	// WorkspaceResolved distinguishes a deliberately empty resolved value from
+	// an older activity payload that predates declarative resources.
+	WorkspaceResolved bool `json:"workspace_resolved,omitempty"`
+	// ModelEndpoint is the non-secret endpoint configuration resolved during
+	// validation. Credential values remain on the activity worker.
+	ModelEndpoint agentharness.ModelEndpoint `json:"model_endpoint,omitempty"`
 }
 
 // PrepareSandboxOutput records what provisioning produced.
@@ -165,6 +186,10 @@ type RunAgentInput struct {
 	RepositoryDir string            `json:"repository_dir"`
 	Timeout       time.Duration     `json:"timeout"`
 	Env           map[string]string `json:"env,omitempty"`
+	// ModelAPIKeyEnv names an operator-approved host environment variable. The
+	// value is read inside this activity and never travels through workflow
+	// history or resolved-resource evidence.
+	ModelAPIKeyEnv string `json:"model_api_key_env,omitempty"`
 }
 
 // RunAgentOutput records the agent outcome.
@@ -247,6 +272,29 @@ type FinalizeInput struct {
 	StartedAt               time.Time           `json:"started_at"`
 	CompletedAt             time.Time           `json:"completed_at"`
 	Error                   string              `json:"error,omitempty"`
+
+	// ── AX-inspired fields ──────────────────────────────────────────────────
+	// Conditions are the per-step outcomes derived by the workflow.
+	Conditions []Condition `json:"conditions,omitempty"`
+	// Resolved resources and their digests.
+	Resources ResolvedResources `json:"resources"`
+	// SuspendResult reports whether the review gate checkpointed the sandbox.
+	SuspendResult Outcome `json:"suspend_result,omitempty"`
+	SuspendError  string  `json:"suspend_error,omitempty"`
+	PreviewResult Outcome `json:"preview_result,omitempty"`
+	// ReviewConfigured and ReviewOutcome record the human gate, so "approved"
+	// is distinguishable from "no review was configured".
+	ReviewConfigured bool   `json:"review_configured,omitempty"`
+	ReviewOutcome    string `json:"review_outcome,omitempty"`
+	ReviewNote       string `json:"review_note,omitempty"`
+	// ReviewError is a non-fatal review-gate problem (a preview that could not
+	// be published), kept separate from SuspendError.
+	ReviewError string `json:"review_error,omitempty"`
+	// Previews are the ingress URLs exposed for review.
+	Previews []PreviewLink `json:"previews,omitempty"`
+	// BudgetExceeded lists the ceilings the run crossed, computed by the
+	// workflow from recorded usage and the resolved budget.
+	BudgetExceeded []string `json:"budget_exceeded,omitempty"`
 }
 
 // FinalizeOutput returns the persisted manifest.
@@ -300,6 +348,22 @@ func (a *Activities) ValidateRequest(ctx context.Context, in ValidateInput) (Val
 	if source == "" {
 		source = "local:" + req.LocalPath
 	}
+
+	// Resolve the named resources before anything else is accepted. This is the
+	// only place resource names are resolved, and the result travels through the
+	// workflow as plain data.
+	resolved, err := a.cfg.ResolveResources(req)
+	if err != nil {
+		return ValidateOutput{}, fmt.Errorf("resolve resources: %w", err)
+	}
+	// A scope narrows the global allowlist; it never widens it. The check is
+	// repeated here because the repository provider enforces only the global
+	// policy.
+	if req.Repository != "" && kind != string(repository.SourceLocal) {
+		if !matchesAnyPrefix(req.Repository, resolved.RepositoriesAllowed) {
+			return ValidateOutput{}, fmt.Errorf("repository %q is not allowed in scope %q", req.Repository, resolved.Scope)
+		}
+	}
 	agentTimeout, err := boundedTimeout(req.AgentTimeout, a.cfg.Limits.AgentTimeout.Std(), 30*time.Minute)
 	if err != nil {
 		return ValidateOutput{}, fmt.Errorf("agent timeout: %w", err)
@@ -318,6 +382,7 @@ func (a *Activities) ValidateRequest(ctx context.Context, in ValidateInput) (Val
 		Kind:       kind,
 		Revision:   req.Revision,
 		TaskHash:   repository.HashTask(req.Task),
+		Resources:  resolved,
 	}
 	span.SetAttributes(
 		attribute.String(AttrRepository, out.Repository),
@@ -340,6 +405,11 @@ func (a *Activities) ValidateRequest(ctx context.Context, in ValidateInput) (Val
 		"agent_model":          req.AgentModel,
 		"verification_profile": req.VerificationProfile,
 		"sandbox_template":     req.SandboxTemplate,
+		"scope":                resolved.Scope,
+		"workspace":            resolved.Workspace,
+		"egress_policy":        resolved.EgressPolicy,
+		"model":                resolved.Model,
+		"resources":            resolved,
 		"recorded_at":          time.Now().UTC(),
 	}
 	if err := a.writeJSON(store, ArtifactTask, record); err != nil {
@@ -371,6 +441,7 @@ func (a *Activities) CreateSandbox(ctx context.Context, in CreateSandboxInput) (
 		IdleTimeout: in.IdleTimeout,
 		Limits:      in.Limits,
 		Env:         in.Env,
+		Network:     in.Network,
 	}
 
 	// Recover an acknowledged or ambiguously completed create by ownership.
@@ -443,15 +514,28 @@ func (a *Activities) PrepareSandbox(ctx context.Context, in PrepareSandboxInput)
 
 	// Factory-owned base packages first. These are required by the factory
 	// itself — git for cloning and diffing — so they must not depend on how a
-	// particular harness was configured.
-	if err := installBasePackages(ctx, sb, a.cfg.Sandbox.BasePackages, a.log); err != nil {
+	// particular harness was configured. A resolved Workspace may narrow the
+	// list; it can never widen it to something the operator did not declare.
+	basePackages := a.cfg.Sandbox.BasePackages
+	if in.WorkspaceResolved {
+		basePackages = in.BasePackages
+	} else if len(in.BasePackages) > 0 {
+		basePackages = in.BasePackages
+	}
+	if err := installBasePackages(ctx, sb, basePackages, a.log); err != nil {
 		span.RecordError(err)
 		return PrepareSandboxOutput{}, err
 	}
 
 	// Operator-configured environment setup that a package manager cannot
 	// express. It runs before the harness because the harness may depend on it.
-	if script := strings.TrimSpace(a.cfg.Sandbox.SetupScript); script != "" {
+	setupScript := a.cfg.Sandbox.SetupScript
+	if in.WorkspaceResolved {
+		setupScript = in.SetupScript
+	} else if strings.TrimSpace(in.SetupScript) != "" {
+		setupScript = in.SetupScript
+	}
+	if script := strings.TrimSpace(setupScript); script != "" {
 		exec, err := sb.Execute(ctx, sandbox.Command{
 			Script:      script,
 			Timeout:     20 * time.Minute,
@@ -471,6 +555,14 @@ func (a *Activities) PrepareSandbox(ctx context.Context, in PrepareSandboxInput)
 	if err := harness.Provision(ctx, sb); err != nil {
 		span.RecordError(err)
 		return PrepareSandboxOutput{}, fmt.Errorf("provision harness %q: %w", in.Harness, err)
+	}
+	if configurer, ok := harness.(agentharness.ModelEndpointConfigurer); ok {
+		if err := configurer.ConfigureModelEndpoint(ctx, sb, in.ModelEndpoint); err != nil {
+			span.RecordError(err)
+			return PrepareSandboxOutput{}, fmt.Errorf("configure model endpoint for harness %q: %w", in.Harness, err)
+		}
+	} else if in.ModelEndpoint.BaseURL != "" {
+		return PrepareSandboxOutput{}, fmt.Errorf("configure model endpoint for harness %q: base_url is unsupported", in.Harness)
 	}
 	out := PrepareSandboxOutput{Duration: time.Since(started)}
 
@@ -556,13 +648,25 @@ func (a *Activities) RunAgent(ctx context.Context, in RunAgentInput) (RunAgentOu
 		return RunAgentOutput{}, err
 	}
 
+	env := make(map[string]string, len(in.Env)+1)
+	for name, value := range in.Env {
+		env[name] = value
+	}
+	if name := strings.TrimSpace(in.ModelAPIKeyEnv); name != "" {
+		value := os.Getenv(name)
+		if value == "" {
+			return RunAgentOutput{}, fmt.Errorf("resolved model credential environment variable %s is empty", name)
+		}
+		env[name] = value
+	}
+
 	result, err := harness.Run(ctx, sb, agentharness.Task{
 		RunID:         in.RunID,
 		Prompt:        in.Prompt,
 		RepositoryDir: in.RepositoryDir,
 		Model:         in.Model,
 		Timeout:       in.Timeout,
-		Env:           in.Env,
+		Env:           env,
 	})
 	if err != nil {
 		span.RecordError(err)
@@ -799,10 +903,14 @@ func (a *Activities) FinalizeResult(ctx context.Context, in FinalizeInput) (Fina
 	}
 
 	manifest := RunManifest{
-		RunID:                   in.Request.RunID,
-		FactoryVersion:          a.cfg.effectiveVersion(),
-		WorkflowID:              in.WorkflowID,
-		WorkflowRunID:           in.WorkflowRunID,
+		RunID:          in.Request.RunID,
+		ChangeID:       in.Request.ChangeID,
+		ParentRunID:    in.Request.ParentRunID,
+		Scope:          in.Resources.Scope,
+		FactoryVersion: a.cfg.effectiveVersion(),
+		WorkflowID:     in.WorkflowID,
+		WorkflowRunID:  in.WorkflowRunID,
+
 		Repository:              in.Validate.Repository,
 		RepositoryKind:          in.Validate.Kind,
 		RequestedRevision:       in.Validate.Revision,
@@ -829,7 +937,40 @@ func (a *Activities) FinalizeResult(ctx context.Context, in FinalizeInput) (Fina
 		Error:                   a.redactor.Redact(in.Error),
 		VerificationMutatedTree: in.VerificationMutatedTree,
 		PostVerificationPatch:   in.PostVerificationPatch,
-		Model:                   in.AgentResult.Model,
+		Workspace:               in.Resources.Workspace,
+		WorkspaceDigest:         in.Resources.WorkspaceDigest,
+		EgressPolicy:            in.Resources.EgressPolicy,
+		EgressDigest:            in.Resources.EgressDigest,
+		EgressSummary:           in.Resources.EgressSummary,
+		ModelDigest:             in.Resources.ModelDigest,
+		ResourceDigest:          in.Resources.Digest(),
+		Conditions:              in.Conditions,
+		SuspendResult:           in.SuspendResult,
+		SuspendError:            a.redactor.Redact(in.SuspendError),
+		PreviewResult:           in.PreviewResult,
+		ReviewConfigured:        in.ReviewConfigured,
+		ReviewOutcome:           in.ReviewOutcome,
+		ReviewNote:              a.redactor.Redact(in.ReviewNote),
+		ReviewError:             a.redactor.Redact(in.ReviewError),
+		Previews:                in.Previews,
+		BudgetExceeded:          in.BudgetExceeded,
+		// HumanResult is the same value under its Phase-2 name: it drives the
+		// change lifecycle, where an approval closes the change and a rejection
+		// returns it to OPEN.
+		HumanResult:   in.ReviewOutcome,
+		TokensIn:      in.AgentResult.TokensIn,
+		TokensOut:     in.AgentResult.TokensOut,
+		InferenceCost: in.AgentResult.CostUSD,
+	}
+	// The model is reported from two directions: the run's resolved resource
+	// (authoritative, operator-declared) and the harness's own report (what it
+	// actually used). The resolved value wins for identity, because a harness
+	// that ignores its configuration must not be able to change the record.
+	if in.Resources.ModelID != "" {
+		manifest.Model = in.Resources.ModelID
+		manifest.ModelProvider = in.Resources.ModelProvider
+	} else {
+		manifest.Model = in.AgentResult.Model
 	}
 
 	if in.Patch != "" && in.PatchArtifact == "" {

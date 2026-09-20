@@ -48,10 +48,24 @@ func gitAwareExecute(patch string) func(sandbox.Command) (sandbox.Execution, err
 	}
 }
 
+// workflowRunOptions customises the test workflow's environment.
+type workflowRunOptions struct {
+	// mutateConfig adjusts the operator configuration before activities are
+	// built, so a test can enable the review gate, declare resources, or set a
+	// budget without duplicating the fixture.
+	mutateConfig func(*Config)
+}
+
 // runWorkflow executes the workflow in Temporal's in-memory test environment
 // with the factory's activities registered, so state transitions, retries,
 // cleanup and the final manifest are all exercised without a Temporal server.
 func runWorkflow(t *testing.T, fake sandbox.Provider, req RunRequest, configure ...func(*testsuite.TestWorkflowEnvironment)) (RunManifest, error) {
+	t.Helper()
+	return runWorkflowOpts(t, fake, req, workflowRunOptions{}, configure...)
+}
+
+// runWorkflowOpts is runWorkflow with configuration control.
+func runWorkflowOpts(t *testing.T, fake sandbox.Provider, req RunRequest, opts workflowRunOptions, configure ...func(*testsuite.TestWorkflowEnvironment)) (RunManifest, error) {
 	t.Helper()
 
 	var suite testsuite.WorkflowTestSuite
@@ -60,7 +74,8 @@ func runWorkflow(t *testing.T, fake sandbox.Provider, req RunRequest, configure 
 	harness, err := agentharness.NewGeneric(agentharness.Spec{
 		Name:       "test-agent",
 		Executable: "agent",
-		Args:       []string{"run"},
+		Args:       []string{"run", agentharness.ModelArgsPlaceholder},
+		ModelFlag:  "--model",
 		Timeout:    time.Minute,
 	})
 	if err != nil {
@@ -89,6 +104,9 @@ func runWorkflow(t *testing.T, fake sandbox.Provider, req RunRequest, configure 
 				Steps: []verification.Step{{ID: "build", Argv: []string{"./build.sh"}, Mandatory: &mandatory}},
 			},
 		},
+	}
+	if opts.mutateConfig != nil {
+		opts.mutateConfig(&cfg)
 	}
 
 	acts, err := NewActivities(ActivitiesOptions{
@@ -217,6 +235,53 @@ func TestWorkflowSucceedsOnVerifiedChange(t *testing.T) {
 	}
 	if manifest.TaskHash == "" {
 		t.Fatal("task_hash was not recorded")
+	}
+}
+
+// TestWorkflowExecutesResolvedModel proves a named resource affects execution,
+// not only the manifest. The raw resource name must never be handed to the
+// harness as though it were a provider model ID.
+func TestWorkflowExecutesResolvedModel(t *testing.T) {
+	t.Setenv("FACTORY_TEST_MODEL_KEY", "test-secret-value")
+	fake := sandbox.NewFake()
+	fake.ExecuteFunc = wrapWithBuildSuccess(gitAwareExecute("diff --git a/greeting.py b/greeting.py"))
+	req := baseRequest(t)
+	req.AgentModel = "fast"
+	req.Model = "fast"
+
+	manifest, err := runWorkflowOpts(t, fake, req, workflowRunOptions{
+		mutateConfig: func(cfg *Config) {
+			cfg.Models = map[string]ModelConfig{
+				"fast": {Provider: "test", Model: "provider/resolved-model", APIKeyEnv: "FACTORY_TEST_MODEL_KEY"},
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("workflow returned an error: %v", err)
+	}
+	if manifest.Model != "provider/resolved-model" {
+		t.Fatalf("manifest model = %q, want resolved ID", manifest.Model)
+	}
+	created := fake.Created()
+	if len(created) != 1 {
+		t.Fatalf("created sandboxes = %v, want one", created)
+	}
+	var found bool
+	for _, cmd := range fake.Commands(created[0]) {
+		line := strings.Join(cmd.Argv, " ")
+		if !strings.Contains(line, "agent run") {
+			continue
+		}
+		found = true
+		if !strings.Contains(line, "--model provider/resolved-model") || strings.Contains(line, "--model fast") {
+			t.Fatalf("agent command = %q, want resolved model ID only", line)
+		}
+		if cmd.Env["FACTORY_TEST_MODEL_KEY"] != "test-secret-value" {
+			t.Fatal("resolved model credential was not supplied to the harness")
+		}
+	}
+	if !found {
+		t.Fatal("agent command was not recorded")
 	}
 }
 

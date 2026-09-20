@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"go.temporal.io/sdk/client"
@@ -236,6 +237,16 @@ func collectSecrets(cfg Config, harnesses *agentharness.Registry) []string {
 	}
 	if cfg.Cube.APIKey != "" {
 		secrets = append(secrets, cfg.Cube.APIKey)
+	}
+	// Named model resources may grant a credential independently of a
+	// harness's static pass_env list. Register those values before any activity
+	// can persist agent output.
+	for _, model := range cfg.Models {
+		if name := strings.TrimSpace(model.APIKeyEnv); name != "" {
+			if value := os.Getenv(name); value != "" {
+				secrets = append(secrets, value)
+			}
+		}
 	}
 	// Operator-declared credential environment variables are the values most
 	// likely to be echoed by an agent.

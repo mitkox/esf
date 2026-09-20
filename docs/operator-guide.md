@@ -108,6 +108,59 @@ Useful flags:
 | `--run-id` | Supply an explicit run id (makes submission idempotent). |
 | `--wait=false` | Submit and return immediately. |
 | `--agent-timeout` | Override the agent timeout. |
+| `--scope` | Run under a tenancy scope; the scope's declared resources apply. |
+| `--workspace` | Use a named pre-warmed workspace. |
+| `--egress` | Run under a named network policy. |
+| `--change` | Attach the run to a durable change (default: the run itself). |
+| `--parent-run` | Record the run this one reworks. |
+| `--review` | Pause for human review before finalizing. |
+
+### Declarative resources and the review gate
+
+A run may reference operator-declared resources instead of repeating settings:
+`[workspaces]`, `[models]`, `[egress]`, `[budgets]` and `[scopes]` in
+`factory.toml`. Resolution happens once, in validation, and the resolved set
+plus its digest is recorded in `run.json`. Unknown names are rejected — a typo
+fails loudly rather than running with no policy.
+
+With `[review] enabled = true` (or `--review`), a run pauses after the gates
+report:
+
+```bash
+./bin/factory status <run-id> --watch          # stream conditions until it pauses
+./bin/factory review <run-id> --approve
+./bin/factory review <run-id> --reject --note "use the formal greeting"
+```
+
+The sandbox is checkpointed while paused when the provider supports it (the
+manifest records `suspend_result`), preview URLs are published when
+`preview_ports` is set (`preview_result` records `SUCCESS`, `FAILED`, or
+`SKIPPED`), and a timeout is recorded as `timeout` — the run then finishes
+normally. A rejection does not rewrite the gate result: the factory result
+stays `SUCCEEDED` if the gates passed, and the redacted review note becomes the
+change's rework instruction while the change returns to `OPEN`.
+
+### Changes (durable work items)
+
+Every run belongs to a change. Without `--change`, the run is its own change.
+With `--change`, rework activations accumulate lineage and spend:
+
+```bash
+./bin/factory get changes
+./bin/factory describe change <change-id>
+./bin/factory run --change <id> --parent-run <reviewed-run-id> ...   # rework
+```
+
+### Operator access to a live sandbox
+
+`factory attach` and `factory preview` are **default closed**. Enable them with
+`[sandbox] allow_attach = true` / `allow_preview = true`; every use is audited
+in `audit/actions.jsonl`. Neither resumes a suspended sandbox implicitly.
+
+```bash
+./bin/factory attach <run-id> -- ls -la /workspace/repository
+./bin/factory preview <run-id> --port 3000
+```
 
 ### Result states
 
@@ -118,6 +171,7 @@ Useful flags:
 | `VERIFICATION_FAILED` | The agent claimed success; a deterministic gate disagreed |
 | `INFRASTRUCTURE_FAILED` | Infrastructure, patch collection, or cleanup failed |
 | `INVALID_REQUEST` | Rejected by policy; no sandbox was created |
+| `PAUSED` | Waiting on a human review gate; the run resumes or times out |
 | `CANCELLED` | The workflow was cancelled |
 
 ## 5. Inspecting a run
@@ -125,6 +179,8 @@ Useful flags:
 ```bash
 ./bin/factory status <run-id>          # manifest if finished, live query otherwise
 ./bin/factory status <run-id> --json
+./bin/factory status <run-id> --watch  # stream condition transitions
+./bin/factory describe run <run-id>    # manifest + conditions + inventory + audit
 ./bin/factory logs   <run-id>          # artifact listing + agent output tails
 ```
 

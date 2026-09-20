@@ -69,6 +69,24 @@ type Task struct {
 	Env map[string]string
 }
 
+// ModelEndpoint is the non-secret part of a resolved model resource.
+// Credential values never enter this structure; APIKeyEnv is only the name the
+// harness configuration should reference.
+type ModelEndpoint struct {
+	Provider  string `json:"provider,omitempty"`
+	Model     string `json:"model,omitempty"`
+	BaseURL   string `json:"base_url,omitempty"`
+	APIKeyEnv string `json:"api_key_env,omitempty"`
+}
+
+// ModelEndpointConfigurer is implemented by harnesses that can install a
+// per-run endpoint configuration after their base provisioning completes.
+// Generic harnesses need only the model ID and environment; OpenCode also
+// needs its provider gateway written into opencode.json.
+type ModelEndpointConfigurer interface {
+	ConfigureModelEndpoint(ctx context.Context, sb sandbox.Sandbox, endpoint ModelEndpoint) error
+}
+
 // Result is the recorded outcome of an agent run.
 //
 // The optional cost/token fields exist so Phase 2 can compare harnesses and

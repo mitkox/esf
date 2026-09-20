@@ -35,6 +35,17 @@ type Fake struct {
 	createN  int
 	specs    map[string]Spec
 	commands map[string][]Command
+
+	// suspendErr, when set, is returned by Suspend.
+	suspendErr error
+	// resumeErr, when set, is returned by Resume.
+	resumeErr error
+	// suspended records the sandbox IDs currently checkpointed.
+	suspended map[string]bool
+	// suspendCalls and resumeCalls record every call, in order, so a test can
+	// assert that an idle sandbox was actually paused and woken.
+	suspendCalls []string
+	resumeCalls  []string
 }
 
 // NewFake returns an empty fake provider.
@@ -44,13 +55,103 @@ func NewFake() *Fake {
 		specs:      map[string]Spec{},
 		commands:   map[string][]Command{},
 		DestroyErr: map[string]error{},
+		suspended:  map[string]bool{},
 	}
 }
 
 func (f *Fake) Name() string { return "fake" }
 
-func (f *Fake) Capabilities() Capabilities { return Capabilities{} }
+// Capabilities advertises the full lifecycle surface so workflow tests exercise
+// the suspend/resume path rather than the degraded SKIPPED path.
+func (f *Fake) Capabilities() Capabilities {
+	return Capabilities{Suspend: true, Resume: true, Preview: true}
+}
 
+// Suspend records a checkpoint request. It is idempotent.
+func (f *Fake) Suspend(_ context.Context, sandboxID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.suspendErr != nil {
+		return f.suspendErr
+	}
+	if _, ok := f.live[sandboxID]; !ok {
+		return fmt.Errorf("fake: sandbox %s not found", sandboxID)
+	}
+	f.suspendCalls = append(f.suspendCalls, sandboxID)
+	f.suspended[sandboxID] = true
+	return nil
+}
+
+// Resume records a wake request. It is idempotent.
+func (f *Fake) Resume(_ context.Context, sandboxID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.resumeErr != nil {
+		return f.resumeErr
+	}
+	if _, ok := f.live[sandboxID]; !ok {
+		return fmt.Errorf("fake: sandbox %s not found", sandboxID)
+	}
+	f.resumeCalls = append(f.resumeCalls, sandboxID)
+	delete(f.suspended, sandboxID)
+	return nil
+}
+
+// PreviewURL returns a deterministic URL for the given port.
+func (f *Fake) PreviewURL(_ context.Context, sandboxID string, port int) (string, error) {
+	if _, ok := f.live[sandboxID]; !ok {
+		return "", fmt.Errorf("fake: sandbox %s not found", sandboxID)
+	}
+	return fmt.Sprintf("http://%d-%s.preview.fake", port, sandboxID), nil
+}
+
+// SuspendCalls returns the sandbox IDs Suspend was called with, in order.
+func (f *Fake) SuspendCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.suspendCalls...)
+}
+
+// ResumeCalls returns the sandbox IDs Resume was called with, in order.
+func (f *Fake) ResumeCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.resumeCalls...)
+}
+
+// Suspended reports whether a sandbox is currently checkpointed.
+func (f *Fake) Suspended(sandboxID string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.suspended[sandboxID]
+}
+
+// SandboxState reports the lifecycle state without transitioning it.
+func (f *Fake) SandboxState(_ context.Context, sandboxID string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.live[sandboxID]; !ok {
+		return "", fmt.Errorf("fake: sandbox %s not found", sandboxID)
+	}
+	if f.suspended[sandboxID] {
+		return StatePaused, nil
+	}
+	return StateRunning, nil
+}
+
+// SetSuspendErr makes Suspend fail, for degraded-path tests.
+func (f *Fake) SetSuspendErr(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.suspendErr = err
+}
+
+// SetResumeErr makes Resume fail, for degraded-path tests.
+func (f *Fake) SetResumeErr(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.resumeErr = err
+}
 func (f *Fake) Ping(context.Context) error { return nil }
 
 func (f *Fake) Create(_ context.Context, spec Spec) (Sandbox, error) {

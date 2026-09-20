@@ -345,6 +345,35 @@ func TestOpenCodeConfigDoesNotEmbedCredentialValue(t *testing.T) {
 	}
 }
 
+func TestOpenCodeConfiguresResolvedModelEndpoint(t *testing.T) {
+	h, err := NewOpenCode(OpenCodeOptions{
+		Binary:   "/host/opencode",
+		ReadFile: func(string) ([]byte, error) { return []byte("bin"), nil },
+	})
+	if err != nil {
+		t.Fatalf("NewOpenCode: %v", err)
+	}
+	provider := sandbox.NewFake()
+	sb, err := provider.Create(context.Background(), sandbox.Spec{Template: "test"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	endpoint := ModelEndpoint{
+		Provider: "test", Model: "provider/model", BaseURL: "https://gateway.example/v1", APIKeyEnv: "FACTORY_MODEL_KEY",
+	}
+	if err := h.ConfigureModelEndpoint(context.Background(), sb, endpoint); err != nil {
+		t.Fatalf("ConfigureModelEndpoint: %v", err)
+	}
+	data, err := sb.ReadFile(context.Background(), OpenCodeConfigPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	text := string(data)
+	if !strings.Contains(text, endpoint.BaseURL) || !strings.Contains(text, "{env:"+endpoint.APIKeyEnv+"}") {
+		t.Fatalf("resolved endpoint missing from opencode config: %s", text)
+	}
+}
+
 func mustJSON(t *testing.T, v any) []byte {
 	t.Helper()
 	data, err := json.Marshal(v)
