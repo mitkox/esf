@@ -2,11 +2,13 @@ package factory
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
+	"testing"
 
 	"github.com/mitkox/esf/internal/agentharness"
 	"github.com/mitkox/esf/internal/artifacts"
-	"testing"
 )
 
 // TestRedactorScrubsPatterns is a security test: captured agent output is
@@ -97,6 +99,33 @@ func TestRedactorScrubsRegisteredValues(t *testing.T) {
 	}
 	if r.ValueCount() != 1 {
 		t.Fatalf("ValueCount = %d, want 1", r.ValueCount())
+	}
+}
+
+func TestCollectSecretsIncludesHarnessAPIKeyEnvironment(t *testing.T) {
+	const secret = "opaque-unreal-provider-key-9876"
+	t.Setenv("UNREAL_TEST_API_KEY", secret)
+	cfg := Config{Harnesses: map[string]HarnessConfig{
+		"unreal": {APIKeyEnv: "UNREAL_TEST_API_KEY"},
+	}}
+	r := NewRedactor(collectSecrets(cfg, nil)...)
+	if got := r.Redact("runner echoed " + secret); strings.Contains(got, secret) {
+		t.Fatalf("api_key_env secret survived redaction: %q", got)
+	}
+}
+
+func TestCollectSecretsIncludesHarnessAPIKeyFile(t *testing.T) {
+	const secret = "opaque-file-provider-key-9876"
+	path := filepath.Join(t.TempDir(), "provider-key")
+	if err := os.WriteFile(path, []byte(secret+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{Harnesses: map[string]HarnessConfig{
+		"unreal": {APIKeyFile: path},
+	}}
+	r := NewRedactor(collectSecrets(cfg, nil)...)
+	if got := r.Redact("runner echoed " + secret); strings.Contains(got, secret) {
+		t.Fatalf("api_key_file secret survived redaction: %q", got)
 	}
 }
 

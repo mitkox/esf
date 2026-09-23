@@ -261,19 +261,24 @@ For an agent provider credential, the factory supports two mechanisms:
 | --- | --- | --- |
 | Environment allowlist | `pass_env = ["MY_TOKEN"]` | The variable is forwarded to the agent process only if its name is listed |
 | Provisioned provider file | `provider_files = { "<sandbox path>" = "<host path>" }` | Opt-in. The file is copied into the sandbox so the agent can authenticate. |
+| CubeEgress vault (Unreal) | `credential_mode = "cube_egress"`, `api_key_file = "..."` | Recommended. HTTPS header injection keeps the real key outside the microVM and applies runtime default-deny egress. |
 
 Both are operator configuration. Neither is reachable from a request. When a
 provider file is configured, its contents are also registered with the redactor,
 so they cannot be persisted into evidence.
 
-> **Trade-off, stated plainly:** a provisioned provider file is readable by the
-> agent inside the sandbox. The cleaner alternative — an egress proxy that
-> injects the credential header so it never enters the sandbox — is Phase 2 work;
-> this deployment's Cube egress proxy already supports credential injection.
+> **Trade-off, stated plainly:** environment values and provisioned provider
+> files are readable by the agent. The Unreal harness's `cube_egress` mode avoids
+> that exposure. It requires CubeEgress and its CA in the selected template;
+> keep `runtime_allow_out` minimal and monitor CubeEgress's metadata audit log.
 
 To rotate a provisioned provider file, replace the host file and restart the
 worker; the new contents are staged on the next run and re-registered with the
 redactor.
+
+To rotate a CubeEgress-managed key, update the worker's secret source and
+restart the worker. Existing sandboxes retain their per-run policy until they
+are destroyed; new runs receive the rotated value.
 
 ## 9. Adding a new agent harness
 
@@ -294,7 +299,7 @@ pass_env    = ["OPENAI_API_KEY"]
 
 | Field | Meaning |
 | --- | --- |
-| `type` | `opencode` (built-in shape) or `generic` (anything else) |
+| `type` | `opencode`, `unreal` (built-in safe adapters), or `generic` |
 | `executable` | Operator-owned program name — never caller-supplied |
 | `args` | Fixed argument vector. `{{model_args}}` expands to the model flag + model, or disappears |
 | `model_flag` | The agent's model-selection flag |
@@ -314,6 +319,8 @@ Notes:
   preparation needs them.
 - The harness is selected by **name** (`--agent codex`). A request cannot name an
   executable.
+- Dynamic placeholders must be complete argv elements and are rejected inside
+  a shell `-c` program. Use `{{model_args}}` for model selection.
 
 Verify with `./bin/factory doctor`, which lists registered harnesses.
 

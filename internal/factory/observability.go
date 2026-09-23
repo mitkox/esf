@@ -42,16 +42,17 @@ const (
 
 // Span names for the desired trace shape.
 const (
-	SpanRun            = "factory.run"
-	SpanValidate       = "validate"
-	SpanCubeCreate     = "cube.create"
-	SpanRepoPrepare    = "repo.prepare"
-	SpanRecordBaseline = "repo.baseline"
-	SpanAgentRun       = "agent.run"
-	SpanVerifyPrefix   = "verify."
-	SpanArtifacts      = "artifacts.collect"
-	SpanCubeDestroy    = "cube.destroy"
-	SpanPrepareSandbox = "sandbox.prepare"
+	SpanRun             = "factory.run"
+	SpanValidate        = "validate"
+	SpanCubeCreate      = "cube.create"
+	SpanRepoPrepare     = "repo.prepare"
+	SpanNetworkLockdown = "sandbox.network.lockdown"
+	SpanRecordBaseline  = "repo.baseline"
+	SpanAgentRun        = "agent.run"
+	SpanVerifyPrefix    = "verify."
+	SpanArtifacts       = "artifacts.collect"
+	SpanCubeDestroy     = "cube.destroy"
+	SpanPrepareSandbox  = "sandbox.prepare"
 )
 
 // Telemetry bundles the tracer and meter providers.

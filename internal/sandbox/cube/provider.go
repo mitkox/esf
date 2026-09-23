@@ -250,6 +250,7 @@ func (p *Provider) Create(ctx context.Context, spec sandbox.Spec) (sandbox.Sandb
 	if spec.Network.AllowInternet != nil {
 		opts.AllowInternetAccess = spec.Network.AllowInternet
 	}
+	opts.Network.Rules = cubeNetworkRules(spec.Network.Rules)
 
 	started := time.Now()
 	created, err := p.client.Create(ctx, opts)
@@ -341,6 +342,51 @@ type cubeSandbox struct {
 
 func (s *cubeSandbox) ID() string       { return s.id }
 func (s *cubeSandbox) Template() string { return s.template }
+
+// UpdateNetwork atomically replaces the live sandbox's egress policy.
+func (s *cubeSandbox) UpdateNetwork(ctx context.Context, network sandbox.Network) error {
+	err := s.sb.UpdateNetwork(ctx, cubesandbox.UpdateNetworkOptions{
+		AllowInternetAccess: network.AllowInternet,
+		NetworkOptions: cubesandbox.NetworkOptions{
+			AllowOut: network.AllowOut,
+			DenyOut:  network.DenyOut,
+			Rules:    cubeNetworkRules(network.Rules),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("update network for sandbox %s: %w", s.id, classify(err))
+	}
+	return nil
+}
+
+func cubeNetworkRules(rules []sandbox.NetworkRule) []cubesandbox.Rule {
+	if len(rules) == 0 {
+		return nil
+	}
+	out := make([]cubesandbox.Rule, 0, len(rules))
+	for _, rule := range rules {
+		inject := make([]cubesandbox.Inject, 0, len(rule.Action.Inject))
+		for _, item := range rule.Action.Inject {
+			inject = append(inject, cubesandbox.Inject{
+				Header: item.Header,
+				Secret: item.Secret,
+				Format: item.Format,
+			})
+		}
+		out = append(out, cubesandbox.Rule{
+			Name: rule.Name,
+			Match: cubesandbox.Match{
+				SNI: rule.Match.SNI, Host: rule.Match.Host,
+				Method: rule.Match.Method, Path: rule.Match.Path,
+				Scheme: rule.Match.Scheme, Port: rule.Match.Port,
+			},
+			Action: cubesandbox.Action{
+				Allow: rule.Action.Allow, Audit: rule.Action.Audit, Inject: inject,
+			},
+		})
+	}
+	return out
+}
 
 // Execute runs one command.
 //

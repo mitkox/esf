@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mitkox/esf/internal/agentharness"
 	"github.com/mitkox/esf/internal/tomlx"
 
 	"github.com/mitkox/esf/internal/sandbox/cube"
@@ -133,6 +134,67 @@ func TestBuildHarnessesRegistersConfiguredNames(t *testing.T) {
 	// A caller cannot invent a harness.
 	if _, err := registry.Resolve("not-configured"); err == nil {
 		t.Fatal("an unconfigured harness name must not resolve")
+	}
+}
+
+func TestBuildHarnessesCreatesUnrealHarness(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	cfg.Harnesses = map[string]HarnessConfig{
+		"unreal": {
+			Type: "unreal", Binary: "/host/unreal-agent-runner",
+			BinarySHA256: strings.Repeat("a", 64),
+			Provider:     "openrouter", BaseURL: "https://openrouter.ai/api/v1",
+			Model: "vendor/model", APIKeyEnv: "OPENROUTER_API_KEY",
+			ThinkingLevel: "high", Timeout: tomlx.FromStd(time.Minute),
+		},
+	}
+	registry, err := cfg.BuildHarnesses()
+	if err != nil {
+		t.Fatalf("BuildHarnesses: %v", err)
+	}
+	harness, err := registry.Resolve("unreal")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	generic, ok := harness.(*agentharness.GenericCommandHarness)
+	if !ok {
+		t.Fatalf("harness type = %T, want *agentharness.GenericCommandHarness", harness)
+	}
+	if got := generic.Spec().Executable; got != agentharness.UnrealBinaryPath {
+		t.Fatalf("unreal executable = %q", got)
+	}
+}
+
+func TestBuildHarnessesRejectsUnrealPassEnv(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	cfg.Harnesses = map[string]HarnessConfig{
+		"unreal": {
+			Type: "unreal", Binary: "/host/runner", Provider: "openai",
+			BinarySHA256: strings.Repeat("a", 64),
+			Model:        "model", APIKeyEnv: "OPENAI_API_KEY",
+			PassEnv: []string{"HOME"}, Timeout: tomlx.FromStd(time.Minute),
+		},
+	}
+	if _, err := cfg.BuildHarnesses(); err == nil || !strings.Contains(err.Error(), "does not accept pass_env") {
+		t.Fatalf("BuildHarnesses error = %v", err)
+	}
+}
+
+func TestBuildHarnessesRejectsCustomUnrealInvocation(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	cfg.Harnesses = map[string]HarnessConfig{
+		"unreal": {
+			Type: "unreal", Binary: "/host/runner", Provider: "openai",
+			BinarySHA256: strings.Repeat("a", 64),
+			Model:        "model", APIKeyEnv: "OPENAI_API_KEY", Executable: "/bin/sh",
+			Timeout: tomlx.FromStd(time.Minute),
+		},
+	}
+	if _, err := cfg.BuildHarnesses(); err == nil || !strings.Contains(err.Error(), "invocation is fixed") {
+		t.Fatalf("BuildHarnesses error = %v", err)
 	}
 }
 
