@@ -317,6 +317,10 @@ Notes:
 
 Verify with `./bin/factory doctor`, which lists registered harnesses.
 
+For the async `unreal-agent` runner (standalone binary, no Go dependency, full
+operator contract + evidence mapping), see [harness-unreal](harness-unreal.md)
+and `scripts/unreal-demo.sh`.
+
 ## 10. Adding a verification profile
 
 ```toml

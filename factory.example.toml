@@ -84,6 +84,26 @@ pass_env = ["FACTORY_AGENT_TOKEN"]
 # credential header so it never enters the sandbox — is Phase 2 work.
 # provider_files = { "/root/.local/share/opencode/auth.json" = "/home/USER/.local/share/opencode/auth.json" }
 
+# ── unreal-agent (async harness, no Go dependency) ───────────────────────────
+# unreal-agent runs as a `generic` harness: ESF stages the standalone runner
+# binary and invokes it through a fixed sh wrapper. ESF never imports the
+# unreal-agent Go module; the only contract is the binary + stdin text prompt.
+# See docs/harness-unreal.md for the full operator guide and benchmarks.
+#
+# [harnesses.unreal]
+# type        = "generic"
+# binary      = "/home/USER/dev/unreal-agent/bin/unreal-agent-runner"
+# executable  = "/bin/sh"
+# args        = ["-c", "export THINKING_LEVEL=\"${THINKING_LEVEL:-high}\"; python3 -c 'import os,sys,json; sys.stdout.write(json.dumps({\"prompt\": sys.stdin.read(), \"thinking_level\": os.environ[\"THINKING_LEVEL\"]}))' | exec /usr/local/bin/unreal -session-directory /tmp/unreal-sessions -log-directory /tmp/unreal-logs"]
+# model       = "<provider-model-id>"
+# timeout     = "30m"
+# packages    = ["python3"]
+# prompt_mode = "stdin_file"
+# pass_env    = ["UNREAL_HARNESS_LLM_PROVIDER", "UNREAL_HARNESS_LLM_BASE_URL", "UNREAL_HARNESS_LLM_MODEL", "THINKING_LEVEL"]
+#
+# The gateway URL and credential travel via pass_env (worker environment);
+# their values never enter config or evidence.
+
 # A deterministic conformance agent used to prove the factory contract without a
 # language model. It receives the task on stdin and exits zero on success, like
 # any other harness. Hosted by the end-to-end acceptance test.
