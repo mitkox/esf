@@ -163,6 +163,59 @@ func TestFileRoundTrip(t *testing.T) {
 	assertNoLeak(t, p, sb.ID())
 }
 
+// TestRuntimeNetworkPolicyUpdate proves the deployed Cube version accepts the
+// fail-closed L7 credential policy shape used immediately before an agent run.
+// The token is deliberately fake and no outbound request is made.
+func TestRuntimeNetworkPolicyUpdate(t *testing.T) {
+	p := newProvider(t)
+	requireCleanStart(t, p)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	sb, err := p.Create(ctx, sandbox.Spec{
+		Metadata:    map[string]string{"origin": testOrigin, "test": t.Name()},
+		IdleTimeout: 5 * time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	t.Cleanup(func() {
+		killCtx, c := context.WithTimeout(context.Background(), 90*time.Second)
+		defer c()
+		_ = p.Destroy(killCtx, sb.ID())
+	})
+
+	updater, ok := sb.(sandbox.NetworkUpdater)
+	if !ok {
+		t.Fatal("Cube sandbox does not implement runtime network updates")
+	}
+	deny := false
+	err = updater.UpdateNetwork(ctx, sandbox.Network{
+		AllowInternet: &deny,
+		Rules: []sandbox.NetworkRule{{
+			Name: "factory-test-model",
+			Match: sandbox.NetworkMatch{
+				Scheme: "https", Host: "example.com", SNI: "example.com",
+				Method: []string{"POST"}, Path: "/v1/*",
+			},
+			Action: sandbox.NetworkAction{
+				Allow: true, Audit: "metadata",
+				Inject: []sandbox.HeaderInjection{{
+					Header: "Authorization", Secret: "fake-integration-token", Format: "Bearer ${SECRET}",
+				}},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("UpdateNetwork: %v", err)
+	}
+
+	if err := p.Destroy(ctx, sb.ID()); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+	assertNoLeak(t, p, sb.ID())
+}
+
 // TestGitWorkflowInsideSandbox is integration test 3: install git, build a
 // repository, modify it, and collect a diff — the exact operations the factory
 // depends on.

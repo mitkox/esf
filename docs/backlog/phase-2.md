@@ -152,6 +152,7 @@ judged by. **Acceptance:** an invalid or unsafe file is rejected with a clear
 error; a valid one drives verification.
 
 ### P1.7 Credential injection at the egress proxy
+**Completed for the Unreal harness.**
 Remove the need to stage provider credentials into sandboxes, closing the only
 material limitation of Phase 1 (completion report §11.1). This deployment's Cube
 egress proxy already supports L7 credential injection. **Acceptance:** an agent

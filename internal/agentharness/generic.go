@@ -2,13 +2,22 @@ package agentharness
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/mitkox/esf/internal/sandbox"
+)
+
+var (
+	harnessNamePattern     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+	environmentNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	packageNamePattern     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9+._:~=\-]*$`)
 )
 
 // Provision describes how to make an agent available inside a sandbox.
@@ -27,6 +36,9 @@ type Provision struct {
 	BinarySource string
 	// BinaryDest is the absolute in-sandbox path for BinarySource.
 	BinaryDest string
+	// BinarySHA256, when set, is the expected lowercase or uppercase SHA-256
+	// digest of BinarySource. A mismatch fails before anything is staged.
+	BinarySHA256 string
 	// Files are configuration files written into the sandbox before the agent
 	// runs. They are factory/operator content, never task-derived.
 	Files map[string]string
@@ -89,12 +101,22 @@ type GenericCommandHarness struct {
 	// configureModelEndpoint is set by harness families such as OpenCode that
 	// need a configuration file in addition to the model command-line flag.
 	configureModelEndpoint func(context.Context, sandbox.Sandbox, ModelEndpoint) error
+	// transformTask adapts a structured protocol before generic execution.
+	// It is configured only by factory-owned constructors such as NewUnreal.
+	transformTask func(Task) (Task, error)
+	// validateModel optionally enforces an adapter's operator model policy.
+	validateModel func(string) error
+	// version overrides the default VerifyArgs-based version discovery.
+	version func(context.Context, sandbox.Sandbox) string
 }
 
 // NewGeneric builds a generic harness from its spec.
 func NewGeneric(spec Spec) (*GenericCommandHarness, error) {
 	if strings.TrimSpace(spec.Name) == "" {
 		return nil, fmt.Errorf("agentharness: spec name is required")
+	}
+	if !harnessNamePattern.MatchString(spec.Name) {
+		return nil, fmt.Errorf("agentharness: spec name %q must contain only letters, digits, dots, underscores, and dashes", spec.Name)
 	}
 	if strings.TrimSpace(spec.Executable) == "" {
 		return nil, fmt.Errorf("agentharness: executable is required for %q", spec.Name)
@@ -114,11 +136,91 @@ func NewGeneric(spec Spec) (*GenericCommandHarness, error) {
 		// placeholder is required; this branch documents that.
 		_ = spec
 	}
+	if err := ValidatePackages(spec.Provision.Packages); err != nil {
+		return nil, fmt.Errorf("agentharness: %q: %w", spec.Name, err)
+	}
+	if spec.Provision.BinarySource == "" && spec.Provision.BinarySHA256 != "" {
+		return nil, fmt.Errorf("agentharness: %q binary_sha256 requires binary source", spec.Name)
+	}
+	if spec.Provision.BinarySource != "" && spec.Provision.BinaryDest == "" {
+		return nil, fmt.Errorf("agentharness: %q binary destination is required", spec.Name)
+	}
+	if digest := spec.Provision.BinarySHA256; digest != "" {
+		if len(digest) != sha256.Size*2 {
+			return nil, fmt.Errorf("agentharness: %q binary_sha256 must be 64 hexadecimal characters", spec.Name)
+		}
+		if _, err := hex.DecodeString(digest); err != nil {
+			return nil, fmt.Errorf("agentharness: %q binary_sha256 is invalid: %w", spec.Name, err)
+		}
+	}
+	for name := range spec.Env {
+		if err := ValidateEnvironmentName(name); err != nil {
+			return nil, fmt.Errorf("agentharness: %q fixed environment: %w", spec.Name, err)
+		}
+	}
+	for _, name := range spec.PassEnv {
+		if err := ValidateEnvironmentName(name); err != nil {
+			return nil, fmt.Errorf("agentharness: %q pass_env: %w", spec.Name, err)
+		}
+	}
+	for _, arg := range spec.Args {
+		for _, placeholder := range []string{ModelArgsPlaceholder, "{{model}}", "{{prompt_file}}", "{{repository_dir}}"} {
+			if strings.Contains(arg, placeholder) && arg != placeholder {
+				return nil, fmt.Errorf("agentharness: %q placeholder %s must be a complete argument", spec.Name, placeholder)
+			}
+		}
+	}
+	if isShellExecutable(spec.Executable) {
+		for index := 1; index < len(spec.Args); index++ {
+			if spec.Args[index-1] != "-c" {
+				continue
+			}
+			for _, placeholder := range []string{ModelArgsPlaceholder, "{{model}}", "{{prompt_file}}", "{{repository_dir}}"} {
+				if strings.Contains(spec.Args[index], placeholder) {
+					return nil, fmt.Errorf("agentharness: %q cannot substitute %s into a shell program", spec.Name, placeholder)
+				}
+			}
+		}
+	}
 	return &GenericCommandHarness{
 		spec:     spec,
 		hostEnv:  os.LookupEnv,
 		readFile: os.ReadFile,
 	}, nil
+}
+
+func isShellExecutable(executable string) bool {
+	name := executable
+	if index := strings.LastIndexByte(name, '/'); index >= 0 {
+		name = name[index+1:]
+	}
+	switch name {
+	case "bash", "dash", "ksh", "sh", "zsh":
+		return true
+	default:
+		return false
+	}
+}
+
+// ValidateEnvironmentName rejects names that cannot be represented safely and
+// portably in a process environment.
+func ValidateEnvironmentName(name string) error {
+	if !environmentNamePattern.MatchString(name) {
+		return fmt.Errorf("environment variable name %q is invalid", name)
+	}
+	return nil
+}
+
+// ValidatePackages rejects package-manager arguments containing whitespace or
+// shell metacharacters. Package installation uses a factory-owned shell script,
+// so configuration values must remain single apt package arguments.
+func ValidatePackages(packages []string) error {
+	for _, name := range packages {
+		if !packageNamePattern.MatchString(name) {
+			return fmt.Errorf("package name %q contains unsafe characters", name)
+		}
+	}
+	return nil
 }
 
 func (h *GenericCommandHarness) Name() string  { return h.spec.Name }
@@ -180,6 +282,12 @@ func (h *GenericCommandHarness) Provision(ctx context.Context, sb sandbox.Sandbo
 		data, err := h.readFile(p.BinarySource)
 		if err != nil {
 			return fmt.Errorf("%s provision: read agent binary %q: %w", h.Name(), p.BinarySource, err)
+		}
+		if p.BinarySHA256 != "" {
+			actual := sha256.Sum256(data)
+			if !strings.EqualFold(hex.EncodeToString(actual[:]), p.BinarySHA256) {
+				return fmt.Errorf("%s provision: agent binary SHA-256 does not match binary_sha256", h.Name())
+			}
 		}
 		if err := sb.WriteFile(ctx, p.BinaryDest, data); err != nil {
 			return fmt.Errorf("%s provision: push agent binary: %w", h.Name(), err)
@@ -259,6 +367,9 @@ func (h *GenericCommandHarness) Provision(ctx context.Context, sb sandbox.Sandbo
 // line, or an empty string when unavailable. It is best-effort: failure to read
 // a version never fails a run.
 func (h *GenericCommandHarness) Version(ctx context.Context, sb sandbox.Sandbox) string {
+	if h.version != nil {
+		return h.version(ctx, sb)
+	}
 	if len(h.spec.Provision.VerifyArgs) == 0 {
 		return ""
 	}
@@ -277,6 +388,14 @@ func (h *GenericCommandHarness) Version(ctx context.Context, sb sandbox.Sandbox)
 	return line
 }
 
+// ValidateModel applies adapter-specific model policy when configured.
+func (h *GenericCommandHarness) ValidateModel(model string) error {
+	if h.validateModel == nil {
+		return nil
+	}
+	return h.validateModel(model)
+}
+
 // Run executes the agent with the configured argument vector.
 func (h *GenericCommandHarness) Run(ctx context.Context, sb sandbox.Sandbox, task Task) (Result, error) {
 	if strings.TrimSpace(task.Prompt) == "" {
@@ -284,6 +403,13 @@ func (h *GenericCommandHarness) Run(ctx context.Context, sb sandbox.Sandbox, tas
 	}
 	if task.RepositoryDir == "" {
 		return Result{}, fmt.Errorf("%s: repository directory is required", h.Name())
+	}
+	if h.transformTask != nil {
+		var err error
+		task, err = h.transformTask(task)
+		if err != nil {
+			return Result{}, err
+		}
 	}
 
 	model := strings.TrimSpace(task.Model)
@@ -425,3 +551,5 @@ func truncate(s string, n int) string {
 }
 
 var _ Harness = (*GenericCommandHarness)(nil)
+var _ ModelValidator = (*GenericCommandHarness)(nil)
+var _ Versioner = (*GenericCommandHarness)(nil)

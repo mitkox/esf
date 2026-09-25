@@ -176,6 +176,18 @@ type PrepareRepositoryOutput struct {
 	Baseline repository.Baseline `json:"baseline"`
 }
 
+// ApplyRuntimeNetworkInput locks down egress before untrusted agent execution.
+type ApplyRuntimeNetworkInput struct {
+	RunID     string `json:"run_id"`
+	SandboxID string `json:"sandbox_id"`
+	Harness   string `json:"harness"`
+}
+
+// ApplyRuntimeNetworkOutput records whether a harness-specific policy applied.
+type ApplyRuntimeNetworkOutput struct {
+	Applied bool `json:"applied"`
+}
+
 // RunAgentInput executes the coding agent inside the sandbox.
 type RunAgentInput struct {
 	RunID         string            `json:"run_id"`
@@ -316,8 +328,14 @@ func (a *Activities) ValidateRequest(ctx context.Context, in ValidateInput) (Val
 	if err := req.Validate(); err != nil {
 		return ValidateOutput{}, err
 	}
-	if !a.harnesses.Has(req.AgentHarness) {
+	harness, err := a.harnesses.Resolve(req.AgentHarness)
+	if err != nil {
 		return ValidateOutput{}, fmt.Errorf("harness %q is not registered on this worker", req.AgentHarness)
+	}
+	if validator, ok := harness.(agentharness.ModelValidator); ok {
+		if err := validator.ValidateModel(req.AgentModel); err != nil {
+			return ValidateOutput{}, err
+		}
 	}
 	if _, err := a.profiles.Resolve(req.VerificationProfile); err != nil {
 		return ValidateOutput{}, err
@@ -567,8 +585,8 @@ func (a *Activities) PrepareSandbox(ctx context.Context, in PrepareSandboxInput)
 	out := PrepareSandboxOutput{Duration: time.Since(started)}
 
 	// Version detection is best-effort and never fails a run.
-	if generic, ok := harness.(*agentharness.GenericCommandHarness); ok {
-		out.HarnessVersion = generic.Version(ctx, sb)
+	if versioner, ok := harness.(agentharness.Versioner); ok {
+		out.HarnessVersion = versioner.Version(ctx, sb)
 	}
 	a.log.InfoContext(ctx, "harness provisioned",
 		slog.String("run.id", in.RunID),
@@ -626,6 +644,40 @@ func (a *Activities) PrepareRepository(ctx context.Context, in PrepareRepository
 		slog.String("run.id", in.RunID),
 		slog.String("repository.sha", baseline.SHA))
 	return PrepareRepositoryOutput{Baseline: baseline}, nil
+}
+
+// ApplyRuntimeNetwork replaces setup-time networking with the agent policy.
+// The provider secret is resolved from the worker's secret source here, so it is
+// never serialized through Temporal or made visible inside the sandbox.
+func (a *Activities) ApplyRuntimeNetwork(ctx context.Context, in ApplyRuntimeNetworkInput) (ApplyRuntimeNetworkOutput, error) {
+	ctx, span := a.telemetry.Tracer().Start(ctx, SpanNetworkLockdown)
+	defer span.End()
+
+	network, applies, err := a.cfg.runtimeNetworkForHarness(in.Harness)
+	if err != nil {
+		span.RecordError(err)
+		return ApplyRuntimeNetworkOutput{}, err
+	}
+	if !applies {
+		return ApplyRuntimeNetworkOutput{}, nil
+	}
+	sb, err := a.provider.Reattach(ctx, in.SandboxID)
+	if err != nil {
+		return ApplyRuntimeNetworkOutput{}, err
+	}
+	updater, ok := sb.(sandbox.NetworkUpdater)
+	if !ok {
+		return ApplyRuntimeNetworkOutput{}, fmt.Errorf("sandbox provider %q cannot apply the required runtime network policy", a.provider.Name())
+	}
+	if err := updater.UpdateNetwork(ctx, network); err != nil {
+		span.RecordError(err)
+		return ApplyRuntimeNetworkOutput{}, fmt.Errorf("apply runtime network policy: %w", err)
+	}
+	a.log.InfoContext(ctx, "sandbox runtime network locked down",
+		slog.String("run.id", in.RunID),
+		slog.String("harness", in.Harness),
+		slog.Int("additional_allow_out", len(network.AllowOut)))
+	return ApplyRuntimeNetworkOutput{Applied: true}, nil
 }
 
 // RunAgent executes the coding agent inside the sandbox.

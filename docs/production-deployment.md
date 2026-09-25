@@ -68,14 +68,37 @@ key. Restart clients/workers so all can decrypt both keys. Then change `active`
 and restart again. Retain old keys for at least the history and backup lifetime.
 Losing a required key makes that history unrecoverable.
 
+For Unreal provider keys, use `credential_mode = "cube_egress"` with a
+file-backed secret. A systemd drop-in can load the source without placing its
+value in `worker.env`:
+
+```ini
+[Service]
+LoadCredential=unreal-provider-key:/etc/factory/secrets/openrouter-key
+```
+
+Then configure:
+
+```toml
+[harnesses.unreal]
+credential_mode = "cube_egress"
+api_key_file = "/run/credentials/factory-worker.service/unreal-provider-key"
+```
+
+The source file should be root-owned and mode `0600`; systemd exposes the
+credential read-only to the service. A Vault Agent-rendered owner-only file can
+be used at the same `api_key_file` seam. The worker reads it only while applying
+the per-run CubeEgress policy, and the value does not enter Temporal or the VM.
+
 ## Install the worker
 
 1. Build with the version in `go.mod`: `go build -trimpath -o bin/factory ./cmd/factory`.
 2. Create a dedicated `factory` system user/group. Install the binary at
    `/usr/local/bin/factory` and configuration at `/etc/factory/factory.toml`.
-3. Make configuration and secret files readable only by root and the factory
-   group (for example owner `root:factory`, mode `0640`). Create
-   `/etc/factory/worker.env`, even when no environment credentials are needed.
+3. Make configuration and keyrings readable only by root and the factory group
+   (for example owner `root:factory`, mode `0640`). Keep any source loaded by
+   `LoadCredential` root-only and mode `0600`. Create `/etc/factory/worker.env`,
+   even when no environment credentials are needed.
 4. Run `factory doctor --config /etc/factory/factory.toml` as the service user
    with the same environment. Resolve every reported failure.
 5. Install `deploy/factory-worker.service` into `/etc/systemd/system/`, reload

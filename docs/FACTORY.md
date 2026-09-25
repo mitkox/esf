@@ -205,11 +205,10 @@ credential. See `docs/adr/0006-control-plane-security-boundary.md`.
 
 ## A required credential
 
-The factory runs the coding agent **inside** the microVM. Sandboxes on this
-deployment can reach the public internet but **cannot reach the factory host**,
-so a host-local model endpoint is not usable from inside an agent run. The agent
-therefore needs a model provider that is reachable over the sandbox's egress and
-authenticated inside the sandbox.
+The factory runs the coding agent **inside** the microVM. Sandboxes cannot reach
+the factory host, so a host-local model endpoint is not usable from an agent run.
+Production Unreal runs use CubeEgress to authenticate at the network boundary;
+the real provider credential is not placed inside the sandbox.
 
 That credential is operator-provisioned configuration, never task-controlled:
 
@@ -217,11 +216,14 @@ That credential is operator-provisioned configuration, never task-controlled:
 [harnesses.opencode2]
 pass_env       = ["MY_PROVIDER_KEY"]                              # env allowlist
 provider_files = { "<sandbox path>" = "<host path>" }             # opt-in staging
+
+[harnesses.unreal]
+credential_mode = "cube_egress"                                  # recommended
 ```
 
-See the operator guide §8 for the trade-offs and the rotation procedure. Without
-a credential the run fails cleanly and honestly: `AGENT_FAILED`, with the
-sandbox still destroyed and the failure captured as evidence.
+See the operator guide §8 for the trade-offs and rotation procedure. A missing
+CubeEgress credential fails the network-lockdown activity before the agent can
+run, and the sandbox is still destroyed.
 
 ---
 
