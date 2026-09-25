@@ -258,6 +258,29 @@ func TestGenericHarnessProvisionInstallsPackagesAndBinary(t *testing.T) {
 	}
 }
 
+func TestGenericHarnessRejectsBinaryDigestMismatchBeforeStaging(t *testing.T) {
+	t.Parallel()
+	h, err := NewGeneric(Spec{
+		Name: "pinned", Executable: "agent", Timeout: time.Minute,
+		Provision: Provision{
+			BinarySource: "/host/agent", BinaryDest: "/usr/local/bin/agent",
+			BinarySHA256: strings.Repeat("a", 64),
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGeneric: %v", err)
+	}
+	h.readFile = func(string) ([]byte, error) { return []byte("different binary"), nil }
+	fake := sandbox.NewFake()
+	sb, _ := fake.Create(context.Background(), sandbox.Spec{})
+	if err := h.Provision(context.Background(), sb); err == nil || !strings.Contains(err.Error(), "SHA-256") {
+		t.Fatalf("Provision error = %v, want digest mismatch", err)
+	}
+	if _, err := sb.ReadFile(context.Background(), "/usr/local/bin/agent"); err == nil {
+		t.Fatal("mismatched binary was staged")
+	}
+}
+
 func TestGenericHarnessProvisionRejectsRelativeSeedPath(t *testing.T) {
 	t.Parallel()
 	h, err := NewGeneric(Spec{
@@ -286,6 +309,12 @@ func TestNewGenericValidatesSpec(t *testing.T) {
 		{"missing executable", Spec{Name: "a", Timeout: time.Minute}},
 		{"non-positive timeout", Spec{Name: "a", Executable: "a"}},
 		{"unknown prompt mode", Spec{Name: "a", Executable: "a", Timeout: time.Minute, PromptMode: "telepathy"}},
+		{"unsafe name", Spec{Name: "../agent", Executable: "a", Timeout: time.Minute}},
+		{"unsafe package", Spec{Name: "a", Executable: "a", Timeout: time.Minute, Provision: Provision{Packages: []string{"git;id"}}}},
+		{"invalid pass env", Spec{Name: "a", Executable: "a", Timeout: time.Minute, PassEnv: []string{"KEY;id"}}},
+		{"embedded model placeholder", Spec{Name: "a", Executable: "/bin/sh", Args: []string{"-c", "run {{model}}"}, Timeout: time.Minute}},
+		{"embedded repository placeholder", Spec{Name: "a", Executable: "/bin/sh", Args: []string{"-c", "cd {{repository_dir}}"}, Timeout: time.Minute}},
+		{"shell program model placeholder", Spec{Name: "a", Executable: "/bin/sh", Args: []string{"-c", "{{model}}"}, Timeout: time.Minute}},
 	}
 	for _, tc := range cases {
 		tc := tc

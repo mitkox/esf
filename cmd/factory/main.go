@@ -617,7 +617,8 @@ func newWorkerCommand(configPath *string) *cobra.Command {
 // ── doctor ──────────────────────────────────────────────────────────────────
 
 func newDoctorCommand(configPath *string) *cobra.Command {
-	return &cobra.Command{
+	var offline bool
+	command := &cobra.Command{
 		Use:          "doctor",
 		Short:        "Verify configuration, CubeSandbox and Temporal before running",
 		SilenceUsage: true,
@@ -640,9 +641,15 @@ func newDoctorCommand(configPath *string) *cobra.Command {
 			fmt.Println()
 
 			problems := 0
+			if err := cfg.Validate(); err != nil {
+				fmt.Printf("Configuration validation:\n  [FAIL] %v\n\n", err)
+				problems++
+			}
 
 			fmt.Println("CubeSandbox:")
-			if runtime, err := factory.NewRuntime(ctx, factory.RuntimeOptions{Config: cfg}); err == nil {
+			if offline {
+				fmt.Println("  [skip] connectivity check disabled (--offline)")
+			} else if runtime, err := factory.NewRuntime(ctx, factory.RuntimeOptions{Config: cfg}); err == nil {
 				defer runtime.Close(ctx)
 				if err := runtime.Provider.Ping(ctx); err != nil {
 					fmt.Printf("  [FAIL] %v\n", err)
@@ -667,7 +674,9 @@ func newDoctorCommand(configPath *string) *cobra.Command {
 			fmt.Println()
 
 			fmt.Println("Temporal:")
-			if runtime, err := factory.NewRuntime(ctx, factory.RuntimeOptions{Config: cfg}); err == nil {
+			if offline {
+				fmt.Println("  [skip] connectivity check disabled (--offline)")
+			} else if runtime, err := factory.NewRuntime(ctx, factory.RuntimeOptions{Config: cfg}); err == nil {
 				defer runtime.Close(ctx)
 				if c, err := runtime.TemporalClient(); err != nil {
 					fmt.Printf("  [FAIL] %v\n", err)
@@ -700,10 +709,16 @@ func newDoctorCommand(configPath *string) *cobra.Command {
 			if problems > 0 {
 				return fmt.Errorf("%d problem(s) found", problems)
 			}
-			fmt.Println("\nFactory doctor: all checks passed.")
+			if offline {
+				fmt.Println("\nFactory doctor: offline configuration checks passed.")
+			} else {
+				fmt.Println("\nFactory doctor: all checks passed.")
+			}
 			return nil
 		},
 	}
+	command.Flags().BoolVar(&offline, "offline", false, "validate configuration and harnesses without contacting CubeSandbox or Temporal")
+	return command
 }
 
 // ── sandboxes ───────────────────────────────────────────────────────────────
@@ -885,6 +900,9 @@ data_dir = ".factory"
 # factory, not to a harness: repository preparation needs git whatever the agent
 # is, so a harness must not have to remember to declare it.
 base_packages = ["git", "ca-certificates"]
+# Egress-managed harnesses switch to deny-by-default after repository setup.
+# Add only destinations the agent genuinely needs at runtime.
+runtime_allow_out = []
 
 [limits]
 agent_timeout        = "30m"
@@ -929,9 +947,23 @@ pass_env = ["FACTORY_AGENT_TOKEN"]
 # SECURITY: this makes the file readable by the agent INSIDE the sandbox. It is
 # opt-in operator configuration, never derived from task text, never logged, and
 # never written into the task prompt. Its contents are also registered with the
-# evidence redactor. The cleaner alternative — an egress proxy that injects the
-# credential header so it never enters the sandbox — is Phase 2 work.
+# evidence redactor. Prefer CubeEgress injection where the harness supports it.
 # provider_files = { "/root/.local/share/opencode/auth.json" = "/home/USER/.local/share/opencode/auth.json" }
+
+# Standalone unreal-agent runner. The factory invokes its JSON protocol
+# directly; only the credential variable name is stored in configuration.
+# [harnesses.unreal]
+# type           = "unreal"
+# binary         = "/opt/factory/bin/unreal-agent-runner"
+# binary_sha256  = "<64-character-sha256>"
+# provider       = "openrouter"
+# base_url       = "https://openrouter.ai/api/v1"
+# model          = "<provider-model-id>"
+# api_key_file   = "/run/credentials/factory-worker.service/openrouter-key"
+# api_key_env    = "OPENROUTER_API_KEY" # compatibility; choose exactly one
+# credential_mode = "cube_egress"
+# thinking_level = "high"
+# timeout        = "30m"
 
 # A deterministic conformance agent used to prove the factory contract without a
 # language model. It receives the task on stdin and exits zero on success, like

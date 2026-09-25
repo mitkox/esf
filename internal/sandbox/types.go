@@ -64,6 +64,43 @@ type Network struct {
 	// AllowInternet, when non-nil, requests that public egress be enabled or
 	// disabled.
 	AllowInternet *bool `json:"allow_internet,omitempty"`
+	// Rules are L7 policies evaluated by a provider-side egress proxy. Secrets
+	// in inject directives must never be exposed to the sandbox process.
+	Rules []NetworkRule `json:"rules,omitempty"`
+}
+
+// NetworkRule is a provider-neutral L7 egress rule. Match fields are ANDed.
+// Rules are evaluated in order and should therefore put narrow rules first.
+type NetworkRule struct {
+	Name   string
+	Match  NetworkMatch
+	Action NetworkAction
+}
+
+// NetworkMatch identifies an outbound HTTP request.
+type NetworkMatch struct {
+	SNI    string
+	Host   string
+	Method []string
+	Path   string
+	Scheme string
+	Port   int
+}
+
+// NetworkAction allows or denies a matching request and may inject headers at
+// the trusted egress proxy. Injected secret values are operator-side data.
+type NetworkAction struct {
+	Allow  bool
+	Audit  string
+	Inject []HeaderInjection
+}
+
+// HeaderInjection describes a header written by the trusted egress proxy.
+// Format must contain ${SECRET}; an empty format means the raw secret.
+type HeaderInjection struct {
+	Header string
+	Secret string
+	Format string
 }
 
 // Info is a point-in-time description of a live sandbox, used for leak
@@ -179,6 +216,13 @@ type Snapshotter interface {
 	Snapshot(ctx context.Context, sandboxID, name string) (string, error)
 	Clone(ctx context.Context, sandboxID, snapshotID string, n int) ([]Sandbox, error)
 	Rollback(ctx context.Context, sandboxID, snapshotID string) error
+}
+
+// NetworkUpdater is implemented by providers that can atomically replace a
+// running sandbox's egress policy. The factory uses it to allow setup traffic
+// first, then lock the agent phase down before untrusted execution begins.
+type NetworkUpdater interface {
+	UpdateNetwork(ctx context.Context, network Network) error
 }
 
 // Provider creates, reattaches to, and destroys sandboxes.
