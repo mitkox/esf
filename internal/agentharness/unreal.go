@@ -276,5 +276,12 @@ func stableUnrealID(kind string, values ...string) string {
 		_, _ = hash.Write([]byte(value))
 		_, _ = hash.Write([]byte{0})
 	}
-	return "factory-" + kind + "-" + hex.EncodeToString(hash.Sum(nil)[:16])
+	// Unreal-agent requires message IDs to be UUIDs. Use a deterministic
+	// UUIDv8: the name is hashed with SHA-256, then the RFC 9562 version and
+	// variant bits are applied before the canonical 8-4-4-4-12 encoding.
+	id := hash.Sum(nil)[:16]
+	id[6] = (id[6] & 0x0f) | 0x80
+	id[8] = (id[8] & 0x3f) | 0x80
+	encoded := hex.EncodeToString(id)
+	return encoded[0:8] + "-" + encoded[8:12] + "-" + encoded[12:16] + "-" + encoded[16:20] + "-" + encoded[20:32]
 }

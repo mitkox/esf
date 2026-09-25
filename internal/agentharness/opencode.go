@@ -115,7 +115,7 @@ func NewOpenCode(opts OpenCodeOptions) (*GenericCommandHarness, error) {
 	cfg := opts.Config
 	if cfg == nil {
 		var err error
-		cfg, err = defaultOpenCodeConfig(opts.BaseURL, opts.APIKeyEnv)
+		cfg, err = defaultOpenCodeConfig(opts.BaseURL, opts.APIKeyEnv, model)
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +159,7 @@ func NewOpenCode(opts OpenCodeOptions) (*GenericCommandHarness, error) {
 		if endpoint.BaseURL == "" {
 			return nil
 		}
-		cfg, err := defaultOpenCodeConfig(endpoint.BaseURL, endpoint.APIKeyEnv)
+		cfg, err := defaultOpenCodeConfig(endpoint.BaseURL, endpoint.APIKeyEnv, endpoint.Model)
 		if err != nil {
 			return err
 		}
@@ -213,7 +213,7 @@ func seedFiles(cachePath, dest string) map[string]string {
 // It is deliberately explicit rather than empty so that a run's agent behaviour
 // is reproducible and does not depend on whatever user configuration happens to
 // exist on the host.
-func defaultOpenCodeConfig(baseURL, apiKeyEnv string) (map[string]any, error) {
+func defaultOpenCodeConfig(baseURL, apiKeyEnv, model string) (map[string]any, error) {
 	cfg := map[string]any{
 		"$schema":       "https://opencode.ai/config.json",
 		"default_agent": "build",
@@ -222,7 +222,7 @@ func defaultOpenCodeConfig(baseURL, apiKeyEnv string) (map[string]any, error) {
 	if baseURL != "" {
 		provider := map[string]any{
 			"name":    "factory",
-			"package": "@opencode-ai/ai/providers/openai-compatible",
+			"package": "@opencode/ai/providers/openai-compatible",
 			"settings": map[string]any{
 				"baseURL": baseURL,
 			},
@@ -231,6 +231,19 @@ func defaultOpenCodeConfig(baseURL, apiKeyEnv string) (map[string]any, error) {
 			// The value is supplied through the sandbox environment, never
 			// persisted into this file.
 			provider["settings"].(map[string]any)["apiKey"] = "{env:" + apiKeyEnv + "}"
+		}
+		if model = strings.TrimSpace(model); model != "" {
+			modelID := model
+			if index := strings.IndexByte(model, '/'); index >= 0 {
+				modelID = model[index+1:]
+			}
+			provider["models"] = map[string]any{
+				modelID: map[string]any{
+					"name":    modelID,
+					"modelID": modelID,
+				},
+			}
+			cfg["model"] = "factory/" + modelID
 		}
 		cfg["providers"] = map[string]any{"factory": provider}
 	}

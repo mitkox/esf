@@ -363,7 +363,7 @@ func TestOpenCodeHarnessDefaults(t *testing.T) {
 
 func TestOpenCodeConfigDoesNotEmbedCredentialValue(t *testing.T) {
 	t.Parallel()
-	config, err := defaultOpenCodeConfig("http://gateway.example/v1", "FACTORY_MODEL_KEY")
+	config, err := defaultOpenCodeConfig("http://gateway.example/v1", "FACTORY_MODEL_KEY", "factory/mitko")
 	if err != nil {
 		t.Fatalf("defaultOpenCodeConfig: %v", err)
 	}
@@ -371,6 +371,12 @@ func TestOpenCodeConfigDoesNotEmbedCredentialValue(t *testing.T) {
 	// The credential must be referenced by name, never inlined.
 	if !strings.Contains(encoded, "{env:FACTORY_MODEL_KEY}") {
 		t.Fatalf("expected an env-var reference in the provider config: %s", encoded)
+	}
+	if !strings.Contains(encoded, "@opencode/ai/providers/openai-compatible") {
+		t.Fatalf("expected the V2 openai-compatible provider package: %s", encoded)
+	}
+	if !strings.Contains(encoded, `"model":"factory/mitko"`) || !strings.Contains(encoded, `"modelID":"mitko"`) {
+		t.Fatalf("expected the local model to be registered: %s", encoded)
 	}
 }
 

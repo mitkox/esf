@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mitkox/esf/internal/sandbox"
 )
 
@@ -93,6 +94,13 @@ func TestUnrealHarnessUsesDirectJSONProtocol(t *testing.T) {
 		if strings.ContainsAny(id, "/_ .") {
 			t.Fatalf("runner ID %q is not a safe localfile session identifier", id)
 		}
+	}
+	messageID, err := uuid.Parse(request.Messages[0].MessageID)
+	if err != nil {
+		t.Fatalf("message ID %q is not a UUID: %v", request.Messages[0].MessageID, err)
+	}
+	if messageID.Version() != 8 {
+		t.Fatalf("message ID version = %d, want 8", messageID.Version())
 	}
 }
 
