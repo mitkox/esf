@@ -35,6 +35,7 @@ type Fake struct {
 	createN  int
 	specs    map[string]Spec
 	commands map[string][]Command
+	networks map[string][]Network
 
 	// suspendErr, when set, is returned by Suspend.
 	suspendErr error
@@ -54,6 +55,7 @@ func NewFake() *Fake {
 		live:       map[string]*FakeSandbox{},
 		specs:      map[string]Spec{},
 		commands:   map[string][]Command{},
+		networks:   map[string][]Network{},
 		DestroyErr: map[string]error{},
 		suspended:  map[string]bool{},
 	}
@@ -258,6 +260,13 @@ func (f *Fake) Spec(sandboxID string) (Spec, bool) {
 	return spec, ok
 }
 
+// Networks returns every runtime network policy applied to the sandbox.
+func (f *Fake) Networks(sandboxID string) []Network {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]Network(nil), f.networks[sandboxID]...)
+}
+
 // FakeSandbox is a live in-memory sandbox.
 type FakeSandbox struct {
 	mu        sync.Mutex
@@ -273,6 +282,18 @@ type FakeSandbox struct {
 
 func (s *FakeSandbox) ID() string       { return s.id }
 func (s *FakeSandbox) Template() string { return s.template }
+
+func (s *FakeSandbox) UpdateNetwork(_ context.Context, network Network) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.destroyed {
+		return fmt.Errorf("fake: sandbox %s is destroyed", s.id)
+	}
+	s.provider.mu.Lock()
+	defer s.provider.mu.Unlock()
+	s.provider.networks[s.id] = append(s.provider.networks[s.id], network)
+	return nil
+}
 
 func (s *FakeSandbox) Execute(ctx context.Context, cmd Command) (Execution, error) {
 	s.mu.Lock()

@@ -36,6 +36,10 @@ data_dir = ".factory"
 # factory, not to a harness: repository preparation needs git whatever the agent
 # is, so a harness must not have to remember to declare it.
 base_packages = ["git", "ca-certificates"]
+# After repository preparation, egress-managed harnesses switch to
+# deny-by-default. Add only destinations the agent genuinely needs at runtime.
+# The model endpoint is allowed automatically by its L7 injection rule.
+runtime_allow_out = []
 
 [limits]
 agent_timeout        = "30m"
@@ -80,9 +84,32 @@ pass_env = ["FACTORY_AGENT_TOKEN"]
 # SECURITY: this makes the file readable by the agent INSIDE the sandbox. It is
 # opt-in operator configuration, never derived from task text, never logged, and
 # never written into the task prompt. Its contents are also registered with the
-# evidence redactor. The cleaner alternative — an egress proxy that injects the
-# credential header so it never enters the sandbox — is Phase 2 work.
+# evidence redactor. Prefer CubeEgress injection where the harness supports it.
 # provider_files = { "/root/.local/share/opencode/auth.json" = "/home/USER/.local/share/opencode/auth.json" }
+
+# ── unreal-agent (async harness, no Go dependency) ───────────────────────────
+# ESF stages the standalone runner and invokes its JSON protocol directly. It
+# does not import the unreal-agent Go module and needs no shell/Python adapter.
+# See docs/harness-unreal.md for the full operator guide and benchmarks.
+#
+# [harnesses.unreal]
+# type           = "unreal"
+# binary         = "/opt/factory/bin/unreal-agent-runner"
+# binary_sha256  = "<64-character-sha256>"
+# provider       = "openrouter"
+# base_url       = "https://openrouter.ai/api/v1"
+# model          = "<provider-model-id>"
+# api_key_file   = "/run/credentials/factory-worker.service/openrouter-key"
+# api_key_env    = "OPENROUTER_API_KEY" # compatibility; choose exactly one
+# credential_mode = "cube_egress"
+# thinking_level = "high"
+# timeout        = "30m"
+#
+# `cube_egress` is the production mode: the worker sends the real value directly
+# to CubeEgress after repository preparation, runtime egress becomes
+# deny-by-default, and the runner sees only a harmless placeholder. The secret
+# never enters the microVM or Temporal history. `environment` is the legacy
+# compatibility mode and exposes the key to sandbox code.
 
 # A deterministic conformance agent used to prove the factory contract without a
 # language model. It receives the task on stdin and exits zero on success, like

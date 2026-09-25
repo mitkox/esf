@@ -131,6 +131,20 @@ type Harness interface {
 	Run(ctx context.Context, sb sandbox.Sandbox, task Task) (Result, error)
 }
 
+// Versioner is implemented by harnesses that can report the exact executable
+// version used inside a sandbox. The factory records this value as evidence.
+// Version discovery is best-effort and must never fail a run.
+type Versioner interface {
+	Version(ctx context.Context, sb sandbox.Sandbox) string
+}
+
+// ModelValidator lets a harness enforce operator model policy before the
+// factory allocates a sandbox. Harnesses that do not implement it retain the
+// generic factory behaviour.
+type ModelValidator interface {
+	ValidateModel(model string) error
+}
+
 // Registry maps operator-configured harness names to implementations.
 //
 // It is the ONLY way workflow code obtains a harness. There is deliberately no

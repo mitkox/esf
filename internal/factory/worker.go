@@ -251,6 +251,16 @@ func collectSecrets(cfg Config, harnesses *agentharness.Registry) []string {
 	// Operator-declared credential environment variables are the values most
 	// likely to be echoed by an agent.
 	for _, hc := range cfg.Harnesses {
+		if name := hc.APIKeyEnv; name != "" {
+			if value := os.Getenv(name); value != "" {
+				secrets = append(secrets, value)
+			}
+		}
+		if path := strings.TrimSpace(hc.APIKeyFile); path != "" {
+			if value, err := readCredentialFile(path); err == nil {
+				secrets = append(secrets, value)
+			}
+		}
 		for _, name := range hc.PassEnv {
 			if value := os.Getenv(name); value != "" {
 				secrets = append(secrets, value)

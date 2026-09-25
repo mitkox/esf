@@ -43,6 +43,8 @@ type OpenCodeOptions struct {
 	Name string
 	// Binary is the host path to the standalone opencode binary.
 	Binary string
+	// BinarySHA256 optionally pins the staged binary content.
+	BinarySHA256 string
 	// Model is the default model (provider/model). Must be reachable from
 	// inside the sandbox.
 	Model string
@@ -141,6 +143,7 @@ func NewOpenCode(opts OpenCodeOptions) (*GenericCommandHarness, error) {
 			Packages:     packages,
 			BinarySource: binary,
 			BinaryDest:   "/usr/local/bin/opencode2",
+			BinarySHA256: opts.BinarySHA256,
 			Files:        map[string]string{OpenCodeConfigPath: string(configBytes)},
 			SeedFiles:    mergeSeedFiles(seedFiles(opts.CatalogCache, opts.CatalogCachePath), opts.ProviderFiles),
 			VerifyArgs:   []string{"opencode2", "--version"},

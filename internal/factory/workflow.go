@@ -400,7 +400,16 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	s.setCondition(ctx, ConditionInventoryWritten, ConditionTrue, "Published",
 		"path="+inventory.Path+" digest="+inventory.Digest)
 
-	// ── 5. Run the coding agent ─────────────────────────────────────────────
+	// ── 5. Lock down runtime egress ──────────────────────────────────────────
+	s.status.CurrentStep = "sandbox.network.lockdown"
+	if err := executeActivity(ctx, acts.ApplyRuntimeNetwork, infraRetry(), ApplyRuntimeNetworkInput{
+		RunID: req.RunID, SandboxID: s.sandboxID, Harness: req.AgentHarness,
+	}).Get(ctx, nil); err != nil {
+		s.status.State = StateInfrastructureFailed
+		return fmt.Errorf("apply runtime network policy: %w", err)
+	}
+
+	// ── 6. Run the coding agent ─────────────────────────────────────────────
 	s.status.CurrentStep = "agent.run"
 	var agentOut RunAgentOutput
 	agentOpts := agentRetry()

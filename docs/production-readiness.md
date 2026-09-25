@@ -55,6 +55,10 @@ A Go dependency vulnerability scan was also completed (see below).
 - A hardened systemd worker unit and a deployment/credential-rotation/recovery
   guide are included. CI builds both factory and Machinist binaries and runs
   a pinned Go vulnerability checker.
+- The Unreal harness supports CubeEgress credential injection. The provider key
+  is resolved only inside the worker activity, never serialized through
+  Temporal, and never exposed to the microVM. Runtime egress changes to
+  deny-by-default before the agent starts.
 
 ## Live validation performed
 

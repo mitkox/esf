@@ -94,6 +94,11 @@ type SandboxConfig struct {
 	// AllowPreview permits `factory preview`, which publishes a port from a
 	// run's sandbox through the deployment ingress. Default closed.
 	AllowPreview bool `toml:"allow_preview"`
+
+	// RuntimeAllowOut lists additional destinations an agent may reach after
+	// repository preparation. Egress-managed harnesses otherwise receive only
+	// their configured model endpoint under a deny-by-default policy.
+	RuntimeAllowOut []string `toml:"runtime_allow_out"`
 }
 
 // TemporalConfig locates the Temporal cluster.
@@ -150,7 +155,7 @@ type ObservabilityConfig struct {
 //
 // A caller names one of these keys. It can never supply an executable.
 type HarnessConfig struct {
-	// Type selects the harness implementation. Currently "opencode" and
+	// Type selects the harness implementation: "opencode", "unreal", or
 	// "generic".
 	Type string `toml:"type"`
 	// Executable is the agent program (generic harness only).
@@ -161,11 +166,18 @@ type HarnessConfig struct {
 	ModelFlag string `toml:"model_flag"`
 	// Model is the default model.
 	Model string `toml:"model"`
+	// Provider selects the model provider for harnesses with a native provider
+	// abstraction (currently unreal).
+	Provider string `toml:"provider"`
+	// ThinkingLevel controls reasoning effort for unreal-agent.
+	ThinkingLevel string `toml:"thinking_level"`
 	// Timeout bounds one agent run.
 	Timeout tomlx.Duration `toml:"timeout"`
 	// Binary is the host path to a standalone agent binary pushed into the
-	// sandbox (opencode harness).
+	// sandbox.
 	Binary string `toml:"binary"`
+	// BinarySHA256 pins the expected content of a staged standalone binary.
+	BinarySHA256 string `toml:"binary_sha256"`
 	// Packages are OS packages installed in the sandbox before the agent runs.
 	Packages []string `toml:"packages"`
 	// PassEnv names host environment variables allowed through to the agent.
@@ -173,11 +185,18 @@ type HarnessConfig struct {
 	PassEnv []string `toml:"pass_env"`
 	// PromptMode selects prompt delivery ("stdin_file" or "argv").
 	PromptMode string `toml:"prompt_mode"`
-	// BaseURL points the agent at a model gateway (opencode harness).
+	// BaseURL points the agent at a model gateway (opencode or unreal harness).
 	BaseURL string `toml:"base_url"`
-	// APIKeyEnv names the environment variable holding the provider credential
-	// (opencode harness). The value is never written to a config file.
+	// APIKeyEnv names the host environment variable holding the provider
+	// credential (opencode or unreal harness). Its value is never persisted.
 	APIKeyEnv string `toml:"api_key_env"`
+	// APIKeyFile is an absolute, owner-only credential file used by
+	// cube_egress mode. It is suitable for systemd credentials or Vault Agent.
+	APIKeyFile string `toml:"api_key_file"`
+	// CredentialMode controls where the provider credential is exposed.
+	// "cube_egress" keeps it in CubeEgress and gives the agent only a harmless
+	// placeholder; "environment" preserves the legacy in-process behavior.
+	CredentialMode string `toml:"credential_mode"`
 	// CatalogCache is a host path to the agent's model-catalog cache, staged
 	// into the sandbox so model resolution does not depend on the network.
 	CatalogCache string `toml:"catalog_cache"`
@@ -328,12 +347,33 @@ func (c Config) Validate() error {
 	if len(c.Harnesses) == 0 {
 		problems = append(problems, "at least one harness must be configured")
 	}
+	if err := agentharness.ValidatePackages(c.Sandbox.BasePackages); err != nil {
+		problems = append(problems, "sandbox.base_packages: "+err.Error())
+	}
 	for name, h := range c.Harnesses {
 		if strings.TrimSpace(h.Type) == "" {
 			problems = append(problems, fmt.Sprintf("harness %q: type is required", name))
 		}
 		if h.Timeout <= 0 {
 			problems = append(problems, fmt.Sprintf("harness %q: timeout must be positive", name))
+		}
+		mode := strings.ToLower(strings.TrimSpace(h.CredentialMode))
+		if mode != "" && mode != "environment" && mode != "cube_egress" {
+			problems = append(problems, fmt.Sprintf("harness %q: credential_mode must be environment or cube_egress", name))
+		}
+		if mode == "cube_egress" && strings.ToLower(strings.TrimSpace(h.Type)) != "unreal" {
+			problems = append(problems, fmt.Sprintf("harness %q: cube_egress credential mode is currently supported only for unreal", name))
+		}
+		if strings.TrimSpace(h.APIKeyFile) != "" && mode != "cube_egress" {
+			problems = append(problems, fmt.Sprintf("harness %q: api_key_file requires credential_mode = cube_egress", name))
+		}
+		if mode == "cube_egress" {
+			if err := validateCubeEgressConfig(name, h); err != nil {
+				problems = append(problems, err.Error())
+			}
+			if err := validateCredentialControlPlane(c.Cube.APIURL); err != nil {
+				problems = append(problems, err.Error())
+			}
 		}
 	}
 	if len(c.Verification) == 0 {
@@ -439,6 +479,7 @@ func (c Config) BuildHarnesses() (*agentharness.Registry, error) {
 			harness, err = agentharness.NewOpenCode(agentharness.OpenCodeOptions{
 				Name:          name,
 				Binary:        hc.Binary,
+				BinarySHA256:  hc.BinarySHA256,
 				Model:         hc.Model,
 				Timeout:       hc.Timeout.Std(),
 				Packages:      hc.Packages,
@@ -462,13 +503,34 @@ func (c Config) BuildHarnesses() (*agentharness.Registry, error) {
 					Packages:     hc.Packages,
 					BinarySource: hc.Binary,
 					BinaryDest:   "/usr/local/bin/" + name,
+					BinarySHA256: hc.BinarySHA256,
 					VerifyArgs:   []string{name, "--version"},
 				},
 			}
 			if hc.Binary == "" {
-				spec.Provision = agentharness.Provision{Packages: hc.Packages}
+				spec.Provision = agentharness.Provision{Packages: hc.Packages, BinarySHA256: hc.BinarySHA256}
 			}
 			harness, err = agentharness.NewGeneric(spec)
+		case "unreal":
+			if len(hc.PassEnv) != 0 {
+				return nil, fmt.Errorf("harness %q: unreal does not accept pass_env; use api_key_env for the credential", name)
+			}
+			if hc.Executable != "" || len(hc.Args) != 0 || hc.ModelFlag != "" || hc.PromptMode != "" || hc.CatalogCache != "" || len(hc.ProviderFiles) != 0 {
+				return nil, fmt.Errorf("harness %q: unreal invocation is fixed; executable, args, model_flag, prompt_mode, catalog_cache, and provider_files are not allowed", name)
+			}
+			harness, err = agentharness.NewUnreal(agentharness.UnrealOptions{
+				Name:          name,
+				Binary:        hc.Binary,
+				BinarySHA256:  hc.BinarySHA256,
+				Provider:      hc.Provider,
+				BaseURL:       hc.BaseURL,
+				Model:         hc.Model,
+				APIKeyEnv:     hc.APIKeyEnv,
+				EgressManaged: strings.EqualFold(strings.TrimSpace(hc.CredentialMode), "cube_egress"),
+				ThinkingLevel: hc.ThinkingLevel,
+				Timeout:       hc.Timeout.Std(),
+				Packages:      hc.Packages,
+			})
 		default:
 			return nil, fmt.Errorf("harness %q: unknown type %q", name, hc.Type)
 		}
