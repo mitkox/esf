@@ -184,6 +184,8 @@ type RunManifest struct {
 	VerificationResult Outcome       `json:"verification_result"`
 	FactoryResult      RunState      `json:"factory_result"`
 	CleanupResult      CleanupResult `json:"cleanup_result"`
+	// Intake is operator-visible advice and never changes FactoryResult.
+	Intake *IntakeResult `json:"intake,omitempty"`
 
 	// ── Evidence pointers (store-relative) ──────────────────────────────────
 	Artifacts string `json:"artifacts"`

@@ -90,6 +90,10 @@ func TestUnrealHarnessUsesDirectJSONProtocol(t *testing.T) {
 	if len(request.Messages) != 1 || request.Messages[0].Content != prompt || request.Messages[0].MessageID == "" || request.SessionID == "" {
 		t.Fatalf("request message/session identity is incomplete: %+v", request)
 	}
+	messageID, err := uuid.Parse(request.Messages[0].MessageID)
+	if err != nil || messageID.Version() != 5 {
+		t.Fatalf("message ID %q must be a version 5 UUID: %v", request.Messages[0].MessageID, err)
+	}
 	for _, id := range []string{request.SessionID, request.Messages[0].MessageID} {
 		if strings.ContainsAny(id, "/_ .") {
 			t.Fatalf("runner ID %q is not a safe localfile session identifier", id)
@@ -101,6 +105,17 @@ func TestUnrealHarnessUsesDirectJSONProtocol(t *testing.T) {
 	}
 	if messageID.Version() != 8 {
 		t.Fatalf("message ID version = %d, want 8", messageID.Version())
+	}
+}
+
+func TestStableUnrealMessageIDSeparatesRunsAndPrompts(t *testing.T) {
+	t.Parallel()
+	first := stableUnrealMessageID("run-1", "prompt-1")
+	if first != stableUnrealMessageID("run-1", "prompt-1") {
+		t.Fatal("same run and prompt produced a different message ID")
+	}
+	if first == stableUnrealMessageID("run-2", "prompt-1") || first == stableUnrealMessageID("run-1", "prompt-2") {
+		t.Fatal("different runs or prompts produced the same message ID")
 	}
 }
 

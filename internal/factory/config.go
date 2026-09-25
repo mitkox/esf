@@ -54,6 +54,8 @@ type Config struct {
 
 	// Review configures the human review gate.
 	Review ReviewConfig `toml:"review"`
+	// Intake is an optional host-side advisory, never an execution policy.
+	Intake IntakeConfig `toml:"intake"`
 
 	// Verification holds the deterministic gate profiles.
 	Verification map[string]verification.Profile `toml:"verification"`
@@ -271,6 +273,7 @@ func Default() Config {
 			Timeout: tomlx.FromStd(DefaultReviewTimeout),
 			Suspend: true,
 		},
+		Intake: IntakeConfig{Model: "jev-latest", Timeout: tomlx.FromStd(15 * time.Second)},
 		Observability: ObservabilityConfig{
 			OTLPEndpoint: envOr("FACTORY_OTEL_ENDPOINT", ""),
 			ServiceName:  "factory",
@@ -327,6 +330,9 @@ func (c Config) Validate() error {
 		return err
 	}
 	var problems []string
+	if err := c.Intake.Validate(); err != nil {
+		problems = append(problems, "intake: "+err.Error())
+	}
 	if c.Temporal.PayloadKeyring != "" {
 		if _, err := loadPayloadCodec(c.Temporal.PayloadKeyring); err != nil {
 			problems = append(problems, err.Error())

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mitkox/esf/internal/sandbox"
 )
 
@@ -200,7 +201,7 @@ func transformUnrealTask(
 	request := unrealRequest{
 		Messages: []unrealMessage{{
 			Role: "user", Content: task.Prompt,
-			MessageID: stableUnrealID("message", task.RunID, task.Prompt),
+			MessageID: stableUnrealMessageID(task.RunID, task.Prompt),
 		}},
 		Model: model, SessionID: stableUnrealID("session", task.RunID),
 		ThinkingLevel: thinkingLevel,
@@ -284,4 +285,8 @@ func stableUnrealID(kind string, values ...string) string {
 	id[8] = (id[8] & 0x3f) | 0x80
 	encoded := hex.EncodeToString(id)
 	return encoded[0:8] + "-" + encoded[8:12] + "-" + encoded[12:16] + "-" + encoded[16:20] + "-" + encoded[20:32]
+}
+
+func stableUnrealMessageID(runID, prompt string) string {
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(stableUnrealID("message", runID, prompt))).String()
 }

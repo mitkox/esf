@@ -90,6 +90,87 @@ credential read-only to the service. A Vault Agent-rendered owner-only file can
 be used at the same `api_key_file` seam. The worker reads it only while applying
 the per-run CubeEgress policy, and the value does not enter Temporal or the VM.
 
+## Optional DSPy/Jev intake advisory
+
+Install the pinned host-side Python component into an isolated environment:
+
+```sh
+python3.12 -m venv /opt/factory/intake-venv
+/opt/factory/intake-venv/bin/pip install /path/to/esf/tools/intake
+```
+
+Create `/etc/factory/secrets/typesafe-api-key` outside Git, owned by root with
+mode `0600`. Do not paste the key into `factory.toml`, `worker.env`, a shell
+command, or a task. For a manual setup, create the file and enter its value in
+an editor so the key does not enter shell history:
+
+```sh
+sudo install -d -m 0700 /etc/factory/secrets
+sudo install -o root -g root -m 0600 /dev/null /etc/factory/secrets/typesafe-api-key
+sudoedit /etc/factory/secrets/typesafe-api-key
+```
+
+Install the optional [intake drop-in](../deploy/factory-worker.service.d/intake.conf)
+when enabling intake:
+
+```sh
+sudo install -d -m 0755 /etc/systemd/system/factory-worker.service.d
+sudo install -m 0644 deploy/factory-worker.service.d/intake.conf \
+  /etc/systemd/system/factory-worker.service.d/intake.conf
+sudo systemctl daemon-reload
+```
+
+Then enable the advisory in the operator config:
+
+```toml
+[intake]
+enabled = true
+python_executable = "/opt/factory/intake-venv/bin/python"
+key_file = "/run/credentials/factory-worker.service/typesafe-api-key"
+model = "jev-latest"
+timeout = "15s"
+```
+
+The worker sends only the full submitted task text to TypeSafe. The Python
+process reads the systemd credential copy, and no key enters Temporal history,
+the sandbox, the task prompt, or durable evidence. An outage records an
+`unavailable` advisory and leaves the run's existing result rules intact.
+Raw probabilities remain uncalibrated evidence. ReAnchor fits the decision
+threshold, score cuts and choice weights; it does not calibrate the raw
+probabilities. Activate a compiled program only after held-out review.
+For local development, keep a `0600` key file outside the repository and set
+`key_file` to its absolute path.
+
+To calibrate later, manually review at least 40 distinct task outcomes and write
+an owner-only JSONL file outside Git. Each line has `run_id`, `task`, `ready`
+(Boolean), `task_type` (`bugfix`, `feature`, `refactor`, `docs`, or `other`), and
+`ambiguity` (`clear`, `partial`, or `ambiguous`). Label a run from its saved
+`task.json` without using the TypeSafe key:
+
+```sh
+sudo -u factory /opt/factory/intake-venv/bin/python -m esf_intake label \
+  --run-dir /var/lib/factory/runs/RUN_ID \
+  --labels /var/lib/factory/intake/labels.jsonl \
+  --ready yes --task-type bugfix --ambiguity clear
+```
+
+After collecting the reviewed labels, run calibration as a transient systemd
+service. It receives its own credential copy; a shell outside the worker unit
+cannot read `/run/credentials/factory-worker.service/`:
+
+```sh
+sudo systemd-run --quiet --wait --pipe --collect --uid=factory \
+  -p LoadCredential=typesafe-api-key:/etc/factory/secrets/typesafe-api-key \
+  -p WorkingDirectory=/var/lib/factory \
+  /bin/sh -c 'TYPESAFE_API_KEY_FILE="$CREDENTIALS_DIRECTORY/typesafe-api-key" exec /opt/factory/intake-venv/bin/python -m esf_intake calibrate --labels /var/lib/factory/intake/labels.jsonl --output /var/lib/factory/intake/calibrated-v1.json'
+```
+
+The command reports baseline and candidate scores on held-out tasks and writes
+the program only if it improves the metric without more false-ready decisions.
+It does not activate the program. To promote it, set `intake.program_path` to
+the saved JSON path and restart the worker. Keep the program operator-owned;
+recorded run manifests identify its SHA-256 digest.
+
 ## Install the worker
 
 1. Build with the version in `go.mod`: `go build -trimpath -o bin/factory ./cmd/factory`.

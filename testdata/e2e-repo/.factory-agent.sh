@@ -31,6 +31,13 @@ if [ -z "${TASK}" ]; then
 fi
 echo "conformance agent: received task (${#TASK} bytes)"
 
+# Intake credentials belong to the worker host, never the agent sandbox.
+if [ -n "${TYPESAFE_API_KEY:-}" ] || [ -n "${TYPESAFE_API_KEY_FILE:-}" ] || \
+   [ -e /run/credentials/factory-worker.service/typesafe-api-key ]; then
+  echo "conformance agent: intake credential reached the sandbox" >&2
+  exit 4
+fi
+
 if [ ! -f greeting.py ]; then
   echo "conformance agent: greeting.py not found in $(pwd)" >&2
   exit 3

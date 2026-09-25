@@ -321,6 +321,7 @@ func printRunResult(runtime *factory.Runtime, manifest factory.RunManifest, runI
 	if manifest.Model != "" {
 		fmt.Printf("MODEL:          %s/%s\n", manifest.ModelProvider, manifest.Model)
 	}
+	printIntake(manifest.Intake, "INTAKE:")
 	if manifest.ReviewConfigured {
 		fmt.Printf("REVIEW:         %s (sandbox %s)\n", manifest.ReviewOutcome, manifest.SuspendResult)
 		for _, preview := range manifest.Previews {
@@ -479,12 +480,25 @@ func printRunStatus(status factory.RunStatus) {
 		fmt.Printf("Baseline:    %s\n", status.BaselineSHA)
 	}
 	fmt.Printf("Agent:       %s\n", status.AgentOutcome)
+	printIntake(status.Intake, "Intake:")
 	if len(status.Conditions) > 0 {
 		fmt.Println("Conditions:")
 		for _, c := range status.Conditions {
 			fmt.Printf("  %-22s %-7s %s\n", c.Type, c.Status, c.Reason)
 		}
 	}
+}
+
+func printIntake(result *factory.IntakeResult, label string) {
+	if result == nil {
+		return
+	}
+	if result.Status != "ok" || result.Ready == nil || result.TaskType == nil || result.Ambiguity == nil {
+		fmt.Printf("%-16s %s (%s)\n", label, result.Status, result.ErrorCode)
+		return
+	}
+	fmt.Printf("%-16s ready=%t (p=%.2f, uncalibrated), type=%s, ambiguity=%s\n",
+		label, result.Ready.Value, result.Ready.Probability, result.TaskType.Value, result.Ambiguity.Level)
 }
 
 // watchRunStatus streams condition transitions until the workflow closes.

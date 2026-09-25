@@ -54,6 +54,7 @@ type workflowRunOptions struct {
 	// built, so a test can enable the review gate, declare resources, or set a
 	// budget without duplicating the fixture.
 	mutateConfig func(*Config)
+	artifactDir  string
 }
 
 // runWorkflow executes the workflow in Temporal's in-memory test environment
@@ -84,7 +85,11 @@ func runWorkflowOpts(t *testing.T, fake sandbox.Provider, req RunRequest, opts w
 	registry := agentharness.NewRegistry()
 	_ = registry.Register(harness)
 
-	store, err := artifacts.NewLocal(t.TempDir())
+	artifactDir := opts.artifactDir
+	if artifactDir == "" {
+		artifactDir = t.TempDir()
+	}
+	store, err := artifacts.NewLocal(artifactDir)
 	if err != nil {
 		t.Fatalf("NewLocal: %v", err)
 	}

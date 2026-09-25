@@ -101,6 +101,8 @@ Build the inherited CLI separately with
 | --- | --- |
 | [Factory overview](docs/FACTORY.md) | Workflow and components |
 | [Operator guide](docs/operator-guide.md) | Harnesses, verification and troubleshooting |
+| [DSPy/Jev intake](docs/production-deployment.md#optional-dspyjev-intake-advisory) | Optional typed task advice and secure TypeSafe credential setup |
+| [DSPy brief lab](tools/brief_lab/README.md) | Offline, evidence-scored implementation brief experiments |
 | [Production deployment](docs/production-deployment.md) | Service setup, TLS, encryption and recovery |
 | [Readiness review](docs/production-readiness.md) | Validation and operational requirements |
 | [Machinist documentation](docs/README.md) | Inherited CLI and control plane |

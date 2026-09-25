@@ -4,12 +4,18 @@
 *.tmp
 __pycache__/
 *.py[cod]
+*.egg-info/
+/tools/intake/build/
+/tools/intake/dist/
+/tools/brief_lab/build/
+/tools/brief_lab/dist/
 internal/controlplane/web/node_modules/
 !internal/controlplane/web/dist/
 !internal/controlplane/web/dist/**
 
 # Factory local state
 /factory.toml
+/secrets/
 /.env
 /factory
 /testdata/e2e-repo-work/
