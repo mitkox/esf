@@ -53,6 +53,13 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - name: Run Go tests with the race detector
         run: go test -race ./...
+      - name: Test DSPy intake without credentials
+        run: |
+          python3 -m venv /tmp/esf-intake-venv
+          /tmp/esf-intake-venv/bin/pip install ./tools/intake
+          /tmp/esf-intake-venv/bin/python -m unittest discover -s tools/intake/tests -p 'test_*.py'
+          /tmp/esf-intake-venv/bin/pip install ./tools/brief_lab
+          /tmp/esf-intake-venv/bin/python -m unittest discover -s tools/brief_lab/tests -p 'test_*.py'
       - name: Build Machinist
         run: |
           mkdir -p bin

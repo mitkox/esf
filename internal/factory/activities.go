@@ -110,6 +110,7 @@ type ValidateOutput struct {
 	Kind                string        `json:"kind"`
 	Revision            string        `json:"revision"`
 	TaskHash            string        `json:"task_hash"`
+	IntakeEnabled       bool          `json:"intake_enabled,omitempty"`
 	// Resources is the fully-resolved resource set for the run. It is resolved
 	// exactly once, here, and carried through the workflow as data: workflow
 	// code must never resolve a name, because a config change during a run
@@ -263,6 +264,7 @@ type DestroySandboxInput struct {
 type FinalizeInput struct {
 	Request                 RunRequest          `json:"request"`
 	Validate                ValidateOutput      `json:"validate"`
+	Intake                  *IntakeResult       `json:"intake,omitempty"`
 	SandboxID               string              `json:"sandbox_id"`
 	SandboxTemplate         string              `json:"sandbox_template"`
 	HarnessVersion          string              `json:"harness_version"`
@@ -396,11 +398,12 @@ func (a *Activities) ValidateRequest(ctx context.Context, in ValidateInput) (Val
 	}
 	out := ValidateOutput{
 		AgentTimeout: agentTimeout, VerificationTimeout: verifyTimeout, TotalTimeout: totalTimeout,
-		Repository: source,
-		Kind:       kind,
-		Revision:   req.Revision,
-		TaskHash:   repository.HashTask(req.Task),
-		Resources:  resolved,
+		Repository:    source,
+		Kind:          kind,
+		Revision:      req.Revision,
+		TaskHash:      repository.HashTask(req.Task),
+		IntakeEnabled: a.cfg.Intake.Enabled,
+		Resources:     resolved,
 	}
 	span.SetAttributes(
 		attribute.String(AttrRepository, out.Repository),
@@ -1006,6 +1009,7 @@ func (a *Activities) FinalizeResult(ctx context.Context, in FinalizeInput) (Fina
 		ReviewError:             a.redactor.Redact(in.ReviewError),
 		Previews:                in.Previews,
 		BudgetExceeded:          in.BudgetExceeded,
+		Intake:                  in.Intake,
 		// HumanResult is the same value under its Phase-2 name: it drives the
 		// change lifecycle, where an approval closes the change and a rejection
 		// returns it to OPEN.

@@ -47,6 +47,16 @@ verification_timeout = "15m"
 total_timeout        = "90m"
 sandbox_idle_timeout = "60m"
 
+# Optional host-side DSPy/Jev task intake advice. The submitted task text is
+# sent to TypeSafe before a sandbox exists. This never blocks a validated run.
+[intake]
+enabled = false
+python_executable = "/opt/factory/intake-venv/bin/python"
+key_file = "/run/credentials/factory-worker.service/typesafe-api-key"
+model = "jev-latest"
+timeout = "15s"
+# program_path = "/etc/factory/intake/calibrated-v1.json" # operator-promoted
+
 [observability]
 # Empty disables trace export; the factory then uses no-op tracers.
 otel_endpoint = ""

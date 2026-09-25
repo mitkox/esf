@@ -42,16 +42,17 @@ func RunIDFromWorkflowID(workflowID string) (string, bool) {
 // It is deliberately small: it is returned by a Temporal query while the
 // workflow is still running, and the full record lives in the run manifest.
 type RunStatus struct {
-	RunID         string    `json:"run_id"`
-	State         RunState  `json:"state"`
-	SandboxID     string    `json:"sandbox_id,omitempty"`
-	CurrentStep   string    `json:"current_step"`
-	StartedAt     time.Time `json:"started_at"`
-	BaselineSHA   string    `json:"baseline_sha,omitempty"`
-	AgentOutcome  Outcome   `json:"agent_result"`
-	VerifyOutcome Outcome   `json:"verification_result"`
-	Error         string    `json:"error,omitempty"`
-	SandboxGone   bool      `json:"sandbox_destroyed"`
+	RunID         string        `json:"run_id"`
+	State         RunState      `json:"state"`
+	SandboxID     string        `json:"sandbox_id,omitempty"`
+	CurrentStep   string        `json:"current_step"`
+	StartedAt     time.Time     `json:"started_at"`
+	BaselineSHA   string        `json:"baseline_sha,omitempty"`
+	AgentOutcome  Outcome       `json:"agent_result"`
+	VerifyOutcome Outcome       `json:"verification_result"`
+	Intake        *IntakeResult `json:"intake,omitempty"`
+	Error         string        `json:"error,omitempty"`
+	SandboxGone   bool          `json:"sandbox_destroyed"`
 	// ChangeID is the durable work item this run belongs to.
 	ChangeID string `json:"change_id,omitempty"`
 	// Scope is the tenancy boundary the run executes under.
@@ -72,6 +73,7 @@ type workflowState struct {
 	totalTimedOut   bool
 
 	validate          ValidateOutput
+	intake            *IntakeResult
 	resources         ResolvedResources
 	baseline          repository.Baseline
 	sandboxID         string
@@ -297,6 +299,20 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 			cancel()
 		}
 	})
+
+	// Intake is host-side advice only. A provider or activity failure must not
+	// change a validated task's path through the factory.
+	if workflow.GetVersion(ctx, "intake-advisory", workflow.DefaultVersion, 1) != workflow.DefaultVersion && validated.IntakeEnabled {
+		s.status.CurrentStep = "intake.assess"
+		intakeOpts := noRetry()
+		intakeOpts.StartToCloseTimeout = 70 * time.Second
+		var intake IntakeResult
+		if err := executeActivity(ctx, acts.AssessIntake, intakeOpts, IntakeInput{Task: req.Task}).Get(ctx, &intake); err != nil {
+			intake = IntakeResult{Status: "unavailable", ErrorCode: "activity_failed"}
+		}
+		s.intake = &intake
+		s.status.Intake = &intake
+	}
 
 	// ── 2. Create sandbox ───────────────────────────────────────────────────
 	s.status.CurrentStep = "cube.create"
@@ -898,6 +914,7 @@ func finalizeRun(
 	input := FinalizeInput{
 		Request:                 req,
 		Validate:                state.validate,
+		Intake:                  state.intake,
 		SandboxID:               state.sandboxID,
 		SandboxTemplate:         state.template,
 		HarnessVersion:          state.harnessVer,
