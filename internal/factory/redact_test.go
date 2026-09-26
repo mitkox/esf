@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/mitkox/esf/internal/agentharness"
-	"github.com/mitkox/esf/internal/artifacts"
+	"github.com/mitkox/esf/internal/factoryartifacts"
 )
 
 // TestRedactorScrubsPatterns is a security test: captured agent output is

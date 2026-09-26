@@ -2,7 +2,13 @@ package factory
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"net"
+	"net/url"
+	"os"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -16,6 +22,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
+	"google.golang.org/grpc/credentials"
 )
 
 // Attribute keys used across factory spans.
@@ -92,6 +99,34 @@ func NewTelemetry(ctx context.Context, cfg ObservabilityConfig) (*Telemetry, err
 	if cfg.OTLPEndpoint == "" {
 		return newNoopTelemetry(), nil
 	}
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+	traceOptions := []otlptracegrpc.Option{otlptracegrpc.WithEndpointURL(cfg.OTLPEndpoint)}
+	metricOptions := []otlpmetricgrpc.Option{otlpmetricgrpc.WithEndpointURL(cfg.OTLPEndpoint)}
+	endpoint, _ := url.Parse(cfg.OTLPEndpoint)
+	if endpoint.Scheme == "http" {
+		traceOptions = append(traceOptions, otlptracegrpc.WithInsecure())
+		metricOptions = append(metricOptions, otlpmetricgrpc.WithInsecure())
+	} else {
+		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
+		if cfg.OTLPCAFile != "" {
+			pem, err := os.ReadFile(cfg.OTLPCAFile)
+			if err != nil {
+				return nil, fmt.Errorf("read OTLP CA file: %w", err)
+			}
+			pool, err := x509.SystemCertPool()
+			if err != nil {
+				return nil, fmt.Errorf("load system CA roots: %w", err)
+			}
+			if !pool.AppendCertsFromPEM(pem) {
+				return nil, fmt.Errorf("OTLP CA file has no certificates")
+			}
+			tlsConfig.RootCAs = pool
+		}
+		traceOptions = append(traceOptions, otlptracegrpc.WithTLSCredentials(credentials.NewTLS(tlsConfig)))
+		metricOptions = append(metricOptions, otlpmetricgrpc.WithTLSCredentials(credentials.NewTLS(tlsConfig)))
+	}
 
 	serviceName := cfg.ServiceName
 	if serviceName == "" {
@@ -105,10 +140,7 @@ func NewTelemetry(ctx context.Context, cfg ObservabilityConfig) (*Telemetry, err
 		return nil, fmt.Errorf("build telemetry resource: %w", err)
 	}
 
-	traceExporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint(cfg.OTLPEndpoint),
-		otlptracegrpc.WithInsecure(),
-	)
+	traceExporter, err := otlptracegrpc.New(ctx, traceOptions...)
 	if err != nil {
 		return nil, fmt.Errorf("create trace exporter: %w", err)
 	}
@@ -117,10 +149,7 @@ func NewTelemetry(ctx context.Context, cfg ObservabilityConfig) (*Telemetry, err
 		sdktrace.WithResource(res),
 	)
 
-	metricExporter, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithEndpoint(cfg.OTLPEndpoint),
-		otlpmetricgrpc.WithInsecure(),
-	)
+	metricExporter, err := otlpmetricgrpc.New(ctx, metricOptions...)
 	if err != nil {
 		return nil, fmt.Errorf("create metric exporter: %w", err)
 	}
@@ -143,6 +172,26 @@ func NewTelemetry(ctx context.Context, cfg ObservabilityConfig) (*Telemetry, err
 	}
 	t.metrics = metrics
 	return t, nil
+}
+
+func (cfg ObservabilityConfig) validate() error {
+	if cfg.OTLPEndpoint == "" {
+		if cfg.OTLPCAFile != "" {
+			return fmt.Errorf("otel_ca_file requires otel_endpoint")
+		}
+		return nil
+	}
+	endpoint, err := url.Parse(cfg.OTLPEndpoint)
+	if err != nil || endpoint.Hostname() == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.User != nil || endpoint.Path != "" || endpoint.RawQuery != "" || endpoint.Fragment != "" {
+		return fmt.Errorf("otel_endpoint must be an http(s) URL with no path or credentials")
+	}
+	if endpoint.Scheme == "http" {
+		host := endpoint.Hostname()
+		if !strings.EqualFold(host, "localhost") && (net.ParseIP(host) == nil || !net.ParseIP(host).IsLoopback()) {
+			return fmt.Errorf("remote otel_endpoint requires HTTPS")
+		}
+	}
+	return nil
 }
 
 func newNoopTelemetry() *Telemetry {

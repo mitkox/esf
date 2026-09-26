@@ -1,0 +1,230 @@
+# Factory operator configuration.
+#
+# This file is OPERATOR POLICY. A task can choose only: task text, an approved
+# repository, and an exact revision. It can never choose an executable, a host
+# path, or a credential.
+#
+# QMS is optional and disabled in this example. No external QMS is required.
+# To enable local assurance, see examples/quality and docs/quality-operations.md.
+
+schema_version = 1
+
+[cube]
+# Set the API URL to match your operator-managed Cube deployment.
+api_url         = "https://cube.example.org"
+template_id     = "tpl-your-ready-template"
+proxy_node_ip   = "cube-proxy.example.org"
+proxy_port_http = 443
+proxy_scheme    = "https"
+idle_timeout    = "60m"
+request_timeout = "60s"
+
+[temporal]
+host_port  = "temporal.example.org:7233"
+tls        = true
+namespace  = "default"
+task_queue = "factory"
+# Required for remote Temporal endpoints. Never disable certificate validation.
+# tls = true
+# server_name = "temporal.example.com"
+# ca_file = "/etc/factory/temporal-ca.pem" # omit to use system roots
+# cert_file = "/etc/factory/client.pem"  # optional mTLS pair
+# key_file = "/etc/factory/client-key.pem"
+# api_key_env = "TEMPORAL_API_KEY"       # optional API-key authentication
+# payload_keyring = "/etc/factory/payload-keys.json"
+
+[storage]
+data_dir = "/var/lib/esf/factory"
+
+[sandbox]
+# Use a versioned Cube template with pinned Git, CA certificates, sha256sum,
+# head, mkfifo, and the configured agent binaries. Empty avoids network package
+# installation for every run. A development template may opt in to packages.
+base_packages = []
+# After repository preparation, egress-managed harnesses switch to
+# deny-by-default. Add only destinations the agent genuinely needs at runtime.
+# The model endpoint is allowed automatically by its L7 injection rule.
+runtime_allow_out = []
+
+[limits]
+command_output_bytes = 4194304
+artifact_bytes       = 33554432
+worker_concurrency   = 8
+worker_stop_timeout  = "60s"
+agent_timeout        = "30m"
+verification_timeout = "15m"
+total_timeout        = "90m"
+sandbox_idle_timeout = "60m"
+
+# Optional host-side DSPy/Jev task intake advice. The submitted task text is
+# sent to TypeSafe before a sandbox exists. This never blocks a validated run.
+[intake]
+enabled = false
+python_executable = "/opt/factory/intake-venv/bin/python"
+key_file = "/run/credentials/factory-worker.service/typesafe-api-key"
+model = "jev-latest"
+# base_url = "http://127.0.0.1:10000" # optional local TypeSafe-compatible service
+timeout = "15s"
+# program_path = "/etc/factory/intake/calibrated-v1.json" # operator-promoted
+
+[observability]
+# Empty disables trace export; the factory then uses no-op tracers.
+otel_endpoint = "" # set https://collector.example.org:4317 for TLS export
+service_name  = "factory"
+
+[repositories]
+# Remote repositories must match one of these prefixes. Empty disallows all
+# remote repositories; local sources remain available for tests.
+allowed = []
+
+# ── Agent harnesses ──────────────────────────────────────────────────────────
+# The harness name is what a request may select. The executable and arguments
+# are operator configuration and are never client-supplied.
+
+[harnesses.opencode2]
+type        = "opencode"
+binary      = "/opt/esf/agents/opencode2"
+preinstalled = true
+packages    = []
+pass_env    = []
+catalog_cache = ""
+binary_sha256 = "10d405161d8b9595f4a2ec31254e961969e6ca3f8239ac9bd55b6ff6431dc24f"
+provider    = "openrouter"
+base_url    = "https://openrouter.ai/api/v1"
+model       = "openrouter/<model>"
+timeout     = "30m"
+prompt_mode = "stdin_file"
+credential_mode = "cube_egress"
+api_key_file = "/run/credentials/factory-worker.service/opencode-provider-key"
+
+# Pre-stage the agent's model catalog. A coding agent that must fetch a model
+# catalog from the network at start-up is neither reproducible nor reliable:
+# the run would depend on an external service being reachable and fast at that
+# instant. Staging it makes model resolution deterministic and offline.
+# catalog_cache = "/opt/esf/agents/opencode-models.json"
+
+# CubeEgress injects the real credential into a matching HTTPS request after
+# repository preparation. The agent receives only a harmless placeholder.
+
+# ── unreal-agent (async harness, no Go dependency) ───────────────────────────
+# ESF invokes the template's standalone runner using its JSON protocol. It
+# does not import the unreal-agent Go module and needs no shell/Python adapter.
+# See docs/harness-unreal.md for the full operator guide and benchmarks.
+#
+# [harnesses.unreal]
+# type           = "unreal"
+# binary         = "/opt/esf/agents/unreal-agent-runner"
+# preinstalled   = true
+# binary_sha256  = "6e6e25a768b500e2e58a0fae031bc75855ad6fe79c6e0f50bdc022bec1668238"
+# provider       = "openrouter"
+# base_url       = "https://openrouter.ai/api/v1"
+# model          = "<provider-model-id>"
+# api_key_file   = "/run/credentials/factory-worker.service/openrouter-key"
+# api_key_env    = "OPENROUTER_API_KEY" # compatibility; choose exactly one
+# credential_mode = "cube_egress"
+# thinking_level = "high"
+# timeout        = "30m"
+#
+# `cube_egress` is the production mode: the worker sends the real value directly
+# to CubeEgress after repository preparation, runtime egress becomes
+# deny-by-default, and the runner sees only a harmless placeholder. The secret
+# never enters the microVM or Temporal history. `environment` is the legacy
+# compatibility mode and exposes the key to sandbox code.
+
+# A credential-free conformance harness is available in the end-to-end test
+# fixture. Add it to a development-only configuration when testing locally.
+
+# ── Deterministic verification ───────────────────────────────────────────────
+# Verification is ALWAYS a structured argv. There is no shell-string form: an
+# API client must never be able to smuggle shell syntax into a gate.
+
+[verification.default]
+name = "default"
+
+[[verification.default.steps]]
+id          = "build"
+argv        = ["./build.sh"]
+mandatory   = true
+timeout     = "10m"
+description = "repository build script"
+
+[[verification.default.steps]]
+id          = "unit-tests"
+argv        = ["./test.sh"]
+mandatory   = true
+timeout     = "10m"
+description = "repository test script"
+
+# ── Named resources ──────────────────────────────────────────────────────────
+# A run REFERENCES these by name; it can never define one. Every resolved
+# resource is recorded in the run manifest with a content digest, so a run is
+# reproducible from its own evidence.
+
+# [sandbox]
+# attach and preview are privileged operator actions against a live sandbox.
+# Both are DEFAULT CLOSED and audited in the run's evidence directory.
+# allow_attach  = false
+# allow_preview = false
+
+# [models.<name>] — model endpoints, separate from harnesses so a model can be
+# changed in one place and accounted for across harnesses. Credentials are
+# referenced by environment variable NAME; the value never enters configuration
+# or evidence.
+#
+# [models.default]
+# provider    = "anthropic"
+# model       = "claude-sonnet-4-5"
+# api_key_env = "ANTHROPIC_API_KEY"
+# base_url    = ""            # optional gateway
+# scopes      = []            # empty = available to every scope
+
+# [egress.<name>] — network policy. A zero-value policy means "deployment
+# default"; allow_internet = false is the strong form. Deny wins.
+#
+# [egress.restricted]
+# allow_internet = false
+# allow_out      = ["api.anthropic.com", "github.com", "registry.npmjs.org"]
+# deny_out       = []
+
+# [workspaces.<name>] — a pre-warmed execution environment. snapshot_id records
+# a pre-built CubeSandbox snapshot containing the preparation below.
+#
+# [workspaces.python]
+# template          = ""       # optional override of cube.template_id
+# base_packages     = ["git", "ca-certificates", "python3", "python3-pip"]
+# setup_script      = ""
+# snapshot_id       = ""
+# repository_cache  = false
+
+# [budgets.<name>] — spending ceilings. A budget is EVIDENCE, not enforcement:
+# the factory records usage reported by the harness and flags a crossing; it
+# never rewrites a result because a ceiling was hit.
+#
+# [budgets.cheap]
+# max_cost_usd   = 1.50
+# max_tokens     = 100000
+# max_wall_clock = "30m"
+
+# [scopes.<name>] — tenancy boundaries. A scope can only NARROW the operator's
+# policy: its repository list is intersected with [repositories].allowed, and a
+# scope entry that no global prefix covers is dropped.
+#
+# [scopes.payments]
+# repositories = ["https://github.com/acme/payments"]
+# harnesses    = ["opencode2"]
+# egress       = "restricted"
+# model        = "default"
+# workspace    = "python"
+# budget       = "cheap"
+# review       = false        # overrides the global review gate
+
+# [review] — the human review gate. When enabled, a run pauses after the
+# deterministic gates report, optionally checkpoints its sandbox, publishes
+# preview URLs, and waits for a decision or the timeout. A timeout is recorded
+# as "timeout" and the run finishes normally.
+#
+# [review]
+# enabled       = false
+# timeout       = "24h"
+# preview_ports = [3000]
+# suspend       = true

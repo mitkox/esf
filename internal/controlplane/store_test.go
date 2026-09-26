@@ -48,7 +48,7 @@ func TestStoreRejectsContradictoryOutcomes(t *testing.T) {
 	}
 }
 
-func TestOpenStoreReplacesLegacySchema(t *testing.T) {
+func TestOpenStorePreservesUnknownLegacySchema(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "machinist.db")
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -61,19 +61,23 @@ func TestOpenStoreReplacesLegacySchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	store, err := OpenStore(path)
+	if err == nil || !strings.Contains(err.Error(), "unversioned database") {
+		if store != nil {
+			_ = store.Close()
+		}
+		t.Fatalf("open unversioned database error = %v", err)
+	}
+	db, err = sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
-	var count, version int
-	if err := store.db.QueryRow(`SELECT COUNT(*) FROM jobs`).Scan(&count); err != nil {
+	defer db.Close()
+	var id string
+	if err := db.QueryRow(`SELECT id FROM jobs`).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
-		t.Fatal(err)
-	}
-	if count != 0 || version != 2 {
-		t.Fatalf("migrated database count=%d version=%d", count, version)
+	if id != "legacy" {
+		t.Fatalf("legacy row changed: %q", id)
 	}
 }
 
@@ -83,7 +87,7 @@ func TestOpenStoreRejectsNewerSchemaWithoutDeletingIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`CREATE TABLE future_data(value TEXT); INSERT INTO future_data VALUES('preserved'); PRAGMA user_version=3;`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE future_data(value TEXT); INSERT INTO future_data VALUES('preserved'); PRAGMA user_version=6;`); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -1140,8 +1144,8 @@ func testVersionOneUpgrade(t *testing.T, partial string) {
 	}
 	defer store.Close()
 	var version int
-	if err := store.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 2 {
-		t.Fatalf("schema version = %d, %v, want 2", version, err)
+	if err := store.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 5 {
+		t.Fatalf("schema version = %d, %v, want 5", version, err)
 	}
 	var columns int
 	if err := store.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('jobs') WHERE name IN ('has_shepherd','schedule_name')`).Scan(&columns); err != nil || columns != 0 {
@@ -1183,4 +1187,58 @@ PRAGMA user_version=1;` + extra); err != nil {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestSnapshotShowsTheAgentFinalMessageAsTheRunSummary(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		result string
+		want   string
+	}{
+		{name: "final message", result: `{"final_message":"Labelled #496 as bug."}`, want: "Labelled #496 as bug."},
+		{name: "no final message", result: `{"duration_millis":5}`, want: ""},
+		{name: "malformed result", result: `not json`, want: ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store := openTestStore(t, filepath.Join(t.TempDir(), "machinist.db"))
+			jobID, err := store.CreateJob(t.Context(), "Triage issues", "machinist", "triage", testAgent("triage", "Triage issues"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			run, err := store.Poll(t.Context(), pollRequest("worker-a", []string{"codex"}, []string{"machinist"}))
+			if err != nil || run == nil {
+				t.Fatalf("poll = %#v, %v", run, err)
+			}
+			if err := store.Complete(t.Context(), run.ID, protocol.Completion{InstanceID: "worker-a", LeaseToken: run.LeaseToken, State: "succeeded", Result: []byte(test.result)}); err != nil {
+				t.Fatal(err)
+			}
+			snapshot, err := store.Snapshot(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(snapshot.Jobs) != 1 || snapshot.Jobs[0].ID != jobID || snapshot.Jobs[0].Runs[0].Summary != test.want {
+				t.Fatalf("jobs = %#v, want summary %q", snapshot.Jobs, test.want)
+			}
+		})
+	}
+}
+
+func TestSnapshotPrefersTheWorkflowStepSummaryOverTheFinalMessage(t *testing.T) {
+	store := openTestStore(t, filepath.Join(t.TempDir(), "machinist.db"))
+	workflowJob(t, store, false)
+	run, err := store.Poll(t.Context(), workflowWorker())
+	if err != nil || run == nil {
+		t.Fatalf("poll = %#v, %v", run, err)
+	}
+	result := []byte(`{"step_result":{"outcome":"complete","summary":"Plan ready"},"final_message":"Long agent reply"}`)
+	if err := store.Complete(t.Context(), run.ID, protocol.Completion{InstanceID: "worker-a", LeaseToken: run.LeaseToken, State: "succeeded", Result: result}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := store.Snapshot(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := snapshot.Jobs[0].Runs[0].Summary; got != "Plan ready" {
+		t.Fatalf("summary = %q, want the step summary", got)
+	}
 }

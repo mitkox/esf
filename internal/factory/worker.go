@@ -15,7 +15,7 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"github.com/mitkox/esf/internal/agentharness"
-	"github.com/mitkox/esf/internal/artifacts"
+	"github.com/mitkox/esf/internal/factoryartifacts"
 	"github.com/mitkox/esf/internal/repository"
 	"github.com/mitkox/esf/internal/sandbox"
 	"github.com/mitkox/esf/internal/sandbox/cube"
@@ -71,6 +71,9 @@ func NewRuntime(ctx context.Context, opts RuntimeOptions) (*Runtime, error) {
 
 	provider := opts.SandboxProvider
 	if provider == nil {
+		if cfg.Limits.CommandOutputBytes > 0 {
+			cfg.Cube.CommandOutputBytes = cfg.Limits.CommandOutputBytes
+		}
 		cubeProvider, err := cube.New(cfg.Cube, cube.WithLogger(log))
 		if err != nil {
 			return nil, fmt.Errorf("build cubesandbox provider: %w", err)
@@ -78,7 +81,11 @@ func NewRuntime(ctx context.Context, opts RuntimeOptions) (*Runtime, error) {
 		provider = cubeProvider
 	}
 
-	artifactFactory, err := artifacts.NewLocal(cfg.Storage.DataDir)
+	artifactLimit := cfg.Limits.ArtifactBytes
+	if artifactLimit == 0 {
+		artifactLimit = artifacts.DefaultMaxArtifactBytes
+	}
+	artifactFactory, err := artifacts.NewLocalWithLimit(cfg.Storage.DataDir, artifactLimit)
 	if err != nil {
 		return nil, fmt.Errorf("build artifact store: %w", err)
 	}
@@ -188,6 +195,14 @@ func (r *Runtime) RunWorker(ctx context.Context) error {
 	defer temporalClient.Close()
 
 	fatalErrors := make(chan error, 1)
+	concurrency := r.Config.Limits.WorkerConcurrency
+	if concurrency == 0 {
+		concurrency = 8
+	}
+	stopTimeout := r.Config.Limits.WorkerStopTimeout.Std()
+	if stopTimeout == 0 {
+		stopTimeout = 30 * time.Second
+	}
 	w := worker.New(temporalClient, r.Config.Temporal.TaskQueue, worker.Options{
 		Identity: workerIdentity(r.Config.Temporal.IdentityPrefix),
 		OnFatalError: func(err error) {
@@ -196,11 +211,9 @@ func (r *Runtime) RunWorker(ctx context.Context) error {
 			default:
 			}
 		},
-		// One sandbox per run; the MVP does not need aggressive concurrency and
-		// a bounded limit keeps resource use predictable.
-		WorkerStopTimeout:                      30 * time.Second,
-		MaxConcurrentActivityExecutionSize:     8,
-		MaxConcurrentWorkflowTaskExecutionSize: 8,
+		WorkerStopTimeout:                      stopTimeout,
+		MaxConcurrentActivityExecutionSize:     concurrency,
+		MaxConcurrentWorkflowTaskExecutionSize: concurrency,
 	})
 
 	w.RegisterWorkflowWithOptions(SoftwareChangeWorkflow, workflowRegistrationOptions())

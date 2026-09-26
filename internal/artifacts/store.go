@@ -1,253 +1,124 @@
-// Package artifacts provides durable storage for factory evidence.
-//
-// Design constraints:
-//
-//   - Artifacts must survive sandbox destruction. They are never written only
-//     inside a microVM.
-//   - The store is intentionally domain-free: it stores bytes at validated
-//     relative paths and knows nothing about runs, manifests, or states. That
-//     keeps a future S3/MinIO backend a drop-in replacement.
-//   - Every path is validated against traversal, so a run ID or step ID can
-//     never escape the store root.
+// Package artifacts stores immutable execution outputs independently of workers.
 package artifacts
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/fs"
+	"io"
 	"os"
+	"path"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
-// ErrInvalidPath is returned for a path that would escape the store root or is
-// otherwise unusable.
-var ErrInvalidPath = errors.New("artifacts: invalid path")
+var ErrTooLarge = errors.New("artifact size limit exceeded")
 
-// Store is a durable, per-run artifact store.
-//
-// Write satisfies verification.Sink structurally, so the verification runner
-// can persist output without importing this package.
 type Store interface {
-	// Write stores data at a store-relative path, creating parents.
-	Write(relPath string, data []byte) error
-	// Read returns the contents of a stored artifact.
-	Read(relPath string) ([]byte, error)
-	// Exists reports whether an artifact is present.
-	Exists(relPath string) (bool, error)
-	// List returns every stored path under prefix, sorted.
-	List(prefix string) ([]string, error)
-	// Location identifies where artifacts live, for evidence.
-	Location() string
-	// Dir is the absolute directory holding this run's artifacts.
-	Dir() string
+	Stage(io.Reader, int64) (*Pending, error)
+	Publish(*Pending, string) error
+	Open(string) (*os.File, error)
+	Delete(string) error
+}
+type Filesystem struct{ directory string }
+type Pending struct {
+	Path, Checksum string
+	Size           int64
 }
 
-// Factory opens per-run stores.
-type Factory interface {
-	// ForRun returns the store for a run. Opening is idempotent and does not
-	// erase existing artifacts, so a retried activity cannot destroy evidence.
-	ForRun(runID string) (Store, error)
-	// Root identifies the storage root, for evidence.
-	Root() string
+func (p *Pending) Close() { _ = os.Remove(p.Path) }
+func ValidPath(value string) bool {
+	return value != "" && len(value) <= 1024 && value != "." && !strings.ContainsAny(value, "\\\x00\r\n") && !strings.HasPrefix(value, "/") && path.Clean(value) == value && value != ".." && !strings.HasPrefix(value, "../")
 }
-
-// Local is a filesystem-backed artifact factory.
-//
-// The layout is deliberately flat and predictable:
-//
-//	<root>/runs/<run-id>/...
-type Local struct {
-	root string
-}
-
-// NewLocal creates a filesystem artifact factory rooted at root.
-func NewLocal(root string) (*Local, error) {
-	if strings.TrimSpace(root) == "" {
-		return nil, fmt.Errorf("artifacts: root is required")
-	}
-	abs, err := filepath.Abs(root)
-	if err != nil {
-		return nil, fmt.Errorf("artifacts: resolve root %q: %w", root, err)
-	}
-	if err := os.MkdirAll(abs, 0o750); err != nil {
-		return nil, fmt.Errorf("artifacts: create root %q: %w", abs, err)
-	}
-	return &Local{root: abs}, nil
-}
-
-// Root returns the storage root.
-func (l *Local) Root() string { return l.root }
-
-// ForRun returns the store for runID.
-func (l *Local) ForRun(runID string) (Store, error) {
-	if err := validateSegment(runID); err != nil {
-		return nil, fmt.Errorf("artifacts: invalid run id %q: %w", runID, err)
-	}
-	dir := filepath.Join(l.root, "runs", runID)
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return nil, fmt.Errorf("artifacts: create run directory %q: %w", dir, err)
-	}
-	return &RunStore{dir: dir, location: filepath.ToSlash(filepath.Join("runs", runID))}, nil
-}
-
-// RunStore is the artifact store for one run.
-type RunStore struct {
-	dir      string
-	location string
-}
-
-// Location identifies the run's artifact directory.
-func (s *RunStore) Location() string { return s.location }
-
-// Dir returns the absolute directory holding this run's artifacts.
-func (s *RunStore) Dir() string { return s.dir }
-
-// Write stores data at a path relative to the run directory.
-func (s *RunStore) Write(relPath string, data []byte) error {
-	full, err := s.resolve(relPath)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(full), 0o750); err != nil {
-		return fmt.Errorf("artifacts: create directory for %q: %w", relPath, err)
-	}
-	// Publish complete files atomically. Readers must never observe a
-	// truncated manifest while an activity retry replaces it.
-	tmp, err := os.CreateTemp(filepath.Dir(full), ".artifact-*")
-	if err != nil {
-		return fmt.Errorf("artifacts: stage %q: %w", relPath, err)
-	}
-	defer os.Remove(tmp.Name())
-	defer tmp.Close()
-	if err := tmp.Chmod(0o640); err != nil {
-		return fmt.Errorf("artifacts: chmod %q: %w", relPath, err)
-	}
-	if _, err := tmp.Write(data); err != nil {
-		return fmt.Errorf("artifacts: write %q: %w", relPath, err)
-	}
-	if err := tmp.Sync(); err != nil {
-		return fmt.Errorf("artifacts: sync %q: %w", relPath, err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("artifacts: close %q: %w", relPath, err)
-	}
-	if err := os.Rename(tmp.Name(), full); err != nil {
-		return fmt.Errorf("artifacts: publish %q: %w", relPath, err)
-	}
-	dir, err := os.Open(filepath.Dir(full))
-	if err != nil {
-		return fmt.Errorf("artifacts: open parent of %q: %w", relPath, err)
-	}
-	defer dir.Close()
-	if err := dir.Sync(); err != nil {
-		return fmt.Errorf("artifacts: sync parent of %q: %w", relPath, err)
-	}
-	return nil
-}
-
-// Read returns a stored artifact.
-func (s *RunStore) Read(relPath string) ([]byte, error) {
-	full, err := s.resolve(relPath)
+func NewFilesystem(directory string) (*Filesystem, error) {
+	abs, err := filepath.Abs(directory)
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(full)
-	if err != nil {
-		return nil, fmt.Errorf("artifacts: read %q: %w", relPath, err)
+	if err = os.MkdirAll(filepath.Join(abs, ".uploads"), 0700); err != nil {
+		return nil, err
 	}
-	return data, nil
+	return &Filesystem{abs}, nil
 }
-
-// Exists reports whether an artifact is stored.
-func (s *RunStore) Exists(relPath string) (bool, error) {
-	full, err := s.resolve(relPath)
+func (s *Filesystem) Stage(reader io.Reader, limit int64) (pending *Pending, err error) {
+	f, err := os.CreateTemp(filepath.Join(s.directory, ".uploads"), "upload-")
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	_, err = os.Stat(full)
-	switch {
-	case err == nil:
-		return true, nil
-	case errors.Is(err, fs.ErrNotExist):
-		return false, nil
-	default:
-		return false, fmt.Errorf("artifacts: stat %q: %w", relPath, err)
+	defer f.Close()
+	defer func() {
+		if err != nil {
+			os.Remove(f.Name())
+		}
+	}()
+	hash := sha256.New()
+	n, err := io.Copy(io.MultiWriter(f, hash), io.LimitReader(reader, limit+1))
+	if err != nil {
+		return nil, err
 	}
+	if n > limit {
+		return nil, fmt.Errorf("%w: %d bytes", ErrTooLarge, limit)
+	}
+	if err = f.Sync(); err != nil {
+		return nil, err
+	}
+	return &Pending{Path: f.Name(), Checksum: hex.EncodeToString(hash.Sum(nil)), Size: n}, nil
 }
-
-// List returns every stored file under prefix, as store-relative paths.
-func (s *RunStore) List(prefix string) ([]string, error) {
-	base := s.dir
-	if strings.TrimSpace(prefix) != "" && prefix != "." && prefix != "/" {
-		resolved, err := s.resolve(prefix)
-		if err != nil {
-			return nil, err
-		}
-		base = resolved
+func (s *Filesystem) Publish(p *Pending, key string) error {
+	if !ValidPath(key) {
+		return errors.New("invalid artifact key")
 	}
-	var paths []string
-	err := filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				return nil
-			}
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(s.dir, p)
+	target := filepath.Join(s.directory, filepath.FromSlash(key))
+	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+		return err
+	}
+	if err := os.Link(p.Path, target); err != nil && !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	// Persist new directory entries all the way to the storage root.
+	for parent := filepath.Dir(target); ; parent = filepath.Dir(parent) {
+		dir, err := os.Open(parent)
 		if err != nil {
 			return err
 		}
-		paths = append(paths, filepath.ToSlash(rel))
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("artifacts: list %q: %w", prefix, err)
-	}
-	sort.Strings(paths)
-	return paths, nil
-}
-
-// resolve validates a store-relative path and returns its absolute form.
-//
-// Rejecting traversal here is what makes run IDs and step IDs safe to use as
-// path components.
-func (s *RunStore) resolve(relPath string) (string, error) {
-	if strings.TrimSpace(relPath) == "" {
-		return "", fmt.Errorf("%w: empty path", ErrInvalidPath)
-	}
-	if filepath.IsAbs(relPath) || strings.HasPrefix(relPath, "/") {
-		return "", fmt.Errorf("%w: %q must be relative", ErrInvalidPath, relPath)
-	}
-	cleaned := filepath.Clean(filepath.FromSlash(relPath))
-	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%w: %q escapes the run directory", ErrInvalidPath, relPath)
-	}
-	full := filepath.Join(s.dir, cleaned)
-	// Defence in depth: confirm the joined path is still inside the run dir.
-	rel, err := filepath.Rel(s.dir, full)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%w: %q escapes the run directory", ErrInvalidPath, relPath)
-	}
-	return full, nil
-}
-
-// validateSegment rejects a path segment that could escape its parent.
-func validateSegment(segment string) error {
-	if strings.TrimSpace(segment) == "" {
-		return fmt.Errorf("%w: empty segment", ErrInvalidPath)
-	}
-	if strings.ContainsAny(segment, `/\`) || segment == "." || segment == ".." {
-		return fmt.Errorf("%w: %q is not a plain path segment", ErrInvalidPath, segment)
+		err = dir.Sync()
+		closeErr := dir.Close()
+		if err != nil {
+			return err
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		if parent == s.directory {
+			break
+		}
 	}
 	return nil
 }
-
-var (
-	_ Factory = (*Local)(nil)
-	_ Store   = (*RunStore)(nil)
-)
+func (s *Filesystem) Open(key string) (*os.File, error) {
+	if !ValidPath(key) {
+		return nil, errors.New("invalid artifact key")
+	}
+	root, err := os.OpenRoot(s.directory)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return root.Open(key)
+}
+func (s *Filesystem) Delete(key string) error {
+	if !ValidPath(key) {
+		return errors.New("invalid artifact key")
+	}
+	root, err := os.OpenRoot(s.directory)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	err = root.Remove(key)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}

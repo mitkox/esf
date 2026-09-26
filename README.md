@@ -52,21 +52,30 @@ does not authorize releases or certify regulatory compliance. See
 
 ## Quick start
 
-Requirements: Go 1.26.6 or newer, Git, an existing CubeSandbox deployment with a
-READY template, and Temporal. Docker Compose can run the included local Temporal
-stack. Node.js 22.22.2 or newer is needed for frontend development.
+Requirements for v0.5.0 development: Go 1.27.1, Node.js 24.21.0, Git,
+an existing CubeSandbox deployment with a READY template, and Temporal.
+Python tools use the frozen `uv.lock`; they are optional. Docker Compose can
+run the included local Temporal stack.
 
 ```sh
 git clone https://github.com/mitkox/esf.git
 cd esf
 mkdir -p bin
-go build -trimpath -o bin/factory ./cmd/factory
-cp factory.example.toml factory.toml
+make build
+./bin/factory init
 ```
 
 Edit `factory.toml` with your Cube API endpoint, template, proxy address, agent
 harness and verification profile. Configure narrowly scoped credentials locally.
 Neither `factory.toml` nor `.env` belongs in Git.
+The example uses placeholder production endpoints and paths. Set these to
+your actual TLS-protected Cube and Temporal services, or loopback development
+services, before running `factory config validate`.
+
+The v0.5.0 release installs the factory archive by default. The console and
+managed worker use the separate Machinist archive or the optional combined
+archive. Install pinned agent binaries separately with
+`scripts/install-agents.sh`; `factory agents verify` checks configured digests.
 
 For local Temporal:
 
@@ -74,6 +83,7 @@ For local Temporal:
 cp deployments/dev/temporal/.env.example deployments/dev/temporal/.env
 # Set a random database password in that .env file before starting.
 make temporal-up
+./bin/factory config validate
 ./bin/factory doctor
 ./bin/factory worker
 ```
@@ -116,6 +126,9 @@ A run can also be submitted from a reviewed manifest:
 Build the inherited CLI separately with
 `go build -trimpath -o bin/machinist ./cmd/machinist`, then run
 `./bin/machinist init`.
+Machinist now supports staged workflows, review gates, shared artifacts, and
+final-message summaries. Its approvals do not replace ESF's optional QMS
+approvals. See [workflow guidance](docs/workflows.md).
 
 ## Documentation
 
@@ -136,12 +149,10 @@ Build the inherited CLI separately with
 ## Development
 
 ```sh
+make lint
+make test
+make frontend
 go test -race ./...
-go vet ./...
-cd internal/controlplane/web
-npm ci
-npm test
-npm run build
 ```
 
 Integration tests require configured services; see the operator guide.

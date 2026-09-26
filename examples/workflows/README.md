@@ -42,3 +42,11 @@ timeout = "2h"
 The script's stages appear only in its logs. Timeout or cancellation stops the whole
 process tree, and a new run starts from the beginning unless the script saves its own
 progress.
+
+## Managed task workflows
+
+For stages tracked in the UI, see [the task guide](../../docs/task-guide.md),
+[staged configuration](staged/config.toml), and the optional
+[classify-then-merge example](risk_delivery/README.md).
+
+The [gVisor experiment](gvisor-pr/README.md) demonstrates an alternative isolated worker.

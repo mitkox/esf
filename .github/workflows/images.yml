@@ -1,0 +1,82 @@
+name: Candidate images
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Candidate or RC tag, such as v0.5.0-candidate.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {component: factory, file: deploy/images/Dockerfile.runtime, target: factory, platforms: "linux/amd64,linux/arm64"}
+          - {component: console, file: deploy/images/Dockerfile.runtime, target: console, platforms: "linux/amd64,linux/arm64"}
+          - {component: managedworker, file: deploy/images/Dockerfile.managedworker, target: managedworker, platforms: "linux/amd64,linux/arm64"}
+          - {component: intake, file: deploy/images/Dockerfile.intake, target: intake, platforms: "linux/amd64,linux/arm64"}
+          - {component: cube-template, file: deploy/cube/Dockerfile, target: cube-template, platforms: "linux/amd64"}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.27.1
+      - name: Validate candidate tag and inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ '${{ inputs.image_tag }}' =~ ^v0\.5\.0-(candidate|rc)\.[0-9]+$ ]]
+          python3 scripts/verify-release-inventory.py
+      - name: Build dependency SBOM
+        run: python3 scripts/generate-sbom.py sbom.cdx.json
+      - name: Log in to GHCR
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Enable buildx
+        run: docker buildx create --use
+      - name: Build and push candidate image
+        id: push
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
+          platforms: ${{ matrix.platforms }}
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}:${{ inputs.image_tag }}
+          build-args: |
+            ESF_VERSION=0.5.0
+            ESF_COMMIT=${{ github.sha }}
+      - name: Attest image provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      - name: Attest image SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: sbom.cdx.json
+          push-to-registry: true
+      - name: Record qualified candidate input
+        run: echo '${{ matrix.component }}=${{ steps.push.outputs.digest }}' >> "$GITHUB_STEP_SUMMARY"

@@ -42,6 +42,7 @@ var unrealModelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,2
 type UnrealOptions struct {
 	Name          string
 	Binary        string
+	Preinstalled  bool
 	BinarySHA256  string
 	Provider      string
 	BaseURL       string
@@ -130,9 +131,15 @@ func NewUnreal(opts UnrealOptions) (*GenericCommandHarness, error) {
 		timeout = DefaultUnrealTimeout
 	}
 
+	executable := UnrealBinaryPath
+	binarySource := binary
+	if opts.Preinstalled {
+		executable = binary
+		binarySource = ""
+	}
 	generic, err := NewGeneric(Spec{
 		Name:       name,
-		Executable: UnrealBinaryPath,
+		Executable: executable,
 		Args: []string{
 			"-workspace", ".",
 			"-session-directory", UnrealSessionDirectory,
@@ -143,12 +150,13 @@ func NewUnreal(opts UnrealOptions) (*GenericCommandHarness, error) {
 		PromptMode: PromptStdinFile,
 		Provision: Provision{
 			Packages:     opts.Packages,
-			BinarySource: binary,
-			BinaryDest:   UnrealBinaryPath,
+			BinarySource: binarySource,
+			BinaryDest:   executable,
+			Preinstalled: opts.Preinstalled,
 			BinarySHA256: binarySHA256,
 			// -h is part of the runner's stable flag contract. The executable
 			// hash, recorded separately by Version, identifies the exact binary.
-			VerifyArgs: []string{UnrealBinaryPath, "-h"},
+			VerifyArgs: []string{executable, "-h"},
 		},
 	})
 	if err != nil {
@@ -171,7 +179,7 @@ func NewUnreal(opts UnrealOptions) (*GenericCommandHarness, error) {
 	generic.transformTask = func(task Task) (Task, error) {
 		return transformUnrealTask(generic, task, provider, baseURL, apiKeyEnv, thinkingLevel, opts.EgressManaged, lookupEnv)
 	}
-	generic.version = unrealVersion
+	generic.version = func(ctx context.Context, sb sandbox.Sandbox) string { return unrealVersion(ctx, sb, executable) }
 	return generic, nil
 }
 
@@ -253,9 +261,9 @@ func validateUnrealModel(model string) (string, error) {
 
 // Version records a content digest rather than trusting optional CLI version
 // output. This also works with development builds of the standalone runner.
-func unrealVersion(ctx context.Context, sb sandbox.Sandbox) string {
+func unrealVersion(ctx context.Context, sb sandbox.Sandbox, binaryPath string) string {
 	exec, err := sb.Execute(ctx, sandbox.Command{
-		Argv: []string{"sha256sum", UnrealBinaryPath}, Timeout: time.Minute,
+		Argv: []string{"sha256sum", binaryPath}, Timeout: time.Minute,
 		Description: "read unreal-agent runner digest",
 	})
 	if err != nil || !exec.Succeeded() {

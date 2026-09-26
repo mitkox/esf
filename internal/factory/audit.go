@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/mitkox/esf/internal/artifacts"
+	"github.com/mitkox/esf/internal/factoryartifacts"
 )
 
 // Operator actions that touch a live sandbox are privileged, so they are

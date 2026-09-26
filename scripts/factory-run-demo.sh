@@ -37,6 +37,7 @@ echo
 echo "== starting factory worker =="
 ./bin/factory worker >"${WORKER_LOG}" 2>&1 &
 WORKER_PID=$!
+# shellcheck disable=SC2329 # Invoked by the EXIT trap.
 cleanup() {
   if kill -0 "${WORKER_PID}" 2>/dev/null; then
     kill "${WORKER_PID}" 2>/dev/null || true

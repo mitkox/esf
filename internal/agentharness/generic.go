@@ -22,12 +22,8 @@ var (
 
 // Provision describes how to make an agent available inside a sandbox.
 //
-// The MVP provisions at sandbox start-up (option B in the design) because the
-// base template ships neither git nor a JavaScript runtime, and building a
-// dedicated Cube template is a deployment-level action this project must not
-// take unilaterally. Every field is operator configuration; the production
-// direction is a versioned factory template (option D), which would simply set
-// these fields to empty.
+// Production templates can include a preinstalled, digest-pinned agent. The
+// legacy host-binary staging mode remains available for development.
 type Provision struct {
 	// Packages are OS packages to install with the sandbox's package manager.
 	// Install is attempted only when this list is non-empty.
@@ -36,6 +32,10 @@ type Provision struct {
 	BinarySource string
 	// BinaryDest is the absolute in-sandbox path for BinarySource.
 	BinaryDest string
+	// Preinstalled selects an executable already present at BinaryDest in the
+	// sandbox template. Its digest is verified before any agent configuration
+	// is written or the executable is invoked.
+	Preinstalled bool
 	// BinarySHA256, when set, is the expected lowercase or uppercase SHA-256
 	// digest of BinarySource. A mismatch fails before anything is staged.
 	BinarySHA256 string
@@ -139,7 +139,14 @@ func NewGeneric(spec Spec) (*GenericCommandHarness, error) {
 	if err := ValidatePackages(spec.Provision.Packages); err != nil {
 		return nil, fmt.Errorf("agentharness: %q: %w", spec.Name, err)
 	}
-	if spec.Provision.BinarySource == "" && spec.Provision.BinarySHA256 != "" {
+	if spec.Provision.Preinstalled {
+		if spec.Provision.BinarySource != "" || !strings.HasPrefix(spec.Provision.BinaryDest, "/") || spec.Provision.BinarySHA256 == "" {
+			return nil, fmt.Errorf("agentharness: %q preinstalled binary requires an absolute destination and digest, without a host source", spec.Name)
+		}
+		if len(spec.Provision.Packages) != 0 {
+			return nil, fmt.Errorf("agentharness: %q preinstalled binary cannot install packages", spec.Name)
+		}
+	} else if spec.Provision.BinarySource == "" && spec.Provision.BinarySHA256 != "" {
 		return nil, fmt.Errorf("agentharness: %q binary_sha256 requires binary source", spec.Name)
 	}
 	if spec.Provision.BinarySource != "" && spec.Provision.BinaryDest == "" {
@@ -275,7 +282,19 @@ func (h *GenericCommandHarness) Provision(ctx context.Context, sb sandbox.Sandbo
 		}
 	}
 
-	if p.BinarySource != "" {
+	if p.Preinstalled {
+		exec, err := sb.Execute(ctx, sandbox.Command{
+			Argv:        []string{"sha256sum", p.BinaryDest},
+			Timeout:     30 * time.Second,
+			Description: "verify preinstalled agent binary digest",
+		})
+		if err != nil {
+			return fmt.Errorf("%s provision: hash preinstalled agent: %w", h.Name(), err)
+		}
+		if !exec.Succeeded() || len(strings.Fields(exec.Stdout)) == 0 || !strings.EqualFold(strings.Fields(exec.Stdout)[0], p.BinarySHA256) {
+			return fmt.Errorf("%s provision: preinstalled agent binary SHA-256 does not match binary_sha256", h.Name())
+		}
+	} else if p.BinarySource != "" {
 		if p.BinaryDest == "" {
 			return fmt.Errorf("%s provision: BinaryDest is required when BinarySource is set", h.Name())
 		}

@@ -6,8 +6,8 @@ CLI and JSON protocol; `go.mod` does not import the unreal-agent module.
 
 ## Runtime contract
 
-The factory stages the operator-pinned binary at
-`/usr/local/bin/unreal-agent-runner` and invokes it directly. There is no shell
+The factory verifies the runner's digest in the versioned Cube template and
+invokes it directly. There is no shell
 wrapper, Python encoder, or task text in argv. ESF writes a JSON request to a
 sandbox file and redirects stdin from that file.
 
@@ -36,7 +36,8 @@ factory success.
 ```toml
 [harnesses.unreal]
 type           = "unreal"
-binary         = "/opt/factory/bin/unreal-agent-runner"
+binary         = "/opt/esf/agents/unreal-agent-runner"
+preinstalled   = true
 binary_sha256  = "<64-character-sha256>"
 provider       = "openrouter"
 base_url       = "https://openrouter.ai/api/v1"
@@ -55,9 +56,10 @@ The configured model is pinned operator policy. A per-run `--model` override is
 accepted only when it names that same model; a different model is rejected
 before a sandbox is created.
 
-`binary_sha256` is mandatory. ESF hashes the host binary before staging it and
-fails provisioning on a mismatch; the actual staged digest is also recorded as
-the harness version in `run.json`.
+`binary_sha256` is mandatory. ESF verifies the template binary before writing
+agent configuration or invoking it, and records its digest as the harness
+version in `run.json`. `factory agents verify` checks the READY template in a
+disposable, network-isolated sandbox and cleans it up afterward.
 
 For local development, an environment source is also supported:
 

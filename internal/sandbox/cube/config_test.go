@@ -29,7 +29,9 @@ func TestConfigValidate(t *testing.T) {
 		// The SDK default is port 3000, which is wrong on this deployment; the
 		// factory requires the URL explicitly rather than guessing.
 		{"missing api url", func(c *Config) { c.APIURL = "" }, "api_url"},
-		{"bad scheme", func(c *Config) { c.APIURL = "127.0.0.1:4000" }, "http://"},
+		{"bad scheme", func(c *Config) { c.APIURL = "127.0.0.1:4000" }, "http(s)"},
+		{"remote API without TLS", func(c *Config) { c.APIURL = "http://cube.example:4000" }, "requires HTTPS"},
+		{"remote data proxy without TLS", func(c *Config) { c.ProxyNodeIP = "192.0.2.10" }, "requires proxy_scheme = https"},
 		{"missing template", func(c *Config) { c.TemplateID = "" }, "template_id"},
 		{"negative idle timeout", func(c *Config) { c.IdleTimeout = tomlx.FromStd(-time.Second) }, "idle_timeout"},
 		{"negative request timeout", func(c *Config) { c.RequestTimeout = tomlx.FromStd(-time.Second) }, "request_timeout"},

@@ -1,0 +1,29 @@
+{{- if and .Values.factory.enabled (not .Values.factory.storage.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "esf.name" . }}-factory
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with .Values.factory.storage.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.factory.storage.size }}
+{{- end }}
+{{- if and .Values.console.enabled (not .Values.console.storage.existingClaim) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "esf.name" . }}-console
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with .Values.console.storage.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.console.storage.size }}
+{{- end }}

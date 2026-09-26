@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/mitkox/esf/internal/agentharness"
-	"github.com/mitkox/esf/internal/artifacts"
+	"github.com/mitkox/esf/internal/factoryartifacts"
 	"github.com/mitkox/esf/internal/repository"
 	"github.com/mitkox/esf/internal/sandbox"
 	"github.com/mitkox/esf/internal/verification"

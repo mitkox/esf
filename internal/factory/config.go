@@ -10,6 +10,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/mitkox/esf/internal/agentharness"
+	artifacts "github.com/mitkox/esf/internal/factoryartifacts"
 	"github.com/mitkox/esf/internal/sandbox/cube"
 	"github.com/mitkox/esf/internal/tomlx"
 	"github.com/mitkox/esf/internal/verification"
@@ -17,13 +18,17 @@ import (
 
 // Version is the factory implementation version recorded in every run
 // manifest. It is what makes "which factory produced this patch?" answerable.
-const Version = "0.1.0"
+var Version = "0.5.0"
+
+// ConfigSchemaVersion changes only when the operator configuration format changes.
+const ConfigSchemaVersion = 1
 
 // Config is the operator configuration for the whole factory.
 //
 // Everything in this structure is OPERATOR policy. A task or API caller can
 // choose only: the task text, an approved repository, and an approved revision.
 type Config struct {
+	SchemaVersion int `toml:"schema_version"`
 	// FactoryVersion overrides Version in evidence when set.
 	FactoryVersion string `toml:"factory_version"`
 
@@ -129,6 +134,10 @@ type StorageConfig struct {
 
 // LimitsConfig holds per-run resource ceilings.
 type LimitsConfig struct {
+	CommandOutputBytes  int64          `toml:"command_output_bytes"`
+	ArtifactBytes       int64          `toml:"artifact_bytes"`
+	WorkerConcurrency   int            `toml:"worker_concurrency"`
+	WorkerStopTimeout   tomlx.Duration `toml:"worker_stop_timeout"`
 	AgentTimeout        tomlx.Duration `toml:"agent_timeout"`
 	VerificationTimeout tomlx.Duration `toml:"verification_timeout"`
 	TotalTimeout        tomlx.Duration `toml:"total_timeout"`
@@ -150,6 +159,8 @@ type ObservabilityConfig struct {
 	// OTLPEndpoint, when set, enables OTLP trace export. Empty disables it and
 	// the factory uses no-op tracers, so no collector is required to run.
 	OTLPEndpoint string `toml:"otel_endpoint"`
+	// OTLPCAFile adds a trusted CA for a TLS-protected OTLP endpoint.
+	OTLPCAFile string `toml:"otel_ca_file"`
 	// ServiceName identifies the factory in traces.
 	ServiceName string `toml:"service_name"`
 }
@@ -176,9 +187,10 @@ type HarnessConfig struct {
 	ThinkingLevel string `toml:"thinking_level"`
 	// Timeout bounds one agent run.
 	Timeout tomlx.Duration `toml:"timeout"`
-	// Binary is the host path to a standalone agent binary pushed into the
-	// sandbox.
+	// Binary is a host path in staging mode, or a sandbox path when preinstalled.
 	Binary string `toml:"binary"`
+	// Preinstalled verifies and runs the binary from the versioned Cube template.
+	Preinstalled bool `toml:"preinstalled"`
 	// BinarySHA256 pins the expected content of a staged standalone binary.
 	BinarySHA256 string `toml:"binary_sha256"`
 	// Packages are OS packages installed in the sandbox before the agent runs.
@@ -212,13 +224,15 @@ type HarnessConfig struct {
 	ProviderFiles map[string]string `toml:"provider_files"`
 }
 
-// Default returns a configuration for the deployment discovered on this host.
+// Default returns development defaults. Production operators should use the
+// versioned example and pin all external endpoints and agent binaries.
 //
 // Defaults are a convenience, not an assumption: every value is overridable and
 // Validate reports what is missing.
 func Default() Config {
 	return Config{
 		FactoryVersion: Version,
+		SchemaVersion:  ConfigSchemaVersion,
 		Cube:           cube.ConfigFromEnv(),
 		Temporal: TemporalConfig{
 			HostPort:       "127.0.0.1:7233",
@@ -233,6 +247,10 @@ func Default() Config {
 			BasePackages: []string{"git", "ca-certificates"},
 		},
 		Limits: LimitsConfig{
+			CommandOutputBytes:  4 << 20,
+			ArtifactBytes:       artifacts.DefaultMaxArtifactBytes,
+			WorkerConcurrency:   8,
+			WorkerStopTimeout:   tomlx.FromStd(30 * time.Second),
 			AgentTimeout:        tomlx.FromStd(30 * time.Minute),
 			VerificationTimeout: tomlx.FromStd(15 * time.Minute),
 			TotalTimeout:        tomlx.FromStd(90 * time.Minute),
@@ -338,6 +356,12 @@ func (c Config) Validate() error {
 		return err
 	}
 	var problems []string
+	if c.SchemaVersion != 0 && c.SchemaVersion != ConfigSchemaVersion {
+		problems = append(problems, fmt.Sprintf("unsupported configuration schema_version %d (supported: %d)", c.SchemaVersion, ConfigSchemaVersion))
+	}
+	if err := c.Observability.validate(); err != nil {
+		problems = append(problems, "observability: "+err.Error())
+	}
 	if err := c.validateQuality(); err != nil {
 		problems = append(problems, "quality: "+err.Error())
 	}
@@ -368,6 +392,15 @@ func (c Config) Validate() error {
 		problems = append(problems, "sandbox.base_packages: "+err.Error())
 	}
 	for name, h := range c.Harnesses {
+		if h.Preinstalled {
+			kind := strings.ToLower(strings.TrimSpace(h.Type))
+			if kind != "opencode" && kind != "unreal" {
+				problems = append(problems, fmt.Sprintf("harness %q: preinstalled is supported only for opencode and unreal", name))
+			}
+			if !filepath.IsAbs(h.Binary) || len(h.BinarySHA256) != 64 || len(h.Packages) != 0 {
+				problems = append(problems, fmt.Sprintf("harness %q: preinstalled requires an absolute sandbox binary path, a SHA-256 digest, and no packages", name))
+			}
+		}
 		if strings.TrimSpace(h.Type) == "" {
 			problems = append(problems, fmt.Sprintf("harness %q: type is required", name))
 		}
@@ -378,8 +411,8 @@ func (c Config) Validate() error {
 		if mode != "" && mode != "environment" && mode != "cube_egress" {
 			problems = append(problems, fmt.Sprintf("harness %q: credential_mode must be environment or cube_egress", name))
 		}
-		if mode == "cube_egress" && strings.ToLower(strings.TrimSpace(h.Type)) != "unreal" {
-			problems = append(problems, fmt.Sprintf("harness %q: cube_egress credential mode is currently supported only for unreal", name))
+		if mode == "cube_egress" && strings.ToLower(strings.TrimSpace(h.Type)) != "unreal" && strings.ToLower(strings.TrimSpace(h.Type)) != "opencode" {
+			problems = append(problems, fmt.Sprintf("harness %q: cube_egress credential mode requires unreal or opencode", name))
 		}
 		if strings.TrimSpace(h.APIKeyFile) != "" && mode != "cube_egress" {
 			problems = append(problems, fmt.Sprintf("harness %q: api_key_file requires credential_mode = cube_egress", name))
@@ -457,6 +490,18 @@ func (c Config) Validate() error {
 	if c.Limits.AgentTimeout <= 0 {
 		problems = append(problems, "limits.agent_timeout must be positive")
 	}
+	if c.Limits.CommandOutputBytes != 0 && c.Limits.CommandOutputBytes < 2048 {
+		problems = append(problems, "limits.command_output_bytes must be at least 2048")
+	}
+	if c.Limits.ArtifactBytes != 0 && (c.Limits.ArtifactBytes < 2048 || c.Limits.ArtifactBytes > 1<<30) {
+		problems = append(problems, "limits.artifact_bytes must be between 2048 and 1073741824")
+	}
+	if c.Limits.WorkerConcurrency < 0 || c.Limits.WorkerConcurrency > 256 {
+		problems = append(problems, "limits.worker_concurrency must be between 1 and 256")
+	}
+	if c.Limits.WorkerStopTimeout < 0 {
+		problems = append(problems, "limits.worker_stop_timeout must not be negative")
+	}
 	if c.Limits.TotalTimeout > 0 && c.Limits.AgentTimeout > c.Limits.TotalTimeout {
 		problems = append(problems, "limits.agent_timeout must not exceed limits.total_timeout")
 	}
@@ -497,12 +542,14 @@ func (c Config) BuildHarnesses() (*agentharness.Registry, error) {
 				Name:          name,
 				Binary:        hc.Binary,
 				BinarySHA256:  hc.BinarySHA256,
+				Preinstalled:  hc.Preinstalled,
 				Model:         hc.Model,
 				Timeout:       hc.Timeout.Std(),
 				Packages:      hc.Packages,
 				PassEnv:       hc.PassEnv,
 				BaseURL:       hc.BaseURL,
 				APIKeyEnv:     hc.APIKeyEnv,
+				EgressManaged: strings.EqualFold(strings.TrimSpace(hc.CredentialMode), "cube_egress"),
 				CatalogCache:  hc.CatalogCache,
 				ProviderFiles: hc.ProviderFiles,
 			})
@@ -539,6 +586,7 @@ func (c Config) BuildHarnesses() (*agentharness.Registry, error) {
 				Name:          name,
 				Binary:        hc.Binary,
 				BinarySHA256:  hc.BinarySHA256,
+				Preinstalled:  hc.Preinstalled,
 				Provider:      hc.Provider,
 				BaseURL:       hc.BaseURL,
 				Model:         hc.Model,
@@ -591,21 +639,10 @@ func defaultVerificationProfiles() map[string]verification.Profile {
 	}
 }
 
-// defaultCatalogCachePath returns the opencode catalog cache for this user, if
-// one exists. It is a convenience default, not a requirement.
+// defaultCatalogCachePath is explicit: a build must not depend on whichever
+// interactive user's cache happens to be present on the host.
 func defaultCatalogCachePath() string {
-	if v := strings.TrimSpace(os.Getenv("FACTORY_OPENCODE_CATALOG_CACHE")); v != "" {
-		return v
-	}
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return ""
-	}
-	candidate := filepath.Join(cacheDir, "opencode", "models.json")
-	if _, err := os.Stat(candidate); err != nil {
-		return ""
-	}
-	return candidate
+	return strings.TrimSpace(os.Getenv("FACTORY_OPENCODE_CATALOG_CACHE"))
 }
 
 func envOr(name, fallback string) string {

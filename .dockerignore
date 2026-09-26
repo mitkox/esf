@@ -1,0 +1,11 @@
+.git
+.venv
+**/node_modules
+bin
+dist
+.factory
+*.db
+*.db-wal
+*.db-shm
+factory.toml
+deployments/dev/temporal/.env

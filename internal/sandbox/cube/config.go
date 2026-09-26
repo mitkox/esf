@@ -9,6 +9,8 @@ package cube
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -25,9 +27,10 @@ import (
 // unnoticed fallback to the wrong port produces a confusing failure. The API
 // URL is required configuration.
 const (
-	DefaultProxyPortHTTP  = 80
-	DefaultIdleTimeout    = 30 * time.Minute
-	DefaultRequestTimeout = 60 * time.Second
+	DefaultProxyPortHTTP            = 80
+	DefaultIdleTimeout              = 30 * time.Minute
+	DefaultRequestTimeout           = 60 * time.Second
+	DefaultCommandOutputBytes int64 = 4 << 20
 	// DefaultTemplate is empty: operators must select an existing READY template.
 	DefaultTemplate = ""
 )
@@ -56,6 +59,8 @@ type Config struct {
 	IdleTimeout tomlx.Duration `toml:"idle_timeout"`
 	// RequestTimeout bounds individual Cube API requests.
 	RequestTimeout tomlx.Duration `toml:"request_timeout"`
+	// CommandOutputBytes bounds stdout and stderr before the SDK accumulates it.
+	CommandOutputBytes int64 `toml:"command_output_bytes"`
 	// Version is an operator-recorded Cube release identifier, written into run
 	// metadata when the API does not expose one. Never invented by the factory.
 	Version string `toml:"version"`
@@ -147,8 +152,10 @@ func (c Config) Validate() error {
 	var problems []string
 	if strings.TrimSpace(c.APIURL) == "" {
 		problems = append(problems, "api_url is required (set CUBE_API_URL; this deployment's API is not on the SDK default port)")
-	} else if !strings.HasPrefix(c.APIURL, "http://") && !strings.HasPrefix(c.APIURL, "https://") {
-		problems = append(problems, fmt.Sprintf("api_url %q must start with http:// or https://", c.APIURL))
+	} else if endpoint, err := url.Parse(c.APIURL); err != nil || endpoint.Hostname() == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.User != nil {
+		problems = append(problems, "api_url must be an http(s) URL without userinfo")
+	} else if endpoint.Scheme == "http" && !isLoopback(endpoint.Hostname()) {
+		problems = append(problems, "remote api_url requires HTTPS")
 	}
 	if strings.TrimSpace(c.TemplateID) == "" {
 		problems = append(problems, "template_id is required (set CUBE_TEMPLATE_ID to an existing READY template)")
@@ -156,16 +163,33 @@ func (c Config) Validate() error {
 	if c.ProxyPortHTTP < 0 || c.ProxyPortHTTP > 65535 {
 		problems = append(problems, fmt.Sprintf("proxy_port_http %d is out of range", c.ProxyPortHTTP))
 	}
+	if c.ProxyScheme != "" && c.ProxyScheme != "http" && c.ProxyScheme != "https" {
+		problems = append(problems, "proxy_scheme must be http or https")
+	}
+	if c.ProxyNodeIP != "" && !isLoopback(c.ProxyNodeIP) && c.ProxyScheme != "https" {
+		problems = append(problems, "remote Cube data proxy requires proxy_scheme = https")
+	}
 	if c.IdleTimeout.Std() < 0 {
 		problems = append(problems, "idle_timeout must not be negative")
 	}
 	if c.RequestTimeout.Std() < 0 {
 		problems = append(problems, "request_timeout must not be negative")
 	}
+	if c.CommandOutputBytes != 0 && c.CommandOutputBytes < 2048 {
+		problems = append(problems, "command_output_bytes must be at least 2048")
+	}
 	if len(problems) > 0 {
 		return fmt.Errorf("invalid cubesandbox configuration: %s", strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+func isLoopback(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // String renders the configuration with the API key redacted, so it is safe to

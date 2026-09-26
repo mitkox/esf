@@ -68,11 +68,20 @@ type Server struct {
 }
 
 type Config struct {
-	Server   Server             `toml:"server"`
-	Commands map[string]Command `toml:"commands"`
-	GitHub   GitHub             `toml:"github"`
-	Triggers TriggerDefinitions `toml:"triggers"`
-	path     string
+	Storage     Storage             `toml:"storage"`
+	FactoryRead FactoryRead         `toml:"factory_read"`
+	Workflows   map[string]Workflow `toml:"workflows"`
+	Server      Server              `toml:"server"`
+	Commands    map[string]Command  `toml:"commands"`
+	GitHub      GitHub              `toml:"github"`
+	Triggers    TriggerDefinitions  `toml:"triggers"`
+	path        string
+}
+
+// FactoryRead exposes a separate, read-only view of durable factory evidence.
+type FactoryRead struct {
+	Root      string `toml:"root"`
+	TokenFile string `toml:"token_file"`
 }
 
 type GitHub struct {
@@ -230,6 +239,11 @@ func loadConfigFile(path string) (Config, error) {
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&machinistConfig); err != nil {
 		return Config{}, fmt.Errorf("parse Machinist config %q: %w", absPath, err)
+	}
+	for _, name := range machinistConfig.WorkflowNames() {
+		if _, err := machinistConfig.ResolveTaskWorkflow(name, ""); err != nil {
+			return Config{}, err
+		}
 	}
 	return machinistConfig, nil
 }
@@ -448,7 +462,7 @@ func validatePromptParameters(commandName, prompt string) error {
 		hasPrompt = true
 		remaining = remaining[end+2:]
 	}
-	if !hasPrompt {
+	if !hasPrompt && !strings.Contains(prompt, "{{task.") && !strings.Contains(prompt, "{{inputs.") && !strings.Contains(prompt, "{{stage.") {
 		return fmt.Errorf("command %q prompt must include %s", commandName, promptParameter)
 	}
 	return nil

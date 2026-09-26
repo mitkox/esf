@@ -66,17 +66,39 @@ func TestIntakeConfigIsOptInAndRequiresHostPaths(t *testing.T) {
 		t.Fatal("intake must be disabled by default")
 	}
 	path := filepath.Join(t.TempDir(), "factory.toml")
-	body := "[intake]\nenabled = true\npython_executable = \"/opt/factory/venv/bin/python\"\nkey_file = \"/run/credentials/factory-worker.service/typesafe-api-key\"\ntimeout = \"12s\"\n"
+	body := "[intake]\nenabled = true\npython_executable = \"/opt/factory/venv/bin/python\"\nkey_file = \"/run/credentials/factory-worker.service/typesafe-api-key\"\nbase_url = \"http://127.0.0.1:10000\"\ntimeout = \"12s\"\n"
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := LoadConfig(path)
-	if err != nil || !cfg.Intake.Enabled || cfg.Intake.effectiveTimeout() != 12*time.Second || cfg.Intake.Validate() != nil {
+	if err != nil || !cfg.Intake.Enabled || cfg.Intake.BaseURL != "http://127.0.0.1:10000" || cfg.Intake.effectiveTimeout() != 12*time.Second || cfg.Intake.Validate() != nil {
 		t.Fatalf("loaded intake config = %+v, %v", cfg.Intake, err)
 	}
 	cfg.Intake.KeyFile = "relative/key"
 	if cfg.Intake.Validate() == nil {
 		t.Fatal("relative credential path was accepted")
+	}
+}
+
+func TestIntakeLocalEndpoint(t *testing.T) {
+	cfg := intakeTestConfig(t, "cat >/dev/null\n[ \"$TYPESAFE_BASE_URL\" = \"http://127.0.0.1:10000\" ] || exit 1\nprintf '%s' '"+intakeFixture+"'")
+	cfg.BaseURL = "http://127.0.0.1:10000"
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	activity := &Activities{cfg: Config{Intake: cfg}}
+	result, err := activity.AssessIntake(context.Background(), IntakeInput{Task: "fix the bug"})
+	if err != nil || result.Status != "ok" {
+		t.Fatalf("local intake endpoint = %+v, %v", result, err)
+	}
+	for _, baseURL := range []string{
+		"http://api.typesafe.ai", "http://localhost.evil.test", "http://127.0.0.1:10000/path",
+		"http://user:pass@localhost:10000", "http://localhost:10000?key=secret", "ftp://localhost:10000",
+	} {
+		cfg.BaseURL = baseURL
+		if err := cfg.Validate(); err == nil {
+			t.Errorf("accepted unsafe intake base_url %q", baseURL)
+		}
 	}
 }
 

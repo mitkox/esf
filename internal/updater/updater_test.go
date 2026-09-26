@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"net/http"
@@ -23,8 +24,8 @@ func TestUpdateInstallsLatestVerifiedRelease(t *testing.T) {
 		case "/api/releases/latest":
 			fmt.Fprint(response, `{"tag_name":"v1.2.3"}`)
 		case "/downloads/v1.2.3/checksums.txt":
-			fmt.Fprintf(response, "%x  machinist_1.2.3_linux_amd64.tar.gz\n", digest)
-		case "/downloads/v1.2.3/machinist_1.2.3_linux_amd64.tar.gz":
+			fmt.Fprintf(response, "%x  esf_machinist_1.2.3_linux_amd64.tar.gz\n", digest)
+		case "/downloads/v1.2.3/esf_machinist_1.2.3_linux_amd64.tar.gz":
 			response.Write(archive)
 		default:
 			http.NotFound(response, request)
@@ -44,6 +45,12 @@ func TestUpdateInstallsLatestVerifiedRelease(t *testing.T) {
 		Client:      server.Client(),
 		APIBase:     server.URL + "/api",
 		ReleaseBase: server.URL + "/downloads",
+		VerifyAttestation: func(_ context.Context, got []byte, version string) error {
+			if !bytes.Equal(got, archive) || version != "v1.2.3" {
+				t.Fatal("incorrect attestation subject")
+			}
+			return nil
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +72,7 @@ func TestUpdateChecksumFailureLeavesExecutableUntouched(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch {
 		case strings.HasSuffix(request.URL.Path, "/checksums.txt"):
-			fmt.Fprintln(response, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  machinist_1.2.3_linux_amd64.tar.gz")
+			fmt.Fprintln(response, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  esf_machinist_1.2.3_linux_amd64.tar.gz")
 		case strings.HasSuffix(request.URL.Path, ".tar.gz"):
 			response.Write(archive)
 		default:
@@ -97,6 +104,31 @@ func TestUpdateChecksumFailureLeavesExecutableUntouched(t *testing.T) {
 	}
 	if !bytes.Equal(got, original) {
 		t.Fatalf("executable changed to %q", got)
+	}
+}
+
+func TestUpdateProvenanceFailureLeavesExecutableUntouched(t *testing.T) {
+	archive := testArchive(t, []byte("new machinist"))
+	digest := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if strings.HasSuffix(request.URL.Path, "/checksums.txt") {
+			fmt.Fprintf(response, "%x  esf_machinist_1.2.3_linux_amd64.tar.gz\n", digest)
+		} else {
+			response.Write(archive)
+		}
+	}))
+	defer server.Close()
+	executable := filepath.Join(t.TempDir(), "machinist")
+	if err := os.WriteFile(executable, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Update(t.Context(), Options{Version: "v1.2.3", Executable: executable, GOOS: "linux", GOARCH: "amd64", Client: server.Client(), ReleaseBase: server.URL, VerifyAttestation: func(context.Context, []byte, string) error { return fmt.Errorf("untrusted signer") }})
+	if err == nil || !strings.Contains(err.Error(), "provenance") {
+		t.Fatalf("error = %v", err)
+	}
+	actual, err := os.ReadFile(executable)
+	if err != nil || string(actual) != "old" {
+		t.Fatalf("executable changed: %q, %v", actual, err)
 	}
 }
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+umask 022
 
 version=${1:-}
 output_dir=${2:-dist}
@@ -8,6 +9,16 @@ output_dir=${2:-dist}
 if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
   echo "usage: $0 vMAJOR.MINOR.PATCH [output-directory]" >&2
   exit 2
+fi
+
+if [[ "$version" == *-test* ]]; then
+  python3 scripts/verify-release-inventory.py
+else
+  python3 scripts/verify-release-inventory.py --require-qualified
+  if [[ -n $(git status --porcelain --untracked-files=normal) ]]; then
+    echo "release builds require a clean checkout" >&2
+    exit 1
+  fi
 fi
 
 mkdir -p "$output_dir"
@@ -20,7 +31,9 @@ build_dir=$(mktemp -d)
 trap 'rm -rf "$build_dir"' EXIT
 
 release_name=${version#v}
+binary_release=${release_name%%-*}
 commit=$(git rev-parse HEAD)
+go_toolchain=$(go env GOVERSION)
 targets=(
   linux/amd64
   linux/arm64
@@ -32,25 +45,35 @@ for target in "${targets[@]}"; do
   goos=${target%/*}
   goarch=${target#*/}
   target_dir="$build_dir/${goos}_${goarch}"
-  archive="$output_dir/machinist_${release_name}_${goos}_${goarch}.tar.gz"
 
   mkdir -p "$target_dir"
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-    go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=$version" \
+    go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=v$binary_release" \
     -o "$target_dir/machinist" ./cmd/machinist
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-    go build -buildvcs=false -trimpath -ldflags="-s -w" \
+    go build -buildvcs=false -trimpath -ldflags="-s -w -X github.com/mitkox/esf/internal/factory.Version=$binary_release -X main.buildCommit=$commit" \
     -o "$target_dir/factory" ./cmd/factory
-  cp LICENSE README.md "$target_dir/"
-  chmod 0644 "$target_dir/LICENSE" "$target_dir/README.md"
-  touch -t 198001010000 "$target_dir/LICENSE" "$target_dir/README.md" "$target_dir/machinist" "$target_dir/factory"
-  COPYFILE_DISABLE=1 tar -C "$target_dir" -cf - LICENSE README.md machinist factory | gzip -n > "$archive"
+  cp -L LICENSE README.md factory.example.toml "$target_dir/"
+  chmod 0644 "$target_dir/LICENSE" "$target_dir/README.md" "$target_dir/factory.example.toml"
+  chmod 0755 "$target_dir/machinist" "$target_dir/factory"
+  touch -t 198001010000 "$target_dir/LICENSE" "$target_dir/README.md" "$target_dir/factory.example.toml" "$target_dir/machinist" "$target_dir/factory"
+  for component in factory machinist combined; do
+    archive="$output_dir/esf_${component}_${release_name}_${goos}_${goarch}.tar.gz"
+    case "$component" in
+      factory) files=(LICENSE README.md factory.example.toml factory) ;;
+      machinist) files=(LICENSE README.md machinist) ;;
+      combined) files=(LICENSE README.md factory.example.toml factory machinist) ;;
+    esac
+    COPYFILE_DISABLE=1 tar --format=ustar --owner=0 --group=0 --numeric-owner -C "$target_dir" -cf - "${files[@]}" | gzip -n > "$archive"
+  done
 done
 
-printf '{\n  "version": "%s",\n  "commit": "%s",\n  "targets": ["linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64"]\n}\n' \
-  "$version" "$commit" > "$output_dir/release-manifest.json"
+printf '{\n  "release": "%s",\n  "binary_release": "v%s",\n  "commit": "%s",\n  "go_toolchain": "%s",\n  "machinist_upstream": "39435164faf1ff7fad49e41c38a7eb1a00538f21",\n  "targets": ["linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64"]\n}\n' \
+  "$version" "$binary_release" "$commit" "$go_toolchain" > "$output_dir/release-manifest.json"
+cp release/inventory.json "$output_dir/dependency-inventory.json"
+python3 scripts/generate-sbom.py "$output_dir/sbom.cdx.json"
 
 (
   cd "$output_dir"
-  shasum -a 256 machinist_*.tar.gz release-manifest.json > checksums.txt
+  shasum -a 256 esf_*.tar.gz release-manifest.json dependency-inventory.json sbom.cdx.json > checksums.txt
 )

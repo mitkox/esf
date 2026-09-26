@@ -263,10 +263,11 @@ func (p *Provider) Create(ctx context.Context, spec sandbox.Spec) (sandbox.Sandb
 		slog.Duration("duration", time.Since(started)))
 
 	return &cubeSandbox{
-		id:       created.SandboxID,
-		template: templateID,
-		sb:       created,
-		log:      p.log,
+		id:          created.SandboxID,
+		template:    templateID,
+		sb:          created,
+		log:         p.log,
+		outputLimit: p.commandOutputLimit(),
 	}, nil
 }
 
@@ -281,10 +282,11 @@ func (p *Provider) Reattach(ctx context.Context, sandboxID string) (sandbox.Sand
 		return nil, fmt.Errorf("reattach to sandbox %s: %w", sandboxID, classify(err))
 	}
 	return &cubeSandbox{
-		id:       sb.SandboxID,
-		template: sb.TemplateID,
-		sb:       sb,
-		log:      p.log,
+		id:          sb.SandboxID,
+		template:    sb.TemplateID,
+		sb:          sb,
+		log:         p.log,
+		outputLimit: p.commandOutputLimit(),
 	}, nil
 }
 
@@ -334,10 +336,18 @@ func (p *Provider) List(ctx context.Context) ([]sandbox.Info, error) {
 
 // cubeSandbox adapts one CubeSandbox instance to sandbox.Sandbox.
 type cubeSandbox struct {
-	id       string
-	template string
-	sb       *cubesandbox.Sandbox
-	log      *slog.Logger
+	id          string
+	template    string
+	sb          *cubesandbox.Sandbox
+	log         *slog.Logger
+	outputLimit int64
+}
+
+func (p *Provider) commandOutputLimit() int64 {
+	if p.cfg.CommandOutputBytes > 0 {
+		return p.cfg.CommandOutputBytes
+	}
+	return DefaultCommandOutputBytes
 }
 
 func (s *cubeSandbox) ID() string       { return s.id }
@@ -411,7 +421,7 @@ func (s *cubeSandbox) Execute(ctx context.Context, cmd sandbox.Command) (sandbox
 	}
 
 	started := time.Now().UTC()
-	result, err := s.sb.Commands().Run(ctx, line, opts)
+	result, err := s.sb.Commands().Run(ctx, boundedCommandScript(line, s.outputLimit), opts)
 	finished := time.Now().UTC()
 	if err != nil {
 		// Distinguish "the command could not run" from "the command ran and

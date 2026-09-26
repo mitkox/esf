@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mitkox/esf/internal/artifacts"
+	"github.com/mitkox/esf/internal/factoryartifacts"
 )
 
 // mustJSON marshals a value or fails the test.

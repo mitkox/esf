@@ -1,8 +1,9 @@
 # Set up Machinist on a remote VM
 
-This guide sets up a dedicated Ubuntu or Debian VM that runs Machinist with
-Codex and Claude Code. Machinist runs from a published binary. Git checkouts are
-needed only for repositories that coding agents may inspect or change.
+This guide sets up a dedicated Ubuntu or Debian VM that runs the Machinist
+console and optional managed worker. The factory worker has its own
+[production guide](production-deployment.md). Coding agents are installed
+separately at qualified versions.
 
 The examples use a local SSH alias named `machinist`. Root performs bootstrap
 and service administration, while coding agents run as a dedicated unprivileged
@@ -42,20 +43,21 @@ file on another VM.
 While connected to the VM, run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/mitkox/esf/v0.2.0/scripts/setup-vm.sh | \
-  MACHINIST_VERSION=v0.2.0 bash
+apt-get update && apt-get install -y git
+git clone --branch v0.5.0 https://github.com/mitkox/esf.git
+cd esf
+ESF_VERSION=v0.5.0 bash scripts/setup-vm.sh
 ```
 
-The script installs Git, GitHub CLI, Codex, Claude Code, and the pinned
-Machinist release. It initializes `~/.machinist` without overwriting existing
+The script installs Git, GitHub CLI, and the provenance-verified Machinist
+release. It initializes `~/.machinist` without overwriting existing
 configuration, then installs systemd services for the control plane and worker.
 It enables and starts the control plane immediately. It enables the worker only
 when a repository is already configured. Re-running the bootstrap reinstalls
-that pinned release and restarts the applicable services. Change both version
-values together when installing another release. Machinist's installer verifies
-the release archive against its published SHA-256 checksum. Review remote
-scripts before executing them when the repository or network is outside your
-trust boundary.
+that pinned release and restarts the applicable services. The installer verifies
+the release archive against its published SHA-256 checksum and GitHub build
+attestation. Install qualified coding agents and authenticate them as the
+`machinist` account after bootstrap.
 
 Switch to the runtime account before authenticating tools, creating its GitHub
 key, cloning repositories, or editing Machinist configuration:
@@ -66,7 +68,7 @@ su - machinist
 
 ### Migrating a root-based v0.1.x installation
 
-The v0.2.0 bootstrap deliberately stops if it detects services or configuration
+The bootstrap deliberately stops if it detects services or configuration
 from the earlier root-based setup. It does not copy root-owned agent credentials
 into the unprivileged account.
 
@@ -100,8 +102,6 @@ Verify the tools:
 ```sh
 git --version
 gh --version
-codex --version
-claude --version
 machinist version
 ```
 

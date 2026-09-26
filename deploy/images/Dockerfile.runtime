@@ -1,0 +1,31 @@
+# Refresh both digests with the release inventory before qualification.
+ARG GO_BUILDER=docker.io/library/golang@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195
+ARG RUNTIME_BASE=gcr.io/distroless/static-debian12@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG TARGETOS
+ARG TARGETARCH
+ARG ESF_VERSION=0.5.0
+ARG ESF_COMMIT
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -buildvcs=false -trimpath \
+      -ldflags="-s -w -X github.com/mitkox/esf/internal/factory.Version=${ESF_VERSION} -X main.buildCommit=${ESF_COMMIT}" \
+      -o /out/factory ./cmd/factory && \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=v${ESF_VERSION}" \
+      -o /out/machinist ./cmd/machinist
+
+FROM ${RUNTIME_BASE} AS factory
+COPY --from=build /out/factory /usr/local/bin/factory
+USER 10001:10001
+ENV HOME=/tmp
+ENTRYPOINT ["/usr/local/bin/factory"]
+
+FROM ${RUNTIME_BASE} AS console
+COPY --from=build /out/machinist /usr/local/bin/machinist
+USER 10002:10002
+ENV HOME=/tmp
+ENTRYPOINT ["/usr/local/bin/machinist"]

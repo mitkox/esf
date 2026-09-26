@@ -7,9 +7,15 @@ if [[ $(id -u) -ne 0 ]]; then
   exit 1
 fi
 
-machinist_version=${MACHINIST_VERSION:-}
-if [[ ! $machinist_version =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-  echo "set MACHINIST_VERSION to the release being installed, such as v0.2.0" >&2
+esf_version=${ESF_VERSION:-${MACHINIST_VERSION:-}}
+if [[ ! $esf_version =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+  echo "set ESF_VERSION to the release being installed, such as v0.5.0" >&2
+  exit 2
+fi
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+repo_dir=$(cd "$script_dir/.." && pwd)
+if [[ ! -f $repo_dir/install.sh ]]; then
+  echo "run setup-vm.sh from a verified ESF source checkout" >&2
   exit 2
 fi
 
@@ -32,6 +38,7 @@ if [[ ! -r /etc/os-release ]]; then
   echo "unsupported Linux distribution: /etc/os-release is missing" >&2
   exit 1
 fi
+# shellcheck disable=SC1091 # This system file is checked for readability above.
 . /etc/os-release
 if [[ ${ID:-} != ubuntu && ${ID:-} != debian ]]; then
   echo "unsupported Linux distribution: ${ID:-unknown}" >&2
@@ -52,25 +59,7 @@ if [[ -z $runtime_home || ! -d $runtime_home ]]; then
   exit 1
 fi
 
-# Codex and Claude Code use per-user credentials, so install their standalone
-# distributions as the account that will run Machinist.
-runuser -u "$runtime_user" -- env HOME="$runtime_home" \
-  bash -c 'curl -fsSL https://chatgpt.com/codex/install.sh | sh'
-runuser -u "$runtime_user" -- env HOME="$runtime_home" \
-  bash -c 'curl -fsSL https://claude.ai/install.sh | bash'
-curl -fsSL "https://raw.githubusercontent.com/mitkox/esf/$machinist_version/install.sh" | \
-  env MACHINIST_VERSION="$machinist_version" sh
-
-# Standalone agent installers use ~/.local/bin. Login shells commonly add that
-# directory to PATH, but services and other non-interactive processes do not.
-for agent_command in codex claude; do
-  agent_path="$runtime_home/.local/bin/$agent_command"
-  if [[ ! -x "$agent_path" ]]; then
-    echo "$agent_command installer did not create $agent_path" >&2
-    exit 1
-  fi
-  ln -sfn "$agent_path" "/usr/local/bin/$agent_command"
-done
+ESF_COMPONENT=machinist ESF_VERSION="$esf_version" sh "$repo_dir/install.sh"
 
 runuser -u "$runtime_user" -- env HOME="$runtime_home" machinist init
 
@@ -83,16 +72,9 @@ if systemctl is-active --quiet machinist-worker.service 2>/dev/null; then
   worker_was_active=true
 fi
 
-service_base_url="https://raw.githubusercontent.com/mitkox/esf/$machinist_version/deploy/systemd"
-service_tmp_dir=$(mktemp -d)
-trap 'rm -rf "$service_tmp_dir"' EXIT
-curl -fsSL "$service_base_url/machinist-control-plane.service" \
-  -o "$service_tmp_dir/machinist-control-plane.service"
-curl -fsSL "$service_base_url/machinist-worker.service" \
-  -o "$service_tmp_dir/machinist-worker.service"
-install -m 0644 "$service_tmp_dir/machinist-control-plane.service" \
+install -m 0644 "$repo_dir/deploy/systemd/machinist-control-plane.service" \
   /etc/systemd/system/machinist-control-plane.service
-install -m 0644 "$service_tmp_dir/machinist-worker.service" \
+install -m 0644 "$repo_dir/deploy/systemd/machinist-worker.service" \
   /etc/systemd/system/machinist-worker.service
 systemctl daemon-reload
 systemctl enable machinist-control-plane.service
@@ -130,13 +112,12 @@ VM bootstrap complete.
 
 Next steps:
   1. Run `su - machinist`, then complete the remaining login and repository steps as that user.
-  2. Run `gh auth login`.
-  3. Run `codex` once and sign in.
-  4. Run `claude` once and sign in.
-  5. Clone each repository agents may use and register its absolute path in
+  2. Run `gh auth login` if GitHub integration is enabled.
+  3. Install the separately qualified coding agent binaries and authenticate them as that user.
+  4. Clone each repository agents may use and register its absolute path in
      ~/.machinist/worker.toml.
-  6. Exit back to root and run `systemctl enable --now machinist-worker` after registering a repository.
-  7. Check `systemctl status machinist-control-plane machinist-worker`.
+  5. Exit back to root and run `systemctl enable --now machinist-worker` after registering a repository.
+  6. Check `systemctl status machinist-control-plane machinist-worker`.
 
 Keep the control plane on 127.0.0.1. Reach it from your computer with:
   ssh -N -L 7331:127.0.0.1:7331 machinist

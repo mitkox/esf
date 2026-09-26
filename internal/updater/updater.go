@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -39,6 +40,9 @@ type Options struct {
 	Client      *http.Client
 	APIBase     string
 	ReleaseBase string
+	// VerifyAttestation permits an isolated verifier in tests. Production uses
+	// GitHub's signed release-workflow provenance before replacing the binary.
+	VerifyAttestation func(context.Context, []byte, string) error
 }
 
 type Result struct {
@@ -96,7 +100,7 @@ func Update(ctx context.Context, options Options) (Result, error) {
 	}
 
 	releaseName := strings.TrimPrefix(version, "v")
-	archiveName := fmt.Sprintf("machinist_%s_%s_%s.tar.gz", releaseName, options.GOOS, options.GOARCH)
+	archiveName := fmt.Sprintf("esf_machinist_%s_%s_%s.tar.gz", releaseName, options.GOOS, options.GOARCH)
 	baseURL := strings.TrimRight(options.ReleaseBase, "/") + "/" + version
 	checksums, err := download(ctx, options.Client, baseURL+"/checksums.txt", maxChecksumsSize)
 	if err != nil {
@@ -114,6 +118,13 @@ func Update(ctx context.Context, options Options) (Result, error) {
 	if !strings.EqualFold(hex.EncodeToString(got[:]), want) {
 		return Result{}, fmt.Errorf("checksum mismatch for %s", archiveName)
 	}
+	verify := options.VerifyAttestation
+	if verify == nil {
+		verify = verifyAttestation
+	}
+	if err := verify(ctx, archive, version); err != nil {
+		return Result{}, fmt.Errorf("release provenance verification failed: %w", err)
+	}
 	binary, err := extractBinary(archive)
 	if err != nil {
 		return Result{}, err
@@ -122,6 +133,26 @@ func Update(ctx context.Context, options Options) (Result, error) {
 		return Result{}, err
 	}
 	return Result{Version: version}, nil
+}
+
+func verifyAttestation(ctx context.Context, archive []byte, version string) error {
+	file, err := os.CreateTemp("", "esf-release-*.tar.gz")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if _, err := file.Write(archive); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, "gh", "attestation", "verify", file.Name(), "-R", "mitkox/esf", "--signer-workflow", "mitkox/esf/.github/workflows/release.yml", "--source-ref", "refs/tags/"+version)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("gh attestation verify: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 func latestVersion(ctx context.Context, client *http.Client, apiBase string) (string, error) {
@@ -152,7 +183,7 @@ func download(ctx context.Context, client *http.Client, endpoint string, limit i
 		return nil, err
 	}
 	request.Header.Set("Accept", "application/vnd.github+json")
-	request.Header.Set("User-Agent", "machinist-updater")
+	request.Header.Set("User-Agent", "esf-updater")
 	response, err := client.Do(request)
 	if err != nil {
 		return nil, err

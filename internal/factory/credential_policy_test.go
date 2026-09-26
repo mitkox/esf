@@ -143,8 +143,41 @@ func TestCubeEgressConfigRejectsPlaintextRemoteControlPlane(t *testing.T) {
 		Binary: "/host/runner", BinarySHA256: strings.Repeat("a", 64), Model: "model",
 		Timeout: tomlx.FromStd(time.Minute),
 	}
-	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "HTTPS or loopback") {
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "requires HTTPS") {
 		t.Fatalf("Validate error = %v", err)
+	}
+}
+
+func TestOpenCodeCubeEgressInjectsCredentialOnlyInProxy(t *testing.T) {
+	const secret = "provider-secret-must-stay-in-proxy"
+	t.Setenv("TEST_ESF_OPENCODE_KEY", secret)
+	cfg := testValidConfigForCredentialPolicy()
+	cfg.Harnesses["opencode"] = HarnessConfig{
+		Type: "opencode", BaseURL: "https://gateway.example/v1", Model: "gateway/model",
+		APIKeyEnv: "TEST_ESF_OPENCODE_KEY", CredentialMode: cubeEgressCredentialMode,
+		Binary: "/host/opencode", BinarySHA256: strings.Repeat("a", 64), Timeout: tomlx.FromStd(time.Minute),
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	network, applies, err := cfg.runtimeNetworkForHarness("opencode")
+	if err != nil || !applies {
+		t.Fatalf("policy: applies=%v error=%v", applies, err)
+	}
+	if got := network.Rules[0].Action.Inject[0].Secret; got != secret {
+		t.Fatalf("proxy secret = %q", got)
+	}
+	if len(network.Rules) != 1 || network.Rules[0].Match.Host != "gateway.example" || *network.AllowInternet {
+		t.Fatalf("unsafe policy: %+v", network)
+	}
+	if _, err := cfg.BuildHarnesses(); err != nil {
+		t.Fatalf("harness: %v", err)
+	}
+	unsafe := cfg.Harnesses["opencode"]
+	unsafe.PassEnv = []string{"TEST_ESF_OPENCODE_KEY"}
+	cfg.Harnesses["opencode"] = unsafe
+	if _, err := cfg.BuildHarnesses(); err == nil {
+		t.Fatal("accepted agent-readable host credential")
 	}
 }
 

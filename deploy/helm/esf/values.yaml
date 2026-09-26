@@ -1,0 +1,43 @@
+factory:
+  enabled: true
+  image:
+    repository: ghcr.io/mitkox/esf-factory
+    digest: "" # set sha256:<qualified digest>
+  configSecret: "" # existing Secret containing factory.toml
+  credentialSecret: "" # optional existing Secret mounted at /etc/esf/credentials
+  agentClaim: "" # optional RWO claim containing separately distributed agents
+  storage:
+    existingClaim: ""
+    storageClass: ""
+    size: 20Gi
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {cpu: "2", memory: 2Gi}
+  nodeSelector: {kubernetes.io/os: linux}
+  quality:
+    enabled: false
+    nodeName: ""
+    socketHostPath: "" # dedicated, operator-owned local host directory
+
+console:
+  enabled: false
+  image:
+    repository: ghcr.io/mitkox/esf-console
+    digest: ""
+  configSecret: "" # existing Secret containing machinist.toml; listen must be 127.0.0.1
+  factoryReadClaim: "" # optional factory RWO claim, mounted read-only on the same node
+  factoryReadTokenSecret: "" # optional separate read-only API token Secret
+  storage:
+    existingClaim: ""
+    storageClass: ""
+    size: 10Gi
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 1Gi}
+  nodeSelector: {kubernetes.io/os: linux}
+
+networkPolicy:
+  enabled: true
+  # Explicit control/data/Temporal/OTLP CIDRs and ports are required for a
+  # working deployment. Empty keeps runtime egress closed except DNS.
+  egress: []

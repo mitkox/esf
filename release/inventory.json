@@ -1,0 +1,34 @@
+{
+  "release": "v0.5.0",
+  "baseline": "399504f439e8abe3e3931b60b5db645ab6da7c22",
+  "machinist": {
+    "revision": "39435164faf1ff7fad49e41c38a7eb1a00538f21",
+    "schema": 5,
+    "qualification": "unit tests passed; deployment upgrade pending"
+  },
+  "dependencies": {
+    "cubesandbox": {"release": "0.7.2", "go_sdk": "v0.0.0-20260924061837-f1aaa737fb38", "qualification": "pending live matrix"},
+    "temporal": {"server": "1.32.0", "admin_tools": "1.32.0", "ui": "2.54.1", "go_sdk": "1.49.0", "api": "1.63.6", "qualification": "pending history replay"},
+    "opencode": {"package": "@opencode/cli", "version": "2.0.18", "npm_integrity": "sha512-EkIxIa2goJ2v8U3Os2gpRckOIjN9gpUBXy6fyVOFbPZl71rkGpoF3NFsm4nlDiF2BgnIqcgJU5NgdV1k6/OZuw==", "linux_amd64_binary_sha256": "10d405161d8b9595f4a2ec31254e961969e6ca3f8239ac9bd55b6ff6431dc24f", "license": "MIT", "qualification": "digest recorded; live acceptance pending"},
+    "unreal": {"release": "0.2.0", "linux_amd64_archive_sha256": "b875502c7c8b38d78a1c837b76a13d2e02d056801a9ce28aec6b3210931554dd", "sha256sums_sha256": "18eb4b6701d7ab4aedb717a86eedfa17c547c47e4c4fa1a4a0cee4dd455a5a23", "binary_sha256": "6e6e25a768b500e2e58a0fae031bc75855ad6fe79c6e0f50bdc022bec1668238", "license": "MIT", "qualification": "release checksums verified; live acceptance pending"},
+    "grpc": "1.84.0",
+    "otel": "1.46.0",
+    "sqlite": "1.59.0",
+    "dspy": "3.4.0",
+    "frontend": {"vite": "8.3.1", "lucide": "1.48.0", "jsdom": "30.1.1", "react": "19.3.0", "tailwind": "4.3.3"},
+    "postgresql": "16.15"
+  },
+  "toolchains": {"go": "1.27.1", "node": "24.21.0", "python_optional": "3.14.7", "kubernetes_qualification": "1.37.1", "helm_qualification": "4.3.0"},
+  "build_bases": {
+    "go": "docker.io/library/golang@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195",
+    "runtime": "gcr.io/distroless/static-debian12@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab",
+    "worker": "docker.io/library/debian@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251",
+    "python": "docker.io/library/python@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56",
+    "node": "docker.io/library/node@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6",
+    "cube": "ghcr.io/tencentcloud/cubesandbox-base@sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472"
+  },
+  "images": {"factory": null, "console": null, "managedworker": null, "intake": null, "cube_template": null, "cube": null, "temporal": null, "postgresql": null},
+  "templates": {"recipe_sha256": "e97243389318ad76f7d6736a1292c5f848a8d1981662d49ed873d97351c02329", "architecture": "linux/amd64", "git_package": "1:2.34.1-1ubuntu1.17", "ca_certificates_package": "20260601~22.04.1", "python3_package": "3.10.6-1~22.04.1", "cube_template_id": null, "template_sha256": null, "qualification": "local image build and agent hash smoke passed; live pending"},
+  "transitive_licenses": "pending SBOM and notice review",
+  "qualification": {"vm": "pending", "kubernetes": "pending", "soak_24h": "pending", "restore": "pending", "security": "pending", "performance": "pending", "temporal_replay": "pending", "agent_acceptance": "pending", "cube_lifecycle": "pending", "migration_drill": "pending"}
+}

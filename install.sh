@@ -2,17 +2,20 @@
 
 set -eu
 
-repository=${MACHINIST_REPOSITORY:-mitkox/esf}
-version=${MACHINIST_VERSION:-}
-install_dir=${MACHINIST_INSTALL_DIR:-}
+repository=${ESF_REPOSITORY:-${MACHINIST_REPOSITORY:-mitkox/esf}}
+version=${ESF_VERSION:-${MACHINIST_VERSION:-}}
+install_dir=${ESF_INSTALL_DIR:-${MACHINIST_INSTALL_DIR:-}}
+component=${ESF_COMPONENT:-factory}
 
 fail() {
-  printf 'machinist installer: %s\n' "$*" >&2
+  printf 'ESF installer: %s\n' "$*" >&2
   exit 1
 }
 
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v tar >/dev/null 2>&1 || fail "tar is required"
+command -v gh >/dev/null 2>&1 || fail "GitHub CLI is required to verify release provenance"
+case $component in factory|machinist|combined) ;; *) fail "ESF_COMPONENT must be factory, machinist, or combined" ;; esac
 
 case $(uname -s) in
   Linux) os=linux ;;
@@ -28,7 +31,7 @@ esac
 
 if [ -z "$version" ]; then
   metadata=$(curl -fsSL -H 'Accept: application/vnd.github+json' \
-    -H 'User-Agent: machinist-installer' \
+    -H 'User-Agent: esf-installer' \
     "https://api.github.com/repos/$repository/releases/latest") || \
     fail "could not find a published release"
   version=$(printf '%s\n' "$metadata" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
@@ -46,7 +49,7 @@ if [ -z "$install_dir" ]; then
 fi
 
 release_name=${version#v}
-archive_name="machinist_${release_name}_${os}_${arch}.tar.gz"
+archive_name="esf_${component}_${release_name}_${os}_${arch}.tar.gz"
 release_url="https://github.com/$repository/releases/download/$version"
 temporary_dir=$(mktemp -d)
 trap 'rm -rf "$temporary_dir"' EXIT HUP INT TERM
@@ -67,13 +70,26 @@ else
   fail "sha256sum or shasum is required"
 fi
 [ "$actual" = "$expected" ] || fail "checksum mismatch for $archive_name"
+gh attestation verify "$temporary_dir/$archive_name" -R "$repository" \
+  --signer-workflow "$repository/.github/workflows/release.yml" \
+  --source-ref "refs/tags/$version" >/dev/null || fail "release provenance verification failed"
 
-tar -xzf "$temporary_dir/$archive_name" -C "$temporary_dir" machinist factory
+case $component in
+  factory) binaries='factory' ;;
+  machinist) binaries='machinist' ;;
+  combined) binaries='factory machinist' ;;
+esac
+for binary in $binaries; do
+  tar -xzf "$temporary_dir/$archive_name" -C "$temporary_dir" "$binary" || fail "archive lacks $binary"
+done
 mkdir -p "$install_dir"
-install -m 0755 "$temporary_dir/machinist" "$install_dir/machinist"
-install -m 0755 "$temporary_dir/factory" "$install_dir/factory"
+for binary in $binaries; do
+  staged="$install_dir/.$binary.esf-update.$$"
+  install -m 0755 "$temporary_dir/$binary" "$staged"
+  mv -f "$staged" "$install_dir/$binary"
+done
 
-printf 'installed factory and machinist %s to %s/machinist\n' "$version" "$install_dir"
+printf 'installed ESF %s %s to %s\n' "$component" "$version" "$install_dir"
 case ":$PATH:" in
   *":$install_dir:"*) ;;
   *) printf 'add %s to PATH before running machinist\n' "$install_dir" ;;

@@ -1,6 +1,8 @@
 # Architecture
 
-Machinist owns process execution, not orchestration.
+Machinist owns staged jobs and their workflow steps. Temporal owns factory
+runs. ESF assurance governs controlled factory decisions; a Machinist review
+does not approve QMS evidence.
 
 - `config.toml` defines portable named commands, optional prompt templates, timeouts,
   triggers, and server settings.
@@ -8,16 +10,18 @@ Machinist owns process execution, not orchestration.
 - `internal/runner` starts one process in one repository, writes the prompt to stdin,
   streams both output channels, records artifacts and token usage, and terminates the
   process tree on timeout or cancellation.
-- `internal/controlplane` stores one job and one run, leases it to a capable worker,
-  rejects stale completions, and exposes authenticated APIs and the web UI.
+- `internal/controlplane` stores jobs, step attempts, immutable shared artifacts,
+  review gates, and execution leases. It rejects stale completions and exposes
+  authenticated APIs and the web UI.
 - `internal/managedworker` resolves only worker-owned executor and repository names.
 
-Each job has exactly one run. The database enforces this with a unique `runs.job_id`.
-Terminal state comes only from the process result. There is no internal stage model.
+Single-command jobs keep their original semantics. Workflow jobs can advance
+through several steps, with separate attempts and review gates. Schema 2
+databases migrate to schema 5 with a consistent backup before migration.
 
 ## The factory layer
 
-The Temporal-based factory in `internal/factory` sits beside Machinist, not inside it:
+The Temporal-based factory in `internal/factory` sits beside Machinist:
 
 - `internal/factory/resources.go` resolves operator-declared resources
   (`[workspaces]`, `[models]`, `[egress]`, `[budgets]`, `[scopes]`) exactly once, in

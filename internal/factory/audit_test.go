@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mitkox/esf/internal/artifacts"
+	"github.com/mitkox/esf/internal/factoryartifacts"
 )
 
 func TestAppendAuditRedactsEveryFreeFormField(t *testing.T) {

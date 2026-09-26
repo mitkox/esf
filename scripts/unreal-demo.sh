@@ -46,6 +46,7 @@ SMOKE_FILE=""
 
 say() { printf '\n== %s ==\n' "$*"; }
 die() { printf 'unreal-demo.sh: ERROR: %s\n' "$*" >&2; exit 1; }
+# shellcheck disable=SC2329 # Invoked by the EXIT trap.
 cleanup() {
   [ -z "$TASK_FILE" ] || rm -f -- "$TASK_FILE"
   [ -z "$SMOKE_FILE" ] || rm -f -- "$SMOKE_FILE"
@@ -173,7 +174,7 @@ EOF
 printf 'overlay written: %s\n' "$DEMO_CONFIG"
 
 if [ -n "$KEY_ENV" ] && [ -n "${!KEY_ENV:-}" ]; then
-  export "$KEY_ENV"
+  export "${KEY_ENV?}"
 fi
 
 say "Doctor (validates config + harness registry)"

@@ -1,0 +1,90 @@
+{{- if .Values.factory.enabled }}
+{{- $name := include "esf.name" . -}}
+{{- $config := required "factory.configSecret is required" .Values.factory.configSecret -}}
+{{- if .Values.factory.quality.enabled }}
+{{- required "factory.quality.nodeName is required for local QMS authority" .Values.factory.quality.nodeName -}}
+{{- required "factory.quality.socketHostPath is required for local QMS authority" .Values.factory.quality.socketHostPath -}}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-factory
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: factory}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: factory}
+    spec:
+      serviceAccountName: {{ $name }}-factory
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      {{- if .Values.factory.quality.enabled }}
+      nodeName: {{ .Values.factory.quality.nodeName | quote }}
+      {{- else }}
+      nodeSelector:
+        {{- toYaml .Values.factory.nodeSelector | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: factory
+          image: {{ include "esf.image" .Values.factory.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args: ["worker", "--config", "/etc/esf/factory.toml"]
+          resources:
+            {{- toYaml .Values.factory.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          startupProbe:
+            exec: {command: ["/usr/local/bin/factory", "doctor", "--config", "/etc/esf/factory.toml", "--profile", "production", "--output", "json", "--offline"]}
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            exec: {command: ["/usr/local/bin/factory", "doctor", "--config", "/etc/esf/factory.toml", "--profile", "production", "--output", "json", "--offline"]}
+            periodSeconds: 20
+          livenessProbe:
+            exec: {command: ["/usr/local/bin/factory", "version", "--json"]}
+            periodSeconds: 30
+          volumeMounts:
+            - {name: config, mountPath: /etc/esf/factory.toml, subPath: factory.toml, readOnly: true}
+            - {name: data, mountPath: /var/lib/esf/factory}
+            - {name: tmp, mountPath: /tmp}
+            {{- if .Values.factory.credentialSecret }}
+            - {name: credentials, mountPath: /etc/esf/credentials, readOnly: true}
+            {{- end }}
+            {{- if .Values.factory.agentClaim }}
+            - {name: agents, mountPath: /opt/esf/agents, readOnly: true}
+            {{- end }}
+            {{- if .Values.factory.quality.enabled }}
+            - {name: quality-socket, mountPath: /run/esf-quality}
+            {{- end }}
+      volumes:
+        - name: config
+          secret: {secretName: {{ $config | quote }}, defaultMode: 0440}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-factory" $name) .Values.factory.storage.existingClaim | quote }}
+        - name: tmp
+          emptyDir: {sizeLimit: 512Mi}
+        {{- if .Values.factory.credentialSecret }}
+        - name: credentials
+          secret: {secretName: {{ .Values.factory.credentialSecret | quote }}, defaultMode: 0440}
+        {{- end }}
+        {{- if .Values.factory.agentClaim }}
+        - name: agents
+          persistentVolumeClaim: {claimName: {{ .Values.factory.agentClaim | quote }}}
+        {{- end }}
+        {{- if .Values.factory.quality.enabled }}
+        - name: quality-socket
+          hostPath: {path: {{ .Values.factory.quality.socketHostPath | quote }}, type: Directory}
+        {{- end }}
+{{- end }}

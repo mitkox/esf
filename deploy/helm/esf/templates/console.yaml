@@ -1,0 +1,84 @@
+{{- if .Values.console.enabled }}
+{{- $name := include "esf.name" . -}}
+{{- $config := required "console.configSecret is required" .Values.console.configSecret -}}
+{{- if and .Values.console.factoryReadClaim (not .Values.factory.enabled) }}
+{{- fail "console.factoryReadClaim requires the factory workload for same-node scheduling" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-console
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: console}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: console}
+    spec:
+      serviceAccountName: {{ $name }}-console
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 90
+      nodeSelector:
+        {{- toYaml .Values.console.nodeSelector | nindent 8 }}
+      {{- if .Values.console.factoryReadClaim }}
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: {{ $name }}
+                  app.kubernetes.io/component: factory
+              topologyKey: kubernetes.io/hostname
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10002
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: console
+          image: {{ include "esf.image" .Values.console.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args: ["--config", "/etc/esf/machinist.toml", "start"]
+          resources:
+            {{- toYaml .Values.console.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          startupProbe:
+            exec: {command: ["/usr/local/bin/machinist", "--config", "/etc/esf/machinist.toml", "health"]}
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            exec: {command: ["/usr/local/bin/machinist", "--config", "/etc/esf/machinist.toml", "health"]}
+            periodSeconds: 10
+          livenessProbe:
+            exec: {command: ["/usr/local/bin/machinist", "--config", "/etc/esf/machinist.toml", "health"]}
+            periodSeconds: 30
+          volumeMounts:
+            - {name: config, mountPath: /etc/esf/machinist.toml, subPath: machinist.toml, readOnly: true}
+            - {name: data, mountPath: /var/lib/esf/console}
+            - {name: tmp, mountPath: /tmp}
+            {{- if .Values.console.factoryReadClaim }}
+            - {name: factory-read, mountPath: /var/lib/esf/factory-read, readOnly: true}
+            - {name: factory-read-token, mountPath: /etc/esf/factory-read-token, subPath: token, readOnly: true}
+            {{- end }}
+      volumes:
+        - name: config
+          secret: {secretName: {{ $config | quote }}, defaultMode: 0440}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-console" $name) .Values.console.storage.existingClaim | quote }}
+        - name: tmp
+          emptyDir: {sizeLimit: 128Mi}
+        {{- if .Values.console.factoryReadClaim }}
+        - name: factory-read
+          persistentVolumeClaim: {claimName: {{ .Values.console.factoryReadClaim | quote }}, readOnly: true}
+        - name: factory-read-token
+          secret: {secretName: {{ required "console.factoryReadTokenSecret is required with factoryReadClaim" .Values.console.factoryReadTokenSecret | quote }}, defaultMode: 0440}
+        {{- end }}
+{{- end }}

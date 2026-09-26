@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mitkox/esf/internal/artifacts"
+	"github.com/mitkox/esf/internal/factoryartifacts"
 	"github.com/mitkox/esf/internal/repository"
 )
 

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +30,7 @@ type IntakeConfig struct {
 	PythonExecutable string         `toml:"python_executable"`
 	KeyFile          string         `toml:"key_file"`
 	Model            string         `toml:"model"`
+	BaseURL          string         `toml:"base_url"`
 	Timeout          tomlx.Duration `toml:"timeout"`
 	ProgramPath      string         `toml:"program_path"`
 }
@@ -58,6 +61,17 @@ func (c IntakeConfig) Validate() error {
 	}
 	if strings.TrimSpace(c.effectiveModel()) == "" || strings.ContainsAny(c.effectiveModel(), "\r\n") {
 		return errors.New("model must be a nonempty single line")
+	}
+	if c.BaseURL != "" {
+		endpoint, err := url.Parse(c.BaseURL)
+		if err != nil || endpoint.Host == "" || endpoint.Opaque != "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" || endpoint.Path != "" && endpoint.Path != "/" {
+			return errors.New("base_url must be an origin URL without credentials, path, query, or fragment")
+		}
+		host := endpoint.Hostname()
+		ip := net.ParseIP(host)
+		if endpoint.Scheme != "https" && !(endpoint.Scheme == "http" && (host == "localhost" || ip != nil && ip.IsLoopback())) {
+			return errors.New("base_url must use HTTPS or HTTP on a loopback host")
+		}
 	}
 	if c.effectiveTimeout() <= 0 || c.effectiveTimeout() > time.Minute {
 		return errors.New("timeout must be positive and at most one minute")
@@ -165,6 +179,9 @@ func (a *Activities) AssessIntake(ctx context.Context, in IntakeInput) (IntakeRe
 		"TYPESAFE_API_KEY_FILE=" + cfg.KeyFile,
 		"ESF_INTAKE_MODEL=" + cfg.effectiveModel(),
 		"ESF_INTAKE_PROGRAM=" + cfg.ProgramPath,
+	}
+	if cfg.BaseURL != "" {
+		cmd.Env = append(cmd.Env, "TYPESAFE_BASE_URL="+cfg.BaseURL)
 	}
 	cmd.Stdin = bytes.NewReader(input)
 	var output bytes.Buffer

@@ -1,13 +1,13 @@
 module github.com/mitkox/esf
 
-go 1.26.6
+go 1.27.1
 
 require (
 	github.com/google/uuid v1.6.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
-	github.com/tencentcloud/CubeSandbox/sdk/go v0.0.0-20260918072046-d1a7bb3ecf99
+	github.com/tencentcloud/CubeSandbox/sdk/go v0.0.0-20260924061837-f1aaa737fb38
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.46.0
@@ -52,7 +52,7 @@ require (
 	golang.org/x/time v0.3.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
-	google.golang.org/grpc v1.83.2 // indirect
+	google.golang.org/grpc v1.84.0 // indirect
 	modernc.org/libc v1.75.7 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect

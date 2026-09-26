@@ -26,8 +26,9 @@ import (
 // reads the message from stdin (verified). That lets the factory pass untrusted
 // task text without any shell interpolation.
 const (
-	// DefaultOpenCodeBinary is the pinned standalone binary on this host.
-	DefaultOpenCodeBinary = "/home/USER/.npm-global/lib/node_modules/@opencode/cli/bin/opencode.exe"
+	OpenCodeEgressKeyEnv = "OPENCODE_CUBE_EGRESS_KEY"
+	// DefaultOpenCodeBinary is the operator-installed agent path.
+	DefaultOpenCodeBinary = "/opt/esf/agents/opencode2"
 	// OpenCodeConfigPath is where the harness writes the agent configuration.
 	OpenCodeConfigPath = "/root/.config/opencode/opencode.json"
 	// DefaultOpenCodeTimeout bounds a single agent run.
@@ -41,8 +42,9 @@ const (
 type OpenCodeOptions struct {
 	// Name is the registry name. Defaults to "opencode2".
 	Name string
-	// Binary is the host path to the standalone opencode binary.
-	Binary string
+	// Binary is a host path in staging mode, or a sandbox path when Preinstalled.
+	Binary       string
+	Preinstalled bool
 	// BinarySHA256 optionally pins the staged binary content.
 	BinarySHA256 string
 	// Model is the default model (provider/model). Must be reachable from
@@ -64,6 +66,9 @@ type OpenCodeOptions struct {
 	// APIKeyEnv names the environment variable the agent reads its credential
 	// from. The value is never written into the sandbox configuration file.
 	APIKeyEnv string
+	// EgressManaged keeps the real credential in CubeEgress. The agent sees only
+	// a placeholder, and no host environment or provider state is staged.
+	EgressManaged bool
 	// CatalogCache is a host path to the agent's model-catalog cache. When set
 	// it is staged into the sandbox so the agent does not have to fetch the
 	// catalog from the network on every run.
@@ -89,6 +94,12 @@ type OpenCodeOptions struct {
 // Nothing here is reachable from an API client: the executable, arguments,
 // permissions and timeouts are all operator configuration.
 func NewOpenCode(opts OpenCodeOptions) (*GenericCommandHarness, error) {
+	if opts.EgressManaged {
+		if len(opts.PassEnv) != 0 || len(opts.ProviderFiles) != 0 || opts.Config != nil {
+			return nil, fmt.Errorf("agentharness: opencode cube_egress forbids pass_env, provider_files, and custom config")
+		}
+		opts.APIKeyEnv = OpenCodeEgressKeyEnv
+	}
 	name := strings.TrimSpace(opts.Name)
 	if name == "" {
 		name = "opencode2"
@@ -106,7 +117,7 @@ func NewOpenCode(opts OpenCodeOptions) (*GenericCommandHarness, error) {
 		timeout = DefaultOpenCodeTimeout
 	}
 	packages := opts.Packages
-	if len(packages) == 0 {
+	if len(packages) == 0 && !opts.Preinstalled {
 		// The base template ships neither git nor a JavaScript runtime; git is
 		// required for baseline, diff and patch extraction.
 		packages = []string{"git", "ca-certificates"}
@@ -125,9 +136,17 @@ func NewOpenCode(opts OpenCodeOptions) (*GenericCommandHarness, error) {
 		return nil, fmt.Errorf("agentharness: encode opencode config: %w", err)
 	}
 
+	executable := "opencode2"
+	binarySource := binary
+	binaryDest := "/usr/local/bin/opencode2"
+	if opts.Preinstalled {
+		executable = binary
+		binarySource = ""
+		binaryDest = binary
+	}
 	h, err := NewGeneric(Spec{
 		Name:       name,
-		Executable: "opencode2",
+		Executable: executable,
 		// --standalone keeps the agent from depending on a host-side background
 		// service; --auto approves permissions non-interactively; --format json
 		// gives machine-readable output the factory can record.
@@ -141,12 +160,13 @@ func NewOpenCode(opts OpenCodeOptions) (*GenericCommandHarness, error) {
 		PassEnv:    opts.PassEnv,
 		Provision: Provision{
 			Packages:     packages,
-			BinarySource: binary,
-			BinaryDest:   "/usr/local/bin/opencode2",
+			BinarySource: binarySource,
+			BinaryDest:   binaryDest,
+			Preinstalled: opts.Preinstalled,
 			BinarySHA256: opts.BinarySHA256,
 			Files:        map[string]string{OpenCodeConfigPath: string(configBytes)},
 			SeedFiles:    mergeSeedFiles(seedFiles(opts.CatalogCache, opts.CatalogCachePath), opts.ProviderFiles),
-			VerifyArgs:   []string{"opencode2", "--version"},
+			VerifyArgs:   []string{executable, "--version"},
 		},
 	})
 	if err != nil {

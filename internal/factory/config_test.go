@@ -36,6 +36,35 @@ func TestDefaultConfigIsValid(t *testing.T) {
 	}
 }
 
+func TestProductionExampleUsesPinnedTemplateAgentWithoutUploads(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "factory.toml")
+	if err := os.WriteFile(path, []byte(ExampleConfig()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Sandbox.BasePackages) != 0 {
+		t.Fatalf("base packages: %v", cfg.Sandbox.BasePackages)
+	}
+	registry, err := cfg.BuildHarnesses()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := registry.Resolve("opencode2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := h.(*agentharness.GenericCommandHarness).Spec()
+	if !spec.Provision.Preinstalled || spec.Provision.BinarySource != "" || len(spec.Provision.Packages) != 0 || len(spec.PassEnv) != 0 {
+		t.Fatalf("production example stages agent tools or credentials: %+v", spec)
+	}
+}
+
 func TestConfigRejectsMissingCubeURL(t *testing.T) {
 	t.Setenv("CUBE_API_URL", "")
 	t.Setenv("E2B_API_URL", "")

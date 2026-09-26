@@ -23,6 +23,10 @@ jobs:
     name: Build release assets
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     env:
       RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
     steps:
@@ -32,10 +36,15 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: 1.26.6
+          go-version: 1.27.1
           cache: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: internal/controlplane/web/package-lock.json
       - name: Confirm toolchain
-        run: test "$(go env GOVERSION)" = "go1.26.6"
+        run: test "$(go env GOVERSION)" = "go1.27.1"
       - name: Verify release tag
         if: github.event_name == 'push'
         shell: bash
@@ -44,18 +53,58 @@ jobs:
           test "$(git cat-file -t "refs/tags/$RELEASE_VERSION")" = tag
           test "$(git rev-parse "refs/tags/$RELEASE_VERSION^{}")" = "$GITHUB_SHA"
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Build and verify frontend
+        if: github.ref_name != 'v0.5.0'
+        working-directory: internal/controlplane/web
+        run: |
+          npm ci
+          npm test
+          npm run build
+          git diff --exit-code -- dist
+          test -z "$(git status --porcelain --untracked-files=all -- dist)"
       - name: Build release set
+        if: github.ref_name != 'v0.5.0'
         run: bash scripts/release.sh "$RELEASE_VERSION" dist
       - name: Prove reproducible release set
+        if: github.ref_name != 'v0.5.0'
         run: |
           bash scripts/release.sh "$RELEASE_VERSION" dist-repeat
           diff -qr dist dist-repeat
+      - name: Promote qualified RC archives
+        if: github.ref_name == 'v0.5.0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QUALIFIED_RC: ${{ vars.ESF_PROMOTION_SOURCE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$QUALIFIED_RC" =~ ^v0\.5\.0-rc\.[0-9]+$ ]]
+          python3 scripts/verify-release-inventory.py --require-qualified
+          test "$(git rev-parse "refs/tags/$QUALIFIED_RC^{}")" = "$GITHUB_SHA"
+          mkdir rc-assets
+          gh release download "$QUALIFIED_RC" --repo "$GITHUB_REPOSITORY" --dir rc-assets
+          (cd rc-assets && shasum -a 256 -c checksums.txt)
+          for archive in rc-assets/esf_*.tar.gz; do
+            gh attestation verify "$archive" -R "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-ref "refs/tags/$QUALIFIED_RC"
+          done
+          python3 scripts/promote-release.py "$QUALIFIED_RC" "$RELEASE_VERSION" rc-assets dist
       - name: Verify release set
         run: bash scripts/verify-release.sh dist "$RELEASE_VERSION"
+      - name: Attest release files
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: dist/*
+      - name: Attest archive SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: dist/esf_*.tar.gz
+          sbom-path: dist/sbom.cdx.json
       - name: Upload release set
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: machinist-release-assets
+          name: esf-release-assets
           path: dist/
           if-no-files-found: error
           retention-days: 14
@@ -75,7 +124,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: machinist-release-assets
+          name: esf-release-assets
           path: dist
       - name: Create GitHub release
         shell: bash
@@ -86,5 +135,5 @@ jobs:
             flags+=(--prerelease)
           fi
           gh release create "$RELEASE_VERSION" dist/* \
-            --title "Machinist $RELEASE_VERSION" \
+            --title "ESF $RELEASE_VERSION" \
             "${flags[@]}"

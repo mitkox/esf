@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mitkox/esf/internal/artifacts"
 	"github.com/mitkox/esf/internal/config"
 	"github.com/mitkox/esf/internal/protocol"
 	_ "modernc.org/sqlite"
@@ -36,38 +37,48 @@ const maxTriggerErrorLength = 2000
 const reclaimExpiredLeasesSQL = `UPDATE runs SET state='queued',worker_instance=NULL,worker_name='',lease_token=NULL,lease_expires_at=NULL,started_at=NULL WHERE state='running' AND (lease_expires_at IS NULL OR lease_expires_at<=?)`
 
 type Store struct {
-	db  *sql.DB
-	now func() time.Time
+	artifactStore artifacts.Store
+	storageConfig config.ResolvedStorage
+	db            *sql.DB
+	path          string
+	now           func() time.Time
 }
 
 type Job struct {
-	ID               string    `json:"id"`
-	Prompt           string    `json:"prompt"`
-	Repository       string    `json:"repository"`
-	GitHubIssueTitle string    `json:"github_issue_title,omitempty"`
-	Command          string    `json:"command"`
-	TriggerID        string    `json:"trigger_id,omitempty"`
-	OccurrenceKey    string    `json:"occurrence_key,omitempty"`
-	TriggerSubject   string    `json:"trigger_subject,omitempty"`
-	State            string    `json:"state"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
-	Runs             []Run     `json:"runs"`
+	Task             *protocol.Task    `json:"task,omitempty"`
+	Workflow         *WorkflowProgress `json:"workflow,omitempty"`
+	ID               string            `json:"id"`
+	Prompt           string            `json:"prompt"`
+	Repository       string            `json:"repository"`
+	GitHubIssueTitle string            `json:"github_issue_title,omitempty"`
+	Command          string            `json:"command"`
+	TriggerID        string            `json:"trigger_id,omitempty"`
+	OccurrenceKey    string            `json:"occurrence_key,omitempty"`
+	TriggerSubject   string            `json:"trigger_subject,omitempty"`
+	State            string            `json:"state"`
+	CreatedAt        time.Time         `json:"created_at"`
+	UpdatedAt        time.Time         `json:"updated_at"`
+	Runs             []Run             `json:"runs"`
 }
 
 type Run struct {
-	ID             string    `json:"id"`
-	Command        string    `json:"command"`
-	Executor       string    `json:"executor"`
-	Model          string    `json:"model,omitempty"`
-	State          string    `json:"state"`
-	WorkerName     string    `json:"worker_name,omitempty"`
-	ExitCode       *int      `json:"exit_code,omitempty"`
-	Error          string    `json:"error,omitempty"`
-	StartedAt      time.Time `json:"started_at,omitempty"`
-	CompletedAt    time.Time `json:"completed_at,omitempty"`
-	DurationMillis *int64    `json:"duration_millis,omitempty"`
-	TokenUsage     *int64    `json:"token_usage,omitempty,string"`
+	Revision       *protocol.Revision `json:"revision,omitempty"`
+	ReviewedRunID  string             `json:"reviewed_run_id,omitempty"`
+	Step           *int               `json:"step,omitempty"`
+	Outcome        string             `json:"outcome,omitempty"`
+	Summary        string             `json:"summary,omitempty"`
+	ID             string             `json:"id"`
+	Command        string             `json:"command"`
+	Executor       string             `json:"executor"`
+	Model          string             `json:"model,omitempty"`
+	State          string             `json:"state"`
+	WorkerName     string             `json:"worker_name,omitempty"`
+	ExitCode       *int               `json:"exit_code,omitempty"`
+	Error          string             `json:"error,omitempty"`
+	StartedAt      time.Time          `json:"started_at,omitempty"`
+	CompletedAt    time.Time          `json:"completed_at,omitempty"`
+	DurationMillis *int64             `json:"duration_millis,omitempty"`
+	TokenUsage     *int64             `json:"token_usage,omitempty,string"`
 }
 
 type Worker struct {
@@ -161,10 +172,19 @@ func OpenStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	db.SetMaxOpenConns(1)
-	store := &Store{db: db, now: time.Now}
+	store := &Store{db: db, path: path, now: time.Now}
 	if err := store.initialize(context.Background()); err != nil {
 		db.Close()
 		return nil, err
+	}
+	resolved, e := (config.Config{}).ResolveStorage(filepath.Join(filepath.Dir(path), "artifacts"))
+	if e != nil {
+		db.Close()
+		return nil, e
+	}
+	if e = store.configureStorage(resolved); e != nil {
+		db.Close()
+		return nil, e
 	}
 	return store, nil
 }
@@ -172,7 +192,7 @@ func OpenStore(path string) (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) initialize(ctx context.Context) error {
-	const schemaVersion = 2
+	const schemaVersion = 5
 	var version int
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&version); err != nil {
 		return fmt.Errorf("read database schema version: %w", err)
@@ -180,12 +200,18 @@ func (s *Store) initialize(ctx context.Context) error {
 	if version > schemaVersion {
 		return fmt.Errorf("database schema version %d is newer than supported version %d", version, schemaVersion)
 	}
-	if version < 1 {
-		if _, err := s.db.ExecContext(ctx, `PRAGMA foreign_keys=OFF;
-DROP TABLE IF EXISTS github_trigger_requests; DROP TABLE IF EXISTS trigger_state; DROP TABLE IF EXISTS schedule_state;
-DROP TABLE IF EXISTS known_repositories; DROP TABLE IF EXISTS worker_repositories; DROP TABLE IF EXISTS workers;
-DROP TABLE IF EXISTS runs; DROP TABLE IF EXISTS jobs; PRAGMA foreign_keys=ON;`); err != nil {
-			return fmt.Errorf("replace legacy database schema: %w", err)
+	if version == 0 {
+		var existing int
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`).Scan(&existing); err != nil {
+			return fmt.Errorf("inspect unversioned database: %w", err)
+		}
+		if existing != 0 {
+			return fmt.Errorf("unversioned database contains %d tables; back it up and migrate it explicitly", existing)
+		}
+	}
+	if version > 0 && version < schemaVersion {
+		if err := s.backupBeforeMigration(ctx, version); err != nil {
+			return fmt.Errorf("back up database before migration: %w", err)
 		}
 	}
 	if version == 1 {
@@ -217,11 +243,60 @@ CREATE UNIQUE INDEX IF NOT EXISTS jobs_trigger_occurrence ON jobs(trigger_identi
 CREATE UNIQUE INDEX IF NOT EXISTS jobs_active_fixed_trigger ON jobs(trigger_identity) WHERE fixed_trigger=1 AND state IN ('queued','running');
 CREATE UNIQUE INDEX IF NOT EXISTS jobs_active_trigger_subject ON jobs(trigger_subject) WHERE trigger_subject<>'' AND state IN ('queued','running');
 CREATE INDEX IF NOT EXISTS github_trigger_requests_reconciliation ON github_trigger_requests(trigger_identity,needs_reconciliation,requested_at);
-PRAGMA user_version=2;`
+`
 	if _, err := s.db.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("initialize database: %w", err)
 	}
-	return nil
+	if version < 3 {
+		if err := s.upgradeWorkflows(ctx); err != nil {
+			return fmt.Errorf("upgrade workflow schema: %w", err)
+		}
+	}
+	_, err := s.db.ExecContext(ctx, workflowSchema+artifactSchema+reviewSchema+"PRAGMA user_version=5;")
+	return err
+}
+
+// backupBeforeMigration uses SQLite's snapshot mechanism so a live WAL database
+// has a consistent, independent copy before any schema changes begin.
+func (s *Store) backupBeforeMigration(ctx context.Context, version int) error {
+	f, err := os.CreateTemp(filepath.Dir(s.path), fmt.Sprintf(".machinist-v%d-*.backup.db", version))
+	if err != nil {
+		return err
+	}
+	backupPath := f.Name()
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Remove(backupPath); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, backupPath); err != nil {
+		_ = os.Remove(backupPath)
+		return err
+	}
+	if err := os.Chmod(backupPath, 0o600); err != nil {
+		return err
+	}
+	backup, err := os.Open(backupPath)
+	if err != nil {
+		return err
+	}
+	if err := backup.Sync(); err != nil {
+		backup.Close()
+		return err
+	}
+	if err := backup.Close(); err != nil {
+		return err
+	}
+	dir, err := os.Open(filepath.Dir(backupPath))
+	if err != nil {
+		return err
+	}
+	if err := dir.Sync(); err != nil {
+		dir.Close()
+		return err
+	}
+	return dir.Close()
 }
 
 // upgradeToVersionTwo removes the Shepherd schedule bookkeeping. Finished jobs
@@ -728,7 +803,7 @@ func (s *Store) poll(ctx context.Context, request protocol.PollRequest, maxConcu
 	if _, err := tx.ExecContext(ctx, `INSERT INTO workers(instance_id,name,last_seen_at) VALUES(?,?,?) ON CONFLICT(instance_id) DO UPDATE SET name=excluded.name,last_seen_at=excluded.last_seen_at`, request.InstanceID, request.Name, now); err != nil {
 		return nil, fmt.Errorf("update worker: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, reclaimExpiredLeasesSQL, nowTime.UnixNano()); err != nil {
+	if _, err := reclaimLeases(ctx, tx, nowTime); err != nil {
 		return nil, fmt.Errorf("reclaim expired leases: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM worker_repositories WHERE worker_instance=?`, request.InstanceID); err != nil {
@@ -745,9 +820,46 @@ func (s *Store) poll(ctx context.Context, request protocol.PollRequest, maxConcu
 	}
 	active, err := scanRunSpec(tx.QueryRowContext(ctx, `SELECT id,job_id,command,command_hash,executor,model,repository,rendered_prompt,timeout_ms,lease_token FROM runs WHERE worker_instance=? AND state='running' LIMIT 1`, request.InstanceID))
 	if err == nil {
+		var activeWorkflow bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM workflow_jobs WHERE job_id=?)`, active.JobID).Scan(&activeWorkflow); err != nil {
+			return nil, err
+		}
+		if err := s.enrichRun(ctx, tx, &active); err != nil {
+			return nil, err
+		}
+		if err := enrichReview(ctx, tx, &active); err != nil {
+			return nil, err
+		}
+		if activeWorkflow && !request.SharedOutputs {
+			var plan string
+			var index int
+			if err := tx.QueryRowContext(ctx, `SELECT w.plan,a.step FROM workflow_jobs w JOIN workflow_attempts a ON a.run_id=? WHERE w.job_id=?`, active.ID, active.JobID).Scan(&plan, &index); err != nil {
+				return nil, err
+			}
+			var steps []config.WorkflowStep
+			if err := json.Unmarshal([]byte(plan), &steps); err != nil {
+				return nil, err
+			}
+			if index < 0 || index >= len(steps) {
+				return nil, errors.New("invalid workflow step")
+			}
+			if steps[index].SharedOutputs {
+				return nil, errors.New("worker must support shared task outputs")
+			}
+		}
+		if active.Revision != nil && !request.Reviews {
+			return nil, errors.New("worker must support review feedback")
+		}
+		if active.Task != nil && !request.Artifacts {
+			return nil, errors.New("worker must support artifacts")
+		}
 		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
+		if activeWorkflow && !request.Workflows {
+			return nil, errors.New("worker must support workflow results")
+		}
+		active.Workflow = activeWorkflow
 		return &active, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -763,20 +875,37 @@ func (s *Store) poll(ctx context.Context, request protocol.PollRequest, maxConcu
 	}
 
 	executors := stringSet(request.Executors)
-	rows, err := tx.QueryContext(ctx, `SELECT r.id,r.job_id,r.command,r.command_hash,r.executor,r.model,r.repository,r.rendered_prompt,r.timeout_ms,j.state FROM runs r JOIN jobs j ON j.id=r.job_id WHERE r.state='queued' ORDER BY r.rowid`)
+	rows, err := tx.QueryContext(ctx, `SELECT r.id,r.job_id,r.command,r.command_hash,r.executor,r.model,r.repository,r.rendered_prompt,r.timeout_ms,j.state,COALESCE((SELECT plan FROM workflow_jobs WHERE job_id=j.id),'') FROM runs r JOIN jobs j ON j.id=r.job_id WHERE r.state='queued' AND (NOT EXISTS(SELECT 1 FROM workflow_jobs w WHERE w.job_id=j.id) OR (? AND EXISTS(SELECT 1 FROM workflow_jobs w WHERE w.job_id=j.id AND (w.worker_name='' OR w.worker_name=?)))) AND (? OR NOT EXISTS(SELECT 1 FROM task_inputs t WHERE t.job_id=j.id)) AND (? OR NOT EXISTS(SELECT 1 FROM execution_reviews er WHERE er.run_id=r.id)) ORDER BY r.rowid`, request.Workflows, request.Name, request.Artifacts, request.Reviews)
 	if err != nil {
 		return nil, err
 	}
 	var selected protocol.RunSpec
 	for rows.Next() {
 		var candidate protocol.RunSpec
-		var jobState string
-		if err := rows.Scan(&candidate.ID, &candidate.JobID, &candidate.Command, &candidate.CommandHash, &candidate.Executor, &candidate.Model, &candidate.Repository, &candidate.RenderedPrompt, &candidate.TimeoutMillis, &jobState); err != nil {
+		var jobState, workflowPlan string
+		if err := rows.Scan(&candidate.ID, &candidate.JobID, &candidate.Command, &candidate.CommandHash, &candidate.Executor, &candidate.Model, &candidate.Repository, &candidate.RenderedPrompt, &candidate.TimeoutMillis, &jobState, &workflowPlan); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		if atCapacity && jobState != "running" {
 			continue
+		}
+		if workflowPlan != "" {
+			var steps []config.WorkflowStep
+			if err := json.Unmarshal([]byte(workflowPlan), &steps); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			capable := true
+			for _, step := range steps {
+				if (step.SharedOutputs && !request.SharedOutputs) || !executors[step.Command.Executor] || !supportsModel(request.Models, step.Command.Executor, step.Command.Model) {
+					capable = false
+					break
+				}
+			}
+			if !capable {
+				continue
+			}
 		}
 		if executors[candidate.Executor] && repositories[candidate.Repository] && supportsModel(request.Models, candidate.Executor, candidate.Model) {
 			selected = candidate
@@ -792,6 +921,14 @@ func (s *Store) poll(ctx context.Context, request protocol.PollRequest, maxConcu
 		}
 		return nil, nil
 	}
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM workflow_jobs WHERE job_id=?)`, selected.JobID).Scan(&selected.Workflow); err != nil {
+		return nil, err
+	}
+	if selected.Workflow {
+		if _, err := tx.ExecContext(ctx, `UPDATE workflow_jobs SET worker_name=? WHERE job_id=? AND worker_name=''`, request.Name, selected.JobID); err != nil {
+			return nil, err
+		}
+	}
 	selected.LeaseToken, err = randomID("lease", 24)
 	if err != nil {
 		return nil, err
@@ -806,6 +943,12 @@ func (s *Store) poll(ctx context.Context, request protocol.PollRequest, maxConcu
 		return nil, fmt.Errorf("lease run: concurrent state change")
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE jobs SET state='running',updated_at=? WHERE id=? AND state='queued'`, now, selected.JobID); err != nil {
+		return nil, err
+	}
+	if err := s.enrichRun(ctx, tx, &selected); err != nil {
+		return nil, err
+	}
+	if err := enrichReview(ctx, tx, &selected); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -851,6 +994,12 @@ func (s *Store) Complete(ctx context.Context, runID string, completion protocol.
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE runs SET state=?,exit_code=?,error=?,result=?,events=?,lease_expires_at=NULL,completed_at=?,duration_millis=?,token_usage=? WHERE id=?`, completion.State, completion.ExitCode, completion.Error, string(completion.Result), completion.Events, now, durationMillis, tokenUsage, runID); err != nil {
 		return err
+	}
+	if handled, err := completeWorkflow(ctx, tx, jobID, runID, completion, now); handled || err != nil {
+		if err != nil {
+			return err
+		}
+		return tx.Commit()
 	}
 	if completion.State == "succeeded" {
 		if _, err := tx.ExecContext(ctx, `UPDATE jobs SET state='succeeded',updated_at=? WHERE id=?`, now, jobID); err != nil {
@@ -944,11 +1093,16 @@ func (s *Store) DeleteJob(ctx context.Context, jobID string) error {
 }
 
 func (s *Store) ReclaimExpiredLeases(ctx context.Context) (int64, error) {
-	result, err := s.db.ExecContext(ctx, reclaimExpiredLeasesSQL, s.now().UTC().UnixNano())
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("reclaim expired leases: %w", err)
+		return 0, err
 	}
-	return result.RowsAffected()
+	defer tx.Rollback()
+	n, err := reclaimLeases(ctx, tx, s.now().UTC())
+	if err != nil {
+		return 0, err
+	}
+	return n, tx.Commit()
 }
 
 func (s *Store) PruneSupersededWorkers(ctx context.Context, seenAfter time.Time) (int64, error) {
@@ -1058,8 +1212,8 @@ func (s *Store) RunOutput(ctx context.Context, runID string) (RunOutput, error) 
 
 func (s *Store) listJobs(ctx context.Context) ([]Job, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT j.id,j.prompt,j.repository,j.github_issue_title,j.command,j.trigger_identity,j.occurrence_key,j.trigger_subject,j.state,j.created_at,j.updated_at,
-COALESCE(r.id,''),COALESCE(r.command,''),COALESCE(r.executor,''),COALESCE(r.model,''),COALESCE(r.state,''),COALESCE(NULLIF(r.worker_name,''),w.name,''),r.exit_code,COALESCE(r.error,''),COALESCE(r.started_at,''),COALESCE(r.completed_at,''),r.duration_millis,r.token_usage
-FROM jobs j LEFT JOIN runs r ON r.job_id=j.id LEFT JOIN workers w ON w.instance_id=r.worker_instance ORDER BY j.created_at DESC`)
+COALESCE(r.id,''),COALESCE(r.command,''),COALESCE(r.executor,''),COALESCE(r.model,''),COALESCE(r.state,''),COALESCE(NULLIF(r.worker_name,''),w.name,''),r.exit_code,COALESCE(r.error,''),COALESCE(r.started_at,''),COALESCE(r.completed_at,''),r.duration_millis,r.token_usage,a.step,COALESCE(a.outcome,''),COALESCE(NULLIF(a.summary,''),CASE WHEN json_valid(r.result) THEN json_extract(r.result,'$.final_message') END,'')
+FROM jobs j LEFT JOIN runs r ON r.job_id=j.id LEFT JOIN workers w ON w.instance_id=r.worker_instance LEFT JOIN workflow_attempts a ON a.run_id=r.id ORDER BY j.created_at DESC,j.id,r.rowid`)
 	if err != nil {
 		return nil, err
 	}
@@ -1070,7 +1224,7 @@ FROM jobs j LEFT JOIN runs r ON r.job_id=j.id LEFT JOIN workers w ON w.instance_
 		var run Run
 		var created, updated, started, completed string
 		if err := rows.Scan(&job.ID, &job.Prompt, &job.Repository, &job.GitHubIssueTitle, &job.Command, &job.TriggerID, &job.OccurrenceKey, &job.TriggerSubject, &job.State, &created, &updated,
-			&run.ID, &run.Command, &run.Executor, &run.Model, &run.State, &run.WorkerName, &run.ExitCode, &run.Error, &started, &completed, &run.DurationMillis, &run.TokenUsage); err != nil {
+			&run.ID, &run.Command, &run.Executor, &run.Model, &run.State, &run.WorkerName, &run.ExitCode, &run.Error, &started, &completed, &run.DurationMillis, &run.TokenUsage, &run.Step, &run.Outcome, &run.Summary); err != nil {
 			return nil, err
 		}
 		job.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
@@ -1080,9 +1234,26 @@ FROM jobs j LEFT JOIN runs r ON r.job_id=j.id LEFT JOIN workers w ON w.instance_
 			run.CompletedAt, _ = time.Parse(time.RFC3339Nano, completed)
 			job.Runs = append(job.Runs, run)
 		}
-		jobs = append(jobs, job)
+		if len(jobs) > 0 && jobs[len(jobs)-1].ID == job.ID {
+			jobs[len(jobs)-1].Runs = append(jobs[len(jobs)-1].Runs, job.Runs...)
+		} else {
+			jobs = append(jobs, job)
+		}
 	}
-	return jobs, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if err := s.loadReviews(ctx, jobs); err != nil {
+		return nil, err
+	}
+	if err := s.loadTasks(ctx, jobs); err != nil {
+		return nil, err
+	}
+	if err := s.loadWorkflowProgress(ctx, jobs); err != nil {
+		return nil, err
+	}
+	return jobs, nil
 }
 
 func resultMetrics(result []byte) (*int64, *int64) {
@@ -1217,7 +1388,7 @@ func terminalRunState(state string) bool {
 }
 
 func terminalJobState(state string) bool {
-	return state == "succeeded" || state == "failed"
+	return state == "succeeded" || state == "failed" || state == "cancelled"
 }
 
 func validateOutcome(state string, exitCode int) error {

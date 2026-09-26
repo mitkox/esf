@@ -8,23 +8,18 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-# Go may be managed by mise; if `go` is not on PATH, fall back to the installed
-# mise Go so `make` works from a bare shell.
-GO ?= $(shell command -v go 2>/dev/null || echo $(HOME)/.local/share/mise/installs/go/1.25.5/bin/go)
+GO ?= go
+UV ?= uv
+PYTHON_VERSION ?= 3.14.7
 
 BIN_DIR    := bin
 FACTORY    := $(BIN_DIR)/factory
 TEMPORAL_DIR := deployments/dev/temporal
 COMPOSE    := docker compose --project-directory $(TEMPORAL_DIR)
 
-# Sandbox connection settings, matching the discovered deployment.
-export CUBE_API_URL        ?= http://127.0.0.1:4000
-export CUBE_TEMPLATE_ID    ?=
-export CUBE_PROXY_NODE_IP  ?=
-export CUBE_PROXY_PORT_HTTP ?= 80
-
-# Path to the pinned standalone opencode2 binary.
-OPENCODE_BINARY ?= $(HOME)/.npm-global/lib/node_modules/@opencode/cli/bin/opencode.exe
+# Set Cube connection variables in your environment for live integration work.
+# A separately installed agent path is needed only by the legacy spike target.
+OPENCODE_BINARY ?= /opt/esf/agents/opencode2
 
 .PHONY: help
 help: ## Show this help
@@ -42,8 +37,31 @@ build: ## Build the factory and discovery binaries into ./bin
 	@echo "built: $(FACTORY) $(BIN_DIR)/cube-smoke $(BIN_DIR)/cube-netprobe $(BIN_DIR)/cube-agent-spike"
 
 .PHONY: test
-test: ## Run unit tests (no CubeSandbox or Temporal required)
+test: ## Run Go, frontend, and optional Python unit tests
 	$(GO) test ./... -count=1
+	$(MAKE) test-frontend test-python
+
+.PHONY: frontend test-frontend test-python
+frontend: ## Install frozen frontend dependencies and build the UI
+	cd internal/controlplane/web && npm ci && npm run build
+
+test-frontend: ## Run frontend tests against the frozen lockfile
+	cd internal/controlplane/web && npm ci && npm test
+
+test-python: ## Run optional Python tool tests against uv.lock
+	@if command -v $(UV) >/dev/null && $(UV) python find $(PYTHON_VERSION) >/dev/null 2>&1; then \
+		$(UV) run --locked --python $(PYTHON_VERSION) python -m unittest discover -s tools/intake/tests -p 'test_*.py' && \
+		$(UV) run --locked --python $(PYTHON_VERSION) python -m unittest discover -s tools/brief_lab/tests -p 'test_*.py'; \
+	else \
+		$(MAKE) test-python-docker; \
+	fi
+
+.PHONY: test-python-docker
+test-python-docker: ## Test optional Python tools in the pinned 3.14.7 image
+	docker build -f deploy/images/Dockerfile.intake --build-arg ESF_COMMIT=$$(git rev-parse HEAD) -t esf/intake:python-tests .
+	docker run --rm --entrypoint /opt/esf/.venv/bin/python esf/intake:python-tests -c 'import sys; assert sys.version_info[:3] == (3, 14, 7)'
+	docker run --rm --entrypoint /opt/esf/.venv/bin/python esf/intake:python-tests -m unittest discover -s tools/intake/tests -p 'test_*.py'
+	docker run --rm --entrypoint /opt/esf/.venv/bin/python esf/intake:python-tests -m unittest discover -s tools/brief_lab/tests -p 'test_*.py'
 
 .PHONY: test-unit
 test-unit: ## Run unit tests only (fast)
@@ -54,12 +72,10 @@ test-integration: ## Run tests that need the live CubeSandbox (tagged integratio
 	$(GO) test -tags=integration ./... -count=1 -v
 
 .PHONY: lint
-lint: ## gofmt check, go vet and shellcheck
-	@out=$$($(GO) fmt ./...); if [ -n "$$out" ]; then echo "gofmt rewrote:"; echo "$$out"; fi
+lint: ## Check Go formatting, vet, and shell scripts without changing files
+	@out=$$(find cmd internal -name '*.go' -print0 | xargs -0 gofmt -l); if [ -n "$$out" ]; then echo "unformatted Go files:"; echo "$$out"; exit 1; fi
 	$(GO) vet ./...
-	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck deployments/dev/temporal/scripts/*.sh scripts/*.sh 2>/dev/null || true; \
-	else echo "shellcheck not installed; skipping"; fi
+	shellcheck deployments/dev/temporal/scripts/*.sh scripts/*.sh
 
 .PHONY: fmt
 fmt: ## Format all Go code

@@ -2,6 +2,8 @@ package agentharness
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -324,6 +326,78 @@ func TestNewGenericValidatesSpec(t *testing.T) {
 				t.Fatal("expected the spec to be rejected")
 			}
 		})
+	}
+}
+
+func TestPreinstalledAgentVerifiedBeforeUseWithoutUpload(t *testing.T) {
+	t.Parallel()
+	const path = "/opt/esf/agents/opencode2"
+	digest := sha256.Sum256([]byte("template binary"))
+	want := hex.EncodeToString(digest[:])
+	h, err := NewGeneric(Spec{Name: "agent", Executable: path, Timeout: time.Minute, Provision: Provision{
+		Preinstalled: true, BinaryDest: path, BinarySHA256: want,
+		Files: map[string]string{"/opt/esf/config": "safe"}, VerifyArgs: []string{path, "--version"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, observed string
+		succeeds       bool
+	}{{"match", want, true}, {"mismatch", strings.Repeat("0", 64), false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := sandbox.NewFake()
+			fake.ExecuteFunc = func(cmd sandbox.Command) (sandbox.Execution, error) {
+				if len(cmd.Argv) == 2 && cmd.Argv[0] == "sha256sum" {
+					return sandbox.Execution{Stdout: tc.observed + "  " + path + "\n"}, nil
+				}
+				return sandbox.Execution{}, nil
+			}
+			sb, err := fake.Create(context.Background(), sandbox.Spec{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = h.Provision(context.Background(), sb)
+			if (err == nil) != tc.succeeds {
+				t.Fatalf("Provision error = %v", err)
+			}
+			if _, err := sb.ReadFile(context.Background(), path); err == nil {
+				t.Fatal("agent was uploaded")
+			}
+			_, configErr := sb.ReadFile(context.Background(), "/opt/esf/config")
+			if (configErr == nil) != tc.succeeds {
+				t.Fatalf("config written after failed digest: %v", configErr)
+			}
+			commands := fake.Commands(sb.ID())
+			if len(commands) == 0 || len(commands[0].Argv) != 2 || commands[0].Argv[0] != "sha256sum" {
+				t.Fatalf("digest was not checked first: %+v", commands)
+			}
+		})
+	}
+}
+
+func TestOpenCodePreinstalledTemplateDoesNotInstallOrStage(t *testing.T) {
+	t.Parallel()
+	h, err := NewOpenCode(OpenCodeOptions{Preinstalled: true, Binary: "/opt/esf/agents/opencode2", BinarySHA256: strings.Repeat("a", 64)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := h.Spec()
+	if spec.Executable != "/opt/esf/agents/opencode2" || spec.Provision.BinarySource != "" || len(spec.Provision.Packages) != 0 {
+		t.Fatalf("unexpected template provision: %+v", spec)
+	}
+}
+
+func TestUnrealPreinstalledTemplateUsesPinnedPath(t *testing.T) {
+	t.Parallel()
+	const binary = "/opt/esf/agents/unreal-agent-runner"
+	h, err := NewUnreal(UnrealOptions{Preinstalled: true, Binary: binary, BinarySHA256: strings.Repeat("b", 64), Provider: "ollama", Model: "model"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := h.Spec()
+	if spec.Executable != binary || spec.Provision.BinaryDest != binary || spec.Provision.BinarySource != "" || len(spec.Provision.Packages) != 0 {
+		t.Fatalf("unexpected Unreal template provision: %+v", spec)
 	}
 }
 

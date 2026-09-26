@@ -29,8 +29,8 @@ func (c Config) runtimeNetworkForHarness(name string) (sandbox.Network, bool, er
 	if !strings.EqualFold(strings.TrimSpace(h.CredentialMode), cubeEgressCredentialMode) {
 		return sandbox.Network{}, false, nil
 	}
-	if !strings.EqualFold(strings.TrimSpace(h.Type), "unreal") {
-		return sandbox.Network{}, false, fmt.Errorf("harness %q: cube_egress credential mode requires type unreal", name)
+	if !strings.EqualFold(strings.TrimSpace(h.Type), "unreal") && !strings.EqualFold(strings.TrimSpace(h.Type), "opencode") {
+		return sandbox.Network{}, false, fmt.Errorf("harness %q: cube_egress credential mode requires type unreal or opencode", name)
 	}
 	if err := validateCubeEgressConfig(name, h); err != nil {
 		return sandbox.Network{}, false, err

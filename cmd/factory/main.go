@@ -33,9 +33,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
-	"github.com/mitkox/esf/internal/artifacts"
 	"github.com/mitkox/esf/internal/assurance"
 	"github.com/mitkox/esf/internal/factory"
+	"github.com/mitkox/esf/internal/factoryartifacts"
 )
 
 func main() {
@@ -62,6 +62,11 @@ verification, one verified patch out.`,
 	root.PersistentFlags().StringVar(&configPath, "config", "", "path to factory.toml (defaults to $FACTORY_CONFIG or ./factory.toml)")
 
 	root.AddCommand(
+		newVersionCommand(),
+		newConfigCommand(&configPath),
+		newAgentsCommand(&configPath),
+		newStorageCommand(&configPath),
+		newRetentionCommand(&configPath),
 		newRunCommand(&configPath),
 		newQualityCommand(&configPath),
 		newGetCommand(&configPath),
@@ -652,11 +657,15 @@ func newWorkerCommand(configPath *string) *cobra.Command {
 
 func newDoctorCommand(configPath *string) *cobra.Command {
 	var offline bool
+	var profile, output string
 	command := &cobra.Command{
 		Use:          "doctor",
 		Short:        "Verify configuration, CubeSandbox and Temporal before running",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if profile != "" || output != "" {
+				return runStructuredDoctor(cmd.Context(), *configPath, profile, output, offline)
+			}
 			ctx, cancel := context.WithTimeout(cmd.Context(), 2*time.Minute)
 			defer cancel()
 
@@ -752,6 +761,8 @@ func newDoctorCommand(configPath *string) *cobra.Command {
 		},
 	}
 	command.Flags().BoolVar(&offline, "offline", false, "validate configuration and harnesses without contacting CubeSandbox or Temporal")
+	command.Flags().StringVar(&profile, "profile", "", "diagnostic profile (production)")
+	command.Flags().StringVar(&output, "output", "", "output format (json)")
 	return command
 }
 
@@ -903,131 +914,4 @@ func originOf(origin string) string {
 var _ = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 var _ = artifacts.ErrInvalidPath
 
-func exampleConfig() string {
-	return `# Factory operator configuration.
-#
-# This file is OPERATOR POLICY. A task can choose only: task text, an approved
-# repository, and an exact revision. It can never choose an executable, a host
-# path, or a credential.
-
-factory_version = "0.1.0"
-
-[cube]
-# Discovered on this host: the Cube API is NOT on the SDK default port 3000.
-api_url         = "http://127.0.0.1:4000"
-template_id     = "tpl-your-ready-template"
-proxy_node_ip   = "192.0.2.10"
-proxy_port_http = 80
-idle_timeout    = "60m"
-request_timeout = "60s"
-
-[temporal]
-host_port  = "127.0.0.1:7233"
-namespace  = "default"
-task_queue = "factory"
-
-[storage]
-data_dir = ".factory"
-
-[sandbox]
-# Installed in EVERY sandbox before the agent harness runs. These belong to the
-# factory, not to a harness: repository preparation needs git whatever the agent
-# is, so a harness must not have to remember to declare it.
-base_packages = ["git", "ca-certificates"]
-# Egress-managed harnesses switch to deny-by-default after repository setup.
-# Add only destinations the agent genuinely needs at runtime.
-runtime_allow_out = []
-
-[limits]
-agent_timeout        = "30m"
-verification_timeout = "15m"
-total_timeout        = "90m"
-sandbox_idle_timeout = "60m"
-
-[observability]
-# Empty disables trace export; the factory then uses no-op tracers.
-otel_endpoint = ""
-service_name  = "factory"
-
-[repositories]
-# Remote repositories must match one of these prefixes. Empty disallows all
-# remote repositories; local sources remain available for tests.
-allowed = []
-
-# ── Agent harnesses ──────────────────────────────────────────────────────────
-# The harness name is what a request may select. The executable and arguments
-# are operator configuration and are never client-supplied.
-
-[harnesses.opencode2]
-type        = "opencode"
-binary      = "/home/USER/.npm-global/lib/node_modules/@opencode/cli/bin/opencode.exe"
-model       = "<provider>/<model>"
-timeout     = "30m"
-packages    = ["git", "ca-certificates"]
-prompt_mode = "stdin_file"
-
-# Only these host environment variables reach the sandbox agent. Everything else
-# on the host is dropped, so unrelated secrets cannot leak into a run.
-pass_env = ["FACTORY_AGENT_TOKEN"]
-
-# Pre-stage the agent's model catalog. A coding agent that must fetch a model
-# catalog from the network at start-up is neither reproducible nor reliable:
-# the run would depend on an external service being reachable and fast at that
-# instant. Staging it makes model resolution deterministic and offline.
-# catalog_cache = "/home/USER/.cache/opencode/models.json"
-
-# Provider session state, staged so the agent can authenticate.
-#
-# SECURITY: this makes the file readable by the agent INSIDE the sandbox. It is
-# opt-in operator configuration, never derived from task text, never logged, and
-# never written into the task prompt. Its contents are also registered with the
-# evidence redactor. Prefer CubeEgress injection where the harness supports it.
-# provider_files = { "/root/.local/share/opencode/auth.json" = "/home/USER/.local/share/opencode/auth.json" }
-
-# Standalone unreal-agent runner. The factory invokes its JSON protocol
-# directly; only the credential variable name is stored in configuration.
-# [harnesses.unreal]
-# type           = "unreal"
-# binary         = "/opt/factory/bin/unreal-agent-runner"
-# binary_sha256  = "<64-character-sha256>"
-# provider       = "openrouter"
-# base_url       = "https://openrouter.ai/api/v1"
-# model          = "<provider-model-id>"
-# api_key_file   = "/run/credentials/factory-worker.service/openrouter-key"
-# api_key_env    = "OPENROUTER_API_KEY" # compatibility; choose exactly one
-# credential_mode = "cube_egress"
-# thinking_level = "high"
-# timeout        = "30m"
-
-# A deterministic conformance agent used to prove the factory contract without a
-# language model. It receives the task on stdin and exits zero on success, like
-# any other harness. Hosted by the end-to-end acceptance test.
-[harnesses.conformance]
-type        = "generic"
-executable  = "/bin/sh"
-args        = ["/workspace/repository/.factory-agent.sh"]
-timeout     = "5m"
-prompt_mode = "stdin_file"
-
-# ── Deterministic verification ───────────────────────────────────────────────
-# Verification is ALWAYS a structured argv. There is no shell-string form: an
-# API client must never be able to smuggle shell syntax into a gate.
-
-[verification.default]
-name = "default"
-
-[[verification.default.steps]]
-id          = "build"
-argv        = ["./build.sh"]
-mandatory   = true
-timeout     = "10m"
-description = "repository build script"
-
-[[verification.default.steps]]
-id          = "unit-tests"
-argv        = ["./test.sh"]
-mandatory   = true
-timeout     = "10m"
-description = "repository test script"
-`
-}
+func exampleConfig() string { return factory.ExampleConfig() }

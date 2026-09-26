@@ -16,7 +16,7 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	"github.com/mitkox/esf/internal/agentharness"
-	"github.com/mitkox/esf/internal/artifacts"
+	"github.com/mitkox/esf/internal/factoryartifacts"
 	"github.com/mitkox/esf/internal/repository"
 	"github.com/mitkox/esf/internal/sandbox"
 	"github.com/mitkox/esf/internal/verification"
@@ -710,7 +710,14 @@ func (a *Activities) RunAgent(ctx context.Context, in RunAgentInput) (RunAgentOu
 	for name, value := range in.Env {
 		env[name] = value
 	}
-	if name := strings.TrimSpace(in.ModelAPIKeyEnv); name != "" {
+	managed := strings.EqualFold(strings.TrimSpace(a.cfg.Harnesses[in.Harness].CredentialMode), cubeEgressCredentialMode)
+	if managed && strings.EqualFold(strings.TrimSpace(a.cfg.Harnesses[in.Harness].Type), "opencode") {
+		env[agentharness.OpenCodeEgressKeyEnv] = "cube-egress-managed-placeholder"
+	}
+	if name := strings.TrimSpace(in.ModelAPIKeyEnv); name != "" && managed {
+		env[name] = "cube-egress-managed-placeholder"
+	}
+	if name := strings.TrimSpace(in.ModelAPIKeyEnv); name != "" && !managed {
 		value := os.Getenv(name)
 		if value == "" {
 			return RunAgentOutput{}, fmt.Errorf("resolved model credential environment variable %s is empty", name)

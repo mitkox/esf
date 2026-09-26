@@ -22,7 +22,7 @@ name: factory-temporal
 
 services:
   postgresql:
-    image: postgres:16.10-alpine
+    image: postgres:${POSTGRESQL_VERSION:?set POSTGRESQL_VERSION in .env}
     container_name: factory-temporal-postgresql
     restart: unless-stopped
     ports:

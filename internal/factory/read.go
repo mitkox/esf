@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/mitkox/esf/internal/artifacts"
+	"github.com/mitkox/esf/internal/factoryartifacts"
 )
 
 // ReadManifest loads a run's durable manifest from the artifact store.

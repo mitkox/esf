@@ -36,6 +36,7 @@ var webAssets embed.FS
 
 type Server struct {
 	store             *Store
+	factoryRead       *factoryRead
 	definitionPath    string
 	triggers          []config.ResolvedTrigger
 	github            githubTriggerClient
@@ -50,6 +51,8 @@ type Server struct {
 }
 
 type statusResponse struct {
+	Workflows        []string `json:"workflows"`
+	FactoryAvailable bool     `json:"factory_available"`
 	Snapshot
 	Commands     []string `json:"commands"`
 	Repositories []string `json:"repositories"`
@@ -57,6 +60,10 @@ type statusResponse struct {
 }
 
 type submitRequest struct {
+	Title      string `json:"title"`
+	SourceURL  string `json:"source_url"`
+	Spec       string `json:"spec"`
+	Workflow   string `json:"workflow"`
 	Prompt     string `json:"prompt"`
 	Repository string `json:"repository"`
 	Command    string `json:"command"`
@@ -71,11 +78,18 @@ type commandDefinitionResponse struct {
 	Prompt   string `json:"prompt"`
 }
 
+type workflowStepDefinition struct {
+	Name     string `json:"name"`
+	Approval bool   `json:"approval"`
+}
+
 type definitionsResponse struct {
-	Commands []commandDefinitionResponse `json:"commands"`
+	Workflows map[string][]workflowStepDefinition `json:"workflows"`
+	Commands  []commandDefinitionResponse         `json:"commands"`
 }
 
 type catalogResponse struct {
+	Workflows    []string `json:"workflows"`
 	Commands     []string `json:"commands"`
 	Repositories []string `json:"repositories"`
 }
@@ -91,6 +105,17 @@ func NewServer(store *Store, definitionPath, workerToken string, maxConcurrentJo
 	managedTriggers, err := config.LoadTriggers(definitionPath)
 	if err != nil {
 		return nil, err
+	}
+	definition, e := config.LoadDefinitions(definitionPath)
+	if e != nil {
+		return nil, e
+	}
+	storage, e := definition.ResolveStorage(store.storageConfig.Path)
+	if e != nil {
+		return nil, e
+	}
+	if e = store.configureStorage(storage); e != nil {
+		return nil, e
 	}
 	startup := time.Now().UTC()
 	definitions := make([]TriggerDefinition, 0, len(managedTriggers))
@@ -215,6 +240,7 @@ func (s *Server) runScheduler(ctx context.Context) error {
 		})
 	}
 	loop(true, s.maintainState)
+	loop(true, s.store.CleanupArtifacts)
 	<-ctx.Done()
 	schedulers.Wait()
 	return nil
@@ -250,9 +276,31 @@ func (s *Server) routes() (http.Handler, error) {
 		return nil, err
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Cache-Control", "no-store")
+		if err := s.store.db.PingContext(request.Context()); err != nil {
+			http.Error(response, "database unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		response.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("PUT /api/v1/runs/{id}/artifacts", s.authorizeWorker(s.uploadArtifact))
+	mux.HandleFunc("GET /api/v1/jobs/{id}/artifacts", s.authorizeArtifact(s.listArtifacts))
+	mux.HandleFunc("GET /api/v1/artifacts/{id}/content", s.authorizeArtifact(s.artifactContent))
 	mux.HandleFunc("GET /api/v1/status", s.status)
 	mux.HandleFunc("GET /api/v1/catalog", s.catalog)
 	mux.HandleFunc("GET /api/v1/definitions", s.definitions)
+	if s.factoryRead != nil {
+		mux.HandleFunc("GET /api/v1/factory/runs", s.authorizeFactoryRead(s.listFactoryRuns))
+		mux.HandleFunc("GET /api/v1/factory/runs/{id}", s.authorizeFactoryRead(s.getFactoryRun))
+		mux.HandleFunc("GET /api/v1/factory/runs/{id}/conditions", s.authorizeFactoryRead(s.getFactoryConditions))
+		mux.HandleFunc("GET /api/v1/factory/runs/{id}/evidence", s.authorizeFactoryRead(s.getFactoryEvidence))
+		mux.HandleFunc("GET /api/v1/factory/runs/{id}/quality", s.authorizeFactoryRead(s.getFactoryQuality))
+		mux.HandleFunc("GET /api/v1/factory/runs/{id}/patch", s.authorizeFactoryRead(s.getFactoryPatch))
+		mux.HandleFunc("GET /api/v1/factory/changes", s.authorizeFactoryRead(s.listFactoryChanges))
+		mux.HandleFunc("GET /api/v1/factory/changes/{id}", s.authorizeFactoryRead(s.getFactoryChange))
+	}
+	mux.HandleFunc("POST /api/v1/jobs/{id}/{action}", s.authorizeSubmission(s.workflowAction))
 	mux.HandleFunc("POST /api/v1/jobs", s.authorizeSubmission(s.submit))
 	mux.HandleFunc("DELETE /api/v1/jobs/{id}", s.authorizeSubmission(s.deleteJob))
 	mux.HandleFunc("POST /api/v1/workers/poll", s.authorizeWorker(s.poll))
@@ -278,7 +326,18 @@ func (s *Server) definitions(response http.ResponseWriter, request *http.Request
 		}
 		commands = append(commands, commandDefinitionResponse{Name: command.Name, Executor: command.Executor, Timeout: command.Timeout.String(), Hash: command.Hash, Prompt: command.Prompt})
 	}
-	writeJSON(response, http.StatusOK, definitionsResponse{Commands: commands})
+	workflows := map[string][]workflowStepDefinition{}
+	for _, name := range definition.WorkflowNames() {
+		steps, err := definition.ResolveTaskWorkflow(name, "")
+		if err != nil {
+			writeError(response, http.StatusInternalServerError, err)
+			return
+		}
+		for _, step := range steps {
+			workflows[name] = append(workflows[name], workflowStepDefinition{Name: step.Command.Name, Approval: step.Approval})
+		}
+	}
+	writeJSON(response, http.StatusOK, definitionsResponse{Commands: commands, Workflows: workflows})
 }
 
 func (s *Server) status(response http.ResponseWriter, request *http.Request) {
@@ -306,10 +365,12 @@ func (s *Server) status(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	writeJSON(response, http.StatusOK, statusResponse{
-		Snapshot:     snapshot,
-		Commands:     definition.CommandNames(),
-		Repositories: repositories,
-		CSRFToken:    s.csrfToken,
+		Snapshot:         snapshot,
+		FactoryAvailable: s.factoryRead != nil,
+		Commands:         definition.CommandNames(),
+		Workflows:        definition.WorkflowNames(),
+		Repositories:     repositories,
+		CSRFToken:        s.csrfToken,
 	})
 }
 
@@ -327,6 +388,7 @@ func (s *Server) catalog(response http.ResponseWriter, request *http.Request) {
 	response.Header().Set("Cache-Control", "no-store")
 	writeJSON(response, http.StatusOK, catalogResponse{
 		Commands:     definition.CommandNames(),
+		Workflows:    definition.WorkflowNames(),
 		Repositories: repositories,
 	})
 }
@@ -356,6 +418,46 @@ func (s *Server) submit(response http.ResponseWriter, request *http.Request) {
 	input.Model = strings.TrimSpace(input.Model)
 	if len(input.Model) > 128 || strings.ContainsAny(input.Model, "\x00\r\n") {
 		writeError(response, http.StatusBadRequest, errors.New("model must be at most 128 characters on one line"))
+		return
+	}
+	if input.Workflow != "" {
+		if input.Command != "" {
+			writeError(response, http.StatusBadRequest, errors.New("choose either workflow or command"))
+			return
+		}
+		definition, err := config.LoadDefinitions(s.definitionPath)
+		if err != nil {
+			writeError(response, http.StatusBadRequest, err)
+			return
+		}
+		if input.Prompt != "" && (input.SourceURL != "" || input.Spec != "" || input.Title != "") {
+			writeError(response, http.StatusBadRequest, errors.New("use spec instead of prompt for a task"))
+			return
+		}
+		task := protocol.Task{Title: input.Title, SourceURL: input.SourceURL, Spec: input.Spec}
+		// Normalize older clients at the boundary; every new workflow is a task.
+		if input.Prompt != "" {
+			task.Spec = input.Prompt
+		}
+		if err := task.Validate(); err != nil {
+			writeError(response, http.StatusBadRequest, err)
+			return
+		}
+		steps, err := definition.ResolveTaskWorkflow(input.Workflow, input.Model)
+		if err != nil {
+			writeError(response, http.StatusBadRequest, err)
+			return
+		}
+		id, err := s.store.CreateTaskJob(request.Context(), task, input.Repository, input.Workflow, steps)
+		if err != nil {
+			writeError(response, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(response, http.StatusCreated, map[string]string{"id": id})
+		return
+	}
+	if input.Title != "" || input.SourceURL != "" || input.Spec != "" {
+		writeError(response, 400, errors.New("task fields require a workflow"))
 		return
 	}
 	if strings.TrimSpace(input.Command) == "" {
@@ -589,9 +691,38 @@ func writeDecodeError(response http.ResponseWriter, err error) {
 
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		response.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+		response.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; media-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 		response.Header().Set("Referrer-Policy", "no-referrer")
 		response.Header().Set("X-Content-Type-Options", "nosniff")
 		next.ServeHTTP(response, request)
 	})
+}
+
+func (s *Server) workflowAction(response http.ResponseWriter, request *http.Request) {
+	if !limitRequestBody(response, request, maxRequestBytes) {
+		return
+	}
+	var input struct {
+		Feedback               string `json:"feedback"`
+		RunID                  string `json:"run_id"`
+		PreviousProcessStopped bool   `json:"previous_process_stopped"`
+	}
+	if err := decodeJSON(request, &input); err != nil {
+		writeDecodeError(response, err)
+		return
+	}
+	err := s.store.WorkflowAction(request.Context(), request.PathValue("id"), input.RunID, request.PathValue("action"), input.PreviousProcessStopped, input.Feedback)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(response, http.StatusNotFound, err)
+		return
+	}
+	if errors.Is(err, ErrWorkflowAction) {
+		writeError(response, http.StatusConflict, err)
+		return
+	}
+	if err != nil {
+		writeError(response, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, map[string]string{"status": "accepted"})
 }
