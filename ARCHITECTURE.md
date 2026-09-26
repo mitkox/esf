@@ -35,3 +35,25 @@ The Temporal-based factory in `internal/factory` sits beside Machinist, not insi
 - `internal/sandbox/lifecycle.go` declares the optional `Suspender`, `Previewer` and
   `Stater` capabilities. The factory records `SKIPPED` with a reason when a provider
   lacks one, so evidence never claims a cost was saved when it was not.
+
+## Optional assurance control plane
+
+QMS is enabled only by configured `quality.policy_files`. Without them, new
+workflows route to the standard factory lifecycle, and no quality store or
+socket is opened. Existing histories retain their command sequence through
+Temporal workflow versioning. Standard mode continues to support Linux and
+macOS; the authenticated QMS worker requires Linux.
+
+`internal/assurance` defines policies, risk classification, immutable records,
+approval decisions, non-conformances, CAPA and provider contracts. The local
+provider uses embedded SQLite; an enterprise service is not required.
+`internal/factory/quality_*` integrates those records with Temporal, fresh
+verification/review sandboxes and a Unix socket authenticated by kernel UID.
+Agents and client-supplied actor names have no authority to approve a run.
+
+For controlled runs, content-addressed evidence is published before one SQLite
+transaction commits the decision, manifest, unsigned attestation, audit event
+and export outbox. Compatibility files are repairable exports. Cleanup precedes
+human approval, and patch readiness never authorizes release. The
+[assurance ADR](docs/adr/0004-assurance-control-plane.md) describes the complete
+authority, recovery and isolation boundaries.

@@ -59,7 +59,8 @@ type RunStatus struct {
 	Scope string `json:"scope,omitempty"`
 	// Conditions are the per-step outcomes observed so far. A watcher can
 	// follow them without waiting for the final manifest.
-	Conditions []Condition `json:"conditions,omitempty"`
+	Conditions []Condition     `json:"conditions,omitempty"`
+	Quality    *QualitySummary `json:"quality,omitempty"`
 }
 
 // workflowState is the deterministic state carried across workflow steps.
@@ -133,6 +134,23 @@ type workflowState struct {
 // No network, filesystem or process call happens here: that is what keeps the
 // workflow deterministic and therefore replayable.
 func SoftwareChangeWorkflow(ctx workflow.Context, req RunRequest) (RunManifest, error) {
+	if workflow.GetVersion(ctx, "assurance-control-plane-v1", workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		routeCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: time.Minute, RetryPolicy: &temporal.RetryPolicy{MaximumAttempts: 3}})
+		var route QualityRouteOutput
+		info := workflow.GetInfo(ctx)
+		if err := workflow.ExecuteActivity(routeCtx, (&Activities{}).QualityRoute, QualityRouteInput{req, info.WorkflowExecution.ID, info.WorkflowExecution.RunID}).Get(routeCtx, &route); err != nil {
+			return RunManifest{}, err
+		}
+		if route.Controlled {
+			return controlledWorkflow(ctx, req, route.Record)
+		}
+	}
+	return legacySoftwareChangeWorkflow(ctx, req)
+}
+
+// legacySoftwareChangeWorkflow preserves the command sequence of histories
+// created before assurance-control-plane-v1.
+func legacySoftwareChangeWorkflow(ctx workflow.Context, req RunRequest) (RunManifest, error) {
 	// A zero-valued receiver identifies activity methods. It is never invoked
 	// from workflow code; only its method name is used for dispatch.
 	acts := &Activities{}

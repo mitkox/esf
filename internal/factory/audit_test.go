@@ -16,7 +16,7 @@ func TestAppendAuditRedactsEveryFreeFormField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ForRun: %v", err)
 	}
-	secret := "sk-1234567890abcdefghijklmnop"
+	secret := "sk-1234567890abcdefghijklmnop" // gitleaks:allow -- synthetic redaction fixture, never a credential
 	entry := AuditEntry{
 		Action:  AuditReviewDecision,
 		Actor:   "operator-" + secret,

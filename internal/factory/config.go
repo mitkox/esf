@@ -53,7 +53,8 @@ type Config struct {
 	Scopes map[string]ScopeConfig `toml:"scopes"`
 
 	// Review configures the human review gate.
-	Review ReviewConfig `toml:"review"`
+	Review  ReviewConfig  `toml:"review"`
+	Quality QualityConfig `toml:"quality"`
 	// Intake is an optional host-side advisory, never an execution policy.
 	Intake IntakeConfig `toml:"intake"`
 
@@ -295,6 +296,13 @@ func LoadConfig(path string) (Config, error) {
 			return Config{}, fmt.Errorf("parse factory config %q: %w", path, err)
 		}
 	}
+	if path != "" {
+		for i, p := range cfg.Quality.PolicyFiles {
+			if !filepath.IsAbs(p) {
+				cfg.Quality.PolicyFiles[i] = filepath.Join(filepath.Dir(path), p)
+			}
+		}
+	}
 	applyEnvOverrides(&cfg)
 	return cfg, nil
 }
@@ -330,6 +338,9 @@ func (c Config) Validate() error {
 		return err
 	}
 	var problems []string
+	if err := c.validateQuality(); err != nil {
+		problems = append(problems, "quality: "+err.Error())
+	}
 	if err := c.Intake.Validate(); err != nil {
 		problems = append(problems, "intake: "+err.Error())
 	}

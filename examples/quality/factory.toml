@@ -1,0 +1,55 @@
+# Replace host paths, Cube template/proxy, socket group and real UIDs.
+# These deterministic harnesses demonstrate control flow only.
+[cube]
+api_url = "http://127.0.0.1:4000"
+template_id = "REPLACE_WITH_READY_TEMPLATE"
+proxy_node_ip = "REPLACE_WITH_PROXY_IP"
+proxy_port_http = 80
+
+[temporal]
+host_port = "127.0.0.1:7233"
+namespace = "default"
+task_queue = "factory-quality-fixture"
+
+[storage]
+data_dir = "/srv/esf/quality-data"
+
+[sandbox]
+base_packages = ["git", "python3"]
+
+[harnesses.author]
+type = "generic"
+executable = "/usr/local/bin/author"
+binary = "/opt/esf/quality-fixtures/author.sh"
+model = "fixture-v1"
+timeout = "2m"
+
+[harnesses.reviewer]
+type = "generic"
+executable = "/usr/local/bin/reviewer"
+binary = "/opt/esf/quality-fixtures/reviewer.py"
+model = "fixture-v1"
+timeout = "2m"
+
+[[verification.fixture-check.steps]]
+id = "patch-format"
+argv = ["git", "diff", "--cached", "--check"]
+mandatory = true
+timeout = "2m"
+
+[quality]
+policy_files = ["policy.yaml"]
+socket = "/run/esf/quality.sock"
+socket_gid = 2000
+
+[quality.roles]
+"1001" = ["submitter"]
+"1002" = ["maintainer"]
+"1003" = ["quality-authority"]
+
+[quality.repositories.fixture]
+local_paths = ["/srv/esf/quality-fixture"]
+scopes = ["default"]
+
+[scopes.default]
+quality_policies = ["fixture-qms"]

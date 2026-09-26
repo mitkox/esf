@@ -39,6 +39,16 @@ runs `go vet`, runs the Go suite with the race detector on Linux and macOS,
 tests and builds the frontend, confirms the tracked frontend bundle is current,
 and builds the `factory` and `machinist` executables.
 
+The default Go suite requires no CubeSandbox, Temporal, model credentials or
+enterprise QMS account. It covers the standard factory and the assurance domain;
+Linux additionally exercises the peer-authenticated local QMS worker. Keep the
+standard factory path working without any quality configuration.
+
+Live quality integration tests are opt-in and require a Linux host, an approved
+scratch Cube template and a local Temporal test server. They create real sandboxes
+and use deterministic fixture harnesses, so do not point them at production data.
+See [the integration test guide](docs/quality-gates-and-providers.md#integration-tests).
+
 The frontend bundle under `internal/controlplane/web/dist` is committed because
 it is embedded into the Go binary. If frontend source changes, rebuild and
 commit the generated assets:
