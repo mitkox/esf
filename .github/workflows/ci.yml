@@ -29,6 +29,8 @@ jobs:
           cache-dependency-path: internal/controlplane/web/package-lock.json
       - name: Confirm toolchain
         run: test "$(go env GOVERSION)" = "go1.26.6"
+      - name: Scan source for secrets
+        run: go run github.com/zricethezav/gitleaks/v8@v8.24.2 dir --redact --no-banner .
       - name: Install frontend dependencies
         working-directory: internal/controlplane/web
         run: npm ci

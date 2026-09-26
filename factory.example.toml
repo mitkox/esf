@@ -3,11 +3,14 @@
 # This file is OPERATOR POLICY. A task can choose only: task text, an approved
 # repository, and an exact revision. It can never choose an executable, a host
 # path, or a credential.
+#
+# QMS is optional and disabled in this example. No external QMS is required.
+# To enable local assurance, see examples/quality and docs/quality-operations.md.
 
 factory_version = "0.1.0"
 
 [cube]
-# Discovered on this host: the Cube API is NOT on the SDK default port 3000.
+# Set the API URL to match your operator-managed Cube deployment.
 api_url         = "http://127.0.0.1:4000"
 template_id     = "tpl-your-ready-template"
 proxy_node_ip   = "192.0.2.10"

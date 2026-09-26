@@ -28,6 +28,7 @@ import (
 // sandbox calls. Temporal workflow code never performs these directly, which is
 // what makes the workflow deterministic and therefore durable.
 type Activities struct {
+	quality         *QualityRuntime
 	provider        sandbox.Provider
 	repos           *repository.Provider
 	harnesses       *agentharness.Registry
@@ -41,6 +42,7 @@ type Activities struct {
 
 // ActivitiesOptions configures the activity set.
 type ActivitiesOptions struct {
+	Quality         *QualityRuntime
 	Provider        sandbox.Provider
 	Repositories    *repository.Provider
 	Harnesses       *agentharness.Registry
@@ -79,6 +81,7 @@ func NewActivities(opts ActivitiesOptions) (*Activities, error) {
 		}
 	}
 	return &Activities{
+		quality:         opts.Quality,
 		provider:        opts.Provider,
 		repos:           opts.Repositories,
 		harnesses:       opts.Harnesses,

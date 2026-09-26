@@ -78,6 +78,9 @@ type Metrics struct {
 	AgentDurationSeconds  metric.Float64Histogram
 	VerifyDurationSeconds metric.Float64Histogram
 	SandboxLeaksTotal     metric.Int64Counter
+	QualityGateDuration   metric.Float64Histogram
+	QualityApprovalWait   metric.Float64Histogram
+	QualityRecords        metric.Int64Gauge
 }
 
 // NewTelemetry builds telemetry from configuration.
@@ -191,6 +194,15 @@ func newMetrics(provider metric.MeterProvider) (*Metrics, error) {
 	meter := provider.Meter("factory")
 	var err error
 	m := &Metrics{}
+	if m.QualityGateDuration, err = meter.Float64Histogram("factory_quality_gate_duration_seconds"); err != nil {
+		return nil, err
+	}
+	if m.QualityApprovalWait, err = meter.Float64Histogram("factory_quality_approval_wait_seconds"); err != nil {
+		return nil, err
+	}
+	if m.QualityRecords, err = meter.Int64Gauge("factory_quality_records", metric.WithDescription("Current counts read from the durable quality store")); err != nil {
+		return nil, err
+	}
 	if m.RunsTotal, err = meter.Int64Counter("factory_runs_total",
 		metric.WithDescription("Total factory runs started")); err != nil {
 		return nil, err

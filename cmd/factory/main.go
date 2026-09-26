@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/mitkox/esf/internal/artifacts"
+	"github.com/mitkox/esf/internal/assurance"
 	"github.com/mitkox/esf/internal/factory"
 )
 
@@ -62,6 +63,7 @@ verification, one verified patch out.`,
 
 	root.AddCommand(
 		newRunCommand(&configPath),
+		newQualityCommand(&configPath),
 		newGetCommand(&configPath),
 		newDescribeCommand(&configPath),
 		newApplyCommand(&configPath),
@@ -172,18 +174,6 @@ execute an arbitrary program.`,
 				runID = newRunID()
 			}
 
-			runtime, err := factory.NewRuntime(ctx, factory.RuntimeOptions{Config: cfg})
-			if err != nil {
-				return err
-			}
-			defer runtime.Close(ctx)
-
-			temporalClient, err := runtime.TemporalClient()
-			if err != nil {
-				return err
-			}
-			defer temporalClient.Close()
-
 			req := factory.RunRequest{
 				RunID:               runID,
 				ChangeID:            changeID,
@@ -218,6 +208,23 @@ execute an arbitrary program.`,
 			if req.SandboxTemplate == "" {
 				req.SandboxTemplate = cfg.Cube.TemplateID
 			}
+
+			if protected, err := cfg.QualityRequired(req); err != nil {
+				return err
+			} else if protected {
+				return submitQuality(ctx, cfg, req, wait)
+			}
+			runtime, err := factory.NewRuntime(ctx, factory.RuntimeOptions{Config: cfg})
+			if err != nil {
+				return err
+			}
+			defer runtime.Close(ctx)
+
+			temporalClient, err := runtime.TemporalClient()
+			if err != nil {
+				return err
+			}
+			defer temporalClient.Close()
 
 			workflowID := factory.WorkflowIDForRun(runID)
 			fmt.Printf("Run ID:      %s\n", runID)
@@ -281,7 +288,7 @@ execute an arbitrary program.`,
 // workflow, so the operator still sees the evidence that was produced.
 func reportFailure(ctx context.Context, runtime *factory.Runtime, c client.Client, runID string, cause error) factory.RunManifest {
 	fmt.Fprintf(os.Stderr, "\nworkflow error: %v\n", cause)
-	manifest, err := factory.ReadManifest(runtime.Artifacts, runID)
+	manifest, err := runtime.ReadRunManifest(context.Background(), runID)
 	if err == nil {
 		return manifest
 	}
@@ -404,6 +411,19 @@ func newStatusCommand(configPath *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if cfg.Quality.Enabled() {
+				var record assurance.Run
+				err = factory.NewQualityClient(cfg.QualitySocket()).Call(ctx, "GET", "/v1/runs/"+runID, nil, &record)
+				if err == nil {
+					if record.Decision != nil {
+						return printJSON(record.Manifest)
+					}
+					return printJSON(record)
+				}
+				if !errors.Is(err, assurance.ErrNotFound) {
+					return err
+				}
+			}
 			runtime, err := factory.NewRuntime(ctx, factory.RuntimeOptions{Config: cfg})
 			if err != nil {
 				return err
@@ -411,7 +431,7 @@ func newStatusCommand(configPath *string) *cobra.Command {
 			defer runtime.Close(ctx)
 
 			// A completed run's authoritative record is its durable manifest.
-			if manifest, err := factory.ReadManifest(runtime.Artifacts, runID); err == nil {
+			if manifest, err := runtime.ReadRunManifest(context.Background(), runID); err == nil {
 				if asJSON {
 					return printJSON(manifest)
 				}
