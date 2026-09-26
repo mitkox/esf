@@ -1,0 +1,8 @@
+{
+  "run_id": "fixture-r2-001",
+  "local_path": "/srv/esf/quality-fixture",
+  "revision": "REPLACE_WITH_BASELINE_COMMIT",
+  "task": "Produce the R2 controlled fixture change",
+  "agent_harness": "author",
+  "verification_profile": "fixture-check"
+}

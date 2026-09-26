@@ -262,6 +262,7 @@ type ReviewConfig struct {
 // names the scope it acts in. A scope can only narrow the operator's policy,
 // never widen it — the union of all scopes is a subset of the global config.
 type ScopeConfig struct {
+	QualityPolicies []string `toml:"quality_policies"`
 	// Repositories narrows the global allowlist. Empty inherits the global list.
 	Repositories []string `toml:"repositories"`
 	// Harnesses restricts which harnesses may be used. Empty allows all.

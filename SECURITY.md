@@ -49,3 +49,20 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the implemented security boundaries.
 The factory runs coding agents in CubeSandbox microVMs. Temporal authentication,
 encrypted workflow payloads, evidence storage, credential provisioning and
 operational boundaries are described in [the deployment guide](docs/production-deployment.md).
+
+Optional QMS uses Linux Unix-socket peer credentials and operator-owned UID role
+bindings. Run it under a dedicated worker identity, restrict the socket and
+private SQLite/object directories, and keep host administrators trusted. Sharing
+an OS account shares approval identity. Temporal signals and actor names supplied
+by clients confer no approval authority.
+
+Candidate source, task prompts and evidence can contain unpublished work even
+when they contain no detected credentials. Keep the database, object store,
+exports and integration-test artifacts private. Secret detection is a defense
+in depth, not a guarantee that arbitrary content is safe to publish.
+
+V1 readiness statements are unsigned and must be obtained from the trusted
+authority. They do not authorize deployment or establish regulatory compliance.
+See [quality operations](docs/quality-operations.md) for setup and
+[the assurance ADR](docs/adr/0004-assurance-control-plane.md) for limitations,
+including reviewer filesystem isolation and the single-host trust model.

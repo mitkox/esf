@@ -39,13 +39,14 @@ const (
 	// before any sandbox was created: a disallowed repository, an unknown
 	// harness, a missing revision.
 	StateInvalidRequest RunState = "INVALID_REQUEST"
+	StateQualityFailed  RunState = "QUALITY_FAILED"
 )
 
 // Valid reports whether s is a known state.
 func (s RunState) Valid() bool {
 	switch s {
 	case StateRequested, StateRunning, StatePaused, StateAgentFailed, StateVerificationFailed,
-		StateSucceeded, StateCancelled, StateInfrastructureFailed, StateInvalidRequest:
+		StateSucceeded, StateCancelled, StateInfrastructureFailed, StateInvalidRequest, StateQualityFailed:
 		return true
 	default:
 		return false
@@ -95,6 +96,7 @@ type PreviewLink struct {
 // snapshot lineage, model accounting and human review outcome, and adding those
 // fields later must not require rewriting the manifest.
 type RunManifest struct {
+	Quality *QualitySummary `json:"quality,omitempty"`
 	// ── Identity ────────────────────────────────────────────────────────────
 	RunID          string `json:"run_id"`
 	FactoryVersion string `json:"factory_version"`
@@ -251,8 +253,9 @@ const (
 // set of user-controlled values: task text, an approved repository, and an
 // approved revision.
 type RunRequest struct {
-	RunID      string `json:"run_id"`
-	Repository string `json:"repository"`
+	AdmissionID string `json:"admission_id,omitempty"`
+	RunID       string `json:"run_id"`
+	Repository  string `json:"repository"`
 	// RepositoryKind is "remote" or "local".
 	RepositoryKind string `json:"repository_kind,omitempty"`
 	// LocalPath is a host path, used by tests and by the acceptance fixture.

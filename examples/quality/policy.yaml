@@ -1,0 +1,40 @@
+apiVersion: esf.io/v1
+kind: QualityPolicy
+metadata:
+  name: fixture-qms
+  version: "1.0.0"
+  description: Controlled fixture demonstrating R2 and R3 patch readiness
+spec:
+  risk:
+    default: R2
+    rules:
+      - level: R0
+        paths: ["docs/**", "*.md"]
+        all_paths: true
+      - level: R3
+        paths: ["auth/**", "security/**"]
+  gates:
+    - id: syntax
+      type: verification
+      profile: fixture-check
+      risks: [R1, R2, R3, R4]
+    - id: independent-review
+      type: independent-review
+      harness: reviewer
+      risks: [R2, R3, R4]
+  evidence: [baseline, patch, author-result]
+  qualifications:
+    - id: fixture-author
+      phase: author
+      harness: author
+      model: fixture-v1
+    - id: fixture-reviewer
+      phase: review
+      harness: reviewer
+      model: fixture-v1
+  approvals:
+    R0: {mode: automatic}
+    R1: {mode: gates}
+    R2: {mode: gates}
+    R3: {mode: human, roles: [maintainer], count: 1, independent: true, timeout: 24h}
+    R4: {mode: human, roles: [quality-authority], count: 2, independent: true, timeout: 24h}

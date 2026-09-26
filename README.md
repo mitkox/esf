@@ -23,10 +23,32 @@ and adds factory orchestration. See [upstream attribution](docs/upstream.md).
 - Durable patches, logs, manifests, and verified cleanup outcomes.
 - Temporal TLS/mTLS, API-key authentication, and optional encrypted payloads.
 - Bounded execution, cancellation, and recovery after a lost create response.
+- Optional patch assurance: frozen policies, independent review, authenticated
+  approvals, attestations, and local non-conformance/CAPA records.
 
 This is actively developed software. Review the [validated behavior and
 operational requirements](docs/production-readiness.md) before deployment.
 ESF produces changes for review; it does not decide what ships.
+
+## QMS is optional
+
+The default configuration runs ESF without QMS. Keep `[quality]` and scope
+`quality_policies` bindings absent to use the normal agent, verification,
+patch, and cleanup workflow. No quality database, approval socket, repository
+registry, or enterprise QMS service is required in this mode. Ordinary runs do
+not receive quality approval or readiness attestations.
+
+| Mode | Configuration | Dependencies |
+| --- | --- | --- |
+| Standard factory (default) | `factory.example.toml` | CubeSandbox, Temporal, selected agent harness |
+| Local QMS | Add quality policies, registered repositories and UID role bindings | Standard dependencies plus a Linux worker and durable local storage; SQLite is embedded |
+| Enterprise integration | Add explicit provider controls to local QMS | Operator-supplied adapter/import process; vendor adapters are future work |
+
+The local QMS implementation is included under the same MIT license and works
+without an external QMS product. It attests readiness of an exact patch; it
+does not authorize releases or certify regulatory compliance. See
+[quality operations](docs/quality-operations.md) and the
+[R2/R3 examples](examples/quality/README.md) to opt in.
 
 ## Quick start
 
@@ -101,6 +123,9 @@ Build the inherited CLI separately with
 | --- | --- |
 | [Factory overview](docs/FACTORY.md) | Workflow and components |
 | [Operator guide](docs/operator-guide.md) | Harnesses, verification and troubleshooting |
+| [Quality operations](docs/quality-operations.md) | Optional local QMS, migration, approvals and CAPA |
+| [Quality gates and providers](docs/quality-gates-and-providers.md) | Policy controls, qualifications, evidence and provider contracts |
+| [R2/R3 quality examples](examples/quality/README.md) | Complete controlled-run fixtures |
 | [DSPy/Jev intake](docs/production-deployment.md#optional-dspyjev-intake-advisory) | Optional typed task advice and secure TypeSafe credential setup |
 | [DSPy brief lab](tools/brief_lab/README.md) | Offline, evidence-scored implementation brief experiments |
 | [Production deployment](docs/production-deployment.md) | Service setup, TLS, encryption and recovery |
