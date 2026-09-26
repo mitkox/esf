@@ -163,9 +163,10 @@ func TestFileRoundTrip(t *testing.T) {
 	assertNoLeak(t, p, sb.ID())
 }
 
-// TestRuntimeNetworkPolicyUpdate proves the deployed Cube version accepts the
-// fail-closed L7 credential policy shape used immediately before an agent run.
-// The token is deliberately fake and no outbound request is made.
+// TestRuntimeNetworkPolicyUpdate proves the deployed Cube version both accepts
+// and routes a fail-closed L7 credential policy after an in-place update. A
+// successful policy push alone cannot prove the eBPF and proxy data path works.
+// The injected token is deliberately fake.
 func TestRuntimeNetworkPolicyUpdate(t *testing.T) {
 	p := newProvider(t)
 	requireCleanStart(t, p)
@@ -196,7 +197,7 @@ func TestRuntimeNetworkPolicyUpdate(t *testing.T) {
 			Name: "factory-test-model",
 			Match: sandbox.NetworkMatch{
 				Scheme: "https", Host: "example.com", SNI: "example.com",
-				Method: []string{"POST"}, Path: "/v1/*",
+				Method: []string{"GET"}, Path: "/",
 			},
 			Action: sandbox.NetworkAction{
 				Allow: true, Audit: "metadata",
@@ -208,6 +209,16 @@ func TestRuntimeNetworkPolicyUpdate(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("UpdateNetwork: %v", err)
+	}
+	request, err := sb.Execute(ctx, sandbox.Command{
+		Argv:    []string{"python3", "-c", "import socket,ssl; ip=socket.gethostbyname('example.com'); raw=socket.create_connection((ip,443),timeout=10); c=ssl.create_default_context().wrap_socket(raw,server_hostname='example.com'); c.sendall(b'GET / HTTP/1.1\\r\\nHost: example.com\\r\\nConnection: close\\r\\n\\r\\n'); print(c.recv(128).split(b'\\r\\n')[0].decode())"},
+		Timeout: 30 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("execute proxied request: %v", err)
+	}
+	if !request.Succeeded() || !strings.Contains(request.Stdout, "200") {
+		t.Fatalf("L7 data path failed: exit=%d stdout=%q stderr=%q", request.ExitCode, request.Stdout, request.Stderr)
 	}
 
 	if err := p.Destroy(ctx, sb.ID()); err != nil {

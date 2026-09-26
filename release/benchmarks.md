@@ -20,17 +20,29 @@ unqualified dry-run artifacts. Sizes are bytes unless stated otherwise.
 | Optional intake image | 150,640,413 | Local `docker image inspect .Size` |
 | Cube template image | 167,806,125 | Local `docker image inspect .Size`; not imported into a live Cube cluster |
 
-The deterministic live fixture is the `testdata/e2e-repo` tree
-`a9145c45dc5434d97ecaa67fa404da4d286aa41a`. Each trial asks the same
-pinned agent to change the greeting to `hello factory` and runs `build.sh` and
-`test.sh` as independent gates. Run isolated batches at 1, 4, and 8 concurrent
-factory submissions, with the same Cube template, Temporal cluster, agent
-model, and egress policy on both VM and Kubernetes. Record p50/p95 sandbox
-preparation, wall time, peak factory and Cube RSS, output-limit behavior,
-retained evidence bytes per run, and unreconciled sandbox count. Compare the
-same fixture and hardware to the pre-optimization baseline; investigate any
-regression above 10%.
+## Local VM concurrency fixture
 
-Live preparation, RSS, evidence retention, 1/4/8 concurrency, and 24-hour soak
-measurements are pending. The production release verifier therefore keeps the
-performance and soak gates closed.
+`scripts/benchmark-factory.py` ran the deterministic `testdata/e2e-repo`
+fixture at revision `c73b463deadf2f30216635cf9d3c0672526685e2` on the same
+host against CubeSandbox 0.7.2 and Temporal 1.32.0. Each trial asked the
+conformance agent to change `hello` to `hello factory`; independent `build.sh`
+and `test.sh` gates checked the patch. The old-template comparison used the
+same factory binary, fixture, and host, but installed Git, CA certificates,
+and pip during each run. The pinned template contains those tools already.
+
+| Concurrent runs | Template | Batch wall time | P95 repository ready | P95 run duration | Worker peak RSS | Evidence per run |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | Old | 10.12 s | 9.22 s | 9.92 s | 47.9 MB | 9.7 kB |
+| 1 | Pinned | 1.30 s | 0.43 s | 1.10 s | 46.7 MB | 9.7 kB |
+| 4 | Old | 16.95 s | 15.86 s | 16.77 s | 54.3 MB | 9.7 kB |
+| 4 | Pinned | 2.21 s | 0.53 s | 1.96 s | 55.9 MB | 9.7 kB |
+| 8 | Old | 21.97 s | 20.96 s | 21.70 s | 58.4 MB | 9.7 kB |
+| 8 | Pinned | 2.31 s | 0.72 s | 2.06 s | 63.9 MB | 9.7 kB |
+
+All 26 runs passed verification with one agent attempt and verified cleanup;
+no factory-owned sandboxes remained after any batch. P95 uses nearest rank
+within each 1-, 4-, or 8-run batch, so these are preliminary measurements.
+The old template is a preparation comparison, not a pre-optimization ESF
+version. Cube RSS, Kubernetes runs, output-limit behavior, repeated samples,
+the 24-hour soak, and the full regression gate remain open. The production
+release verifier therefore keeps the performance and soak gates closed.
