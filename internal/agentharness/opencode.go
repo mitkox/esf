@@ -115,7 +115,7 @@ func NewOpenCode(opts OpenCodeOptions) (*GenericCommandHarness, error) {
 	cfg := opts.Config
 	if cfg == nil {
 		var err error
-		cfg, err = defaultOpenCodeConfig(opts.BaseURL, opts.APIKeyEnv)
+		cfg, err = defaultOpenCodeConfig(opts.BaseURL, opts.APIKeyEnv, model)
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +159,7 @@ func NewOpenCode(opts OpenCodeOptions) (*GenericCommandHarness, error) {
 		if endpoint.BaseURL == "" {
 			return nil
 		}
-		cfg, err := defaultOpenCodeConfig(endpoint.BaseURL, endpoint.APIKeyEnv)
+		cfg, err := defaultOpenCodeConfig(endpoint.BaseURL, endpoint.APIKeyEnv, endpoint.Model)
 		if err != nil {
 			return err
 		}
@@ -213,18 +213,31 @@ func seedFiles(cachePath, dest string) map[string]string {
 // It is deliberately explicit rather than empty so that a run's agent behaviour
 // is reproducible and does not depend on whatever user configuration happens to
 // exist on the host.
-func defaultOpenCodeConfig(baseURL, apiKeyEnv string) (map[string]any, error) {
+func defaultOpenCodeConfig(baseURL, apiKeyEnv, model string) (map[string]any, error) {
 	cfg := map[string]any{
 		"$schema":       "https://opencode.ai/config.json",
 		"default_agent": "build",
 		"shell":         "/bin/bash",
 	}
 	if baseURL != "" {
+		// OpenCode resolves --model against provider and model keys. A run
+		// variant belongs only in that flag, not in the catalog or default.
+		catalogModel, _, _ := strings.Cut(strings.TrimSpace(model), "#")
+		providerID, modelID, ok := strings.Cut(catalogModel, "/")
+		if !ok || providerID == "" || modelID == "" {
+			return nil, fmt.Errorf("agentharness: opencode gateway model %q must be provider/model", model)
+		}
 		provider := map[string]any{
-			"name":    "factory",
-			"package": "@opencode-ai/ai/providers/openai-compatible",
+			"name":    providerID,
+			"package": "@opencode/ai/providers/openai-compatible",
 			"settings": map[string]any{
 				"baseURL": baseURL,
+			},
+			"models": map[string]any{
+				modelID: map[string]any{
+					"name":    modelID,
+					"modelID": modelID,
+				},
 			},
 		}
 		if apiKeyEnv != "" {
@@ -232,7 +245,8 @@ func defaultOpenCodeConfig(baseURL, apiKeyEnv string) (map[string]any, error) {
 			// persisted into this file.
 			provider["settings"].(map[string]any)["apiKey"] = "{env:" + apiKeyEnv + "}"
 		}
-		cfg["providers"] = map[string]any{"factory": provider}
+		cfg["model"] = catalogModel
+		cfg["providers"] = map[string]any{providerID: provider}
 	}
 	return cfg, nil
 }
