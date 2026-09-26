@@ -36,6 +36,9 @@ class AssessTask(dspy.Signature):
 
 
 def configure(key_file: Path, model: str) -> None:
+    # DSPy's default DiskCache deserializes pickle files from a persistent
+    # directory. Intake runs are short-lived, so keep only a bounded memory cache.
+    dspy.configure_cache(enable_disk_cache=False, memory_max_entries=1024)
     file_stat = key_file.stat()
     if not stat.S_ISREG(file_stat.st_mode) or stat.S_IMODE(file_stat.st_mode) & 0o077:
         raise ValueError("credential file must be a regular file inaccessible to group and others")

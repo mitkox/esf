@@ -240,6 +240,8 @@ def main(argv: list[str] | None = None) -> int:
     optimize_cmd.add_argument("--max-metric-calls", type=int, default=16)
     args = parser.parse_args(argv)
     try:
+        # Never load pickle entries from a writable on-disk DSPy cache.
+        dspy.configure_cache(enable_disk_cache=False, memory_max_entries=1024)
         dspy.configure(lm=dspy.LM(args.model))
         if args.command == "generate":
             program = dspy.Predict(DraftBrief)

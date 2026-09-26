@@ -50,6 +50,7 @@ test-frontend: ## Run frontend tests against the frozen lockfile
 
 test-python: ## Run optional Python tool tests against uv.lock
 	@if command -v $(UV) >/dev/null && $(UV) python find $(PYTHON_VERSION) >/dev/null 2>&1; then \
+		$(UV) sync --locked --python $(PYTHON_VERSION) --reinstall-package esf-intake --reinstall-package esf-brief-lab && \
 		$(UV) run --locked --python $(PYTHON_VERSION) python -m unittest discover -s tools/intake/tests -p 'test_*.py' && \
 		$(UV) run --locked --python $(PYTHON_VERSION) python -m unittest discover -s tools/brief_lab/tests -p 'test_*.py'; \
 	else \

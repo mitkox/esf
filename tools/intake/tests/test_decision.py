@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import dspy
 from dspy.experimental import Choice, Noul, Score
 
 from esf_intake.calibrate import calibrate, read_labels, split_labels
@@ -45,6 +46,8 @@ class DecisionTests(unittest.TestCase):
                 configure(key_file, "jev-latest")
                 self.assertEqual(os.environ["TYPESAFE_API_KEY"], "sentinel-private-key")
                 client.assert_called_once_with("jev-latest")
+                self.assertFalse(dspy.cache.enable_disk_cache)
+                self.assertEqual(dspy.cache.memory_cache.maxsize, 1024)
             key_file.chmod(0o644)
             with self.assertRaises(ValueError):
                 configure(key_file, "jev-latest")
