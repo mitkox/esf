@@ -220,11 +220,24 @@ func defaultOpenCodeConfig(baseURL, apiKeyEnv, model string) (map[string]any, er
 		"shell":         "/bin/bash",
 	}
 	if baseURL != "" {
+		// OpenCode resolves --model against provider and model keys. A run
+		// variant belongs only in that flag, not in the catalog or default.
+		catalogModel, _, _ := strings.Cut(strings.TrimSpace(model), "#")
+		providerID, modelID, ok := strings.Cut(catalogModel, "/")
+		if !ok || providerID == "" || modelID == "" {
+			return nil, fmt.Errorf("agentharness: opencode gateway model %q must be provider/model", model)
+		}
 		provider := map[string]any{
-			"name":    "factory",
+			"name":    providerID,
 			"package": "@opencode/ai/providers/openai-compatible",
 			"settings": map[string]any{
 				"baseURL": baseURL,
+			},
+			"models": map[string]any{
+				modelID: map[string]any{
+					"name":    modelID,
+					"modelID": modelID,
+				},
 			},
 		}
 		if apiKeyEnv != "" {
@@ -232,20 +245,8 @@ func defaultOpenCodeConfig(baseURL, apiKeyEnv, model string) (map[string]any, er
 			// persisted into this file.
 			provider["settings"].(map[string]any)["apiKey"] = "{env:" + apiKeyEnv + "}"
 		}
-		if model = strings.TrimSpace(model); model != "" {
-			modelID := model
-			if index := strings.IndexByte(model, '/'); index >= 0 {
-				modelID = model[index+1:]
-			}
-			provider["models"] = map[string]any{
-				modelID: map[string]any{
-					"name":    modelID,
-					"modelID": modelID,
-				},
-			}
-			cfg["model"] = "factory/" + modelID
-		}
-		cfg["providers"] = map[string]any{"factory": provider}
+		cfg["model"] = catalogModel
+		cfg["providers"] = map[string]any{providerID: provider}
 	}
 	return cfg, nil
 }

@@ -372,11 +372,40 @@ func TestOpenCodeConfigDoesNotEmbedCredentialValue(t *testing.T) {
 	if !strings.Contains(encoded, "{env:FACTORY_MODEL_KEY}") {
 		t.Fatalf("expected an env-var reference in the provider config: %s", encoded)
 	}
-	if !strings.Contains(encoded, "@opencode/ai/providers/openai-compatible") {
-		t.Fatalf("expected the V2 openai-compatible provider package: %s", encoded)
+	if config["model"] != "factory/mitko" {
+		t.Fatalf("configured model = %v, want factory/mitko", config["model"])
 	}
-	if !strings.Contains(encoded, `"model":"factory/mitko"`) || !strings.Contains(encoded, `"modelID":"mitko"`) {
-		t.Fatalf("expected the local model to be registered: %s", encoded)
+	provider := config["providers"].(map[string]any)["factory"].(map[string]any)
+	if provider["package"] != "@opencode/ai/providers/openai-compatible" {
+		t.Fatalf("unexpected V2 provider package: %v", provider["package"])
+	}
+	model := provider["models"].(map[string]any)["mitko"].(map[string]any)
+	if model["modelID"] != "mitko" {
+		t.Fatalf("registered model ID = %v, want mitko", model["modelID"])
+	}
+}
+
+func TestOpenCodeGatewayRequiresQualifiedModel(t *testing.T) {
+	t.Parallel()
+	for _, model := range []string{"", "model", "/model", "provider/"} {
+		if _, err := defaultOpenCodeConfig("https://gateway.example/v1", "", model); err == nil {
+			t.Errorf("accepted unqualified gateway model %q", model)
+		}
+	}
+}
+
+func TestOpenCodeGatewayKeepsVariantOutOfCatalog(t *testing.T) {
+	t.Parallel()
+	config, err := defaultOpenCodeConfig("https://gateway.example/v1", "", "provider/team/model#high")
+	if err != nil {
+		t.Fatalf("defaultOpenCodeConfig: %v", err)
+	}
+	if config["model"] != "provider/team/model" {
+		t.Fatalf("catalog default = %v, want model without run variant", config["model"])
+	}
+	models := config["providers"].(map[string]any)["provider"].(map[string]any)["models"].(map[string]any)
+	if models["team/model"].(map[string]any)["modelID"] != "team/model" {
+		t.Fatalf("registered model includes run variant: %v", models)
 	}
 }
 
@@ -394,7 +423,7 @@ func TestOpenCodeConfiguresResolvedModelEndpoint(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	endpoint := ModelEndpoint{
-		Provider: "test", Model: "provider/model", BaseURL: "https://gateway.example/v1", APIKeyEnv: "FACTORY_MODEL_KEY",
+		Provider: "test", Model: "provider/team/model", BaseURL: "https://gateway.example/v1", APIKeyEnv: "FACTORY_MODEL_KEY",
 	}
 	if err := h.ConfigureModelEndpoint(context.Background(), sb, endpoint); err != nil {
 		t.Fatalf("ConfigureModelEndpoint: %v", err)
@@ -406,6 +435,21 @@ func TestOpenCodeConfiguresResolvedModelEndpoint(t *testing.T) {
 	text := string(data)
 	if !strings.Contains(text, endpoint.BaseURL) || !strings.Contains(text, "{env:"+endpoint.APIKeyEnv+"}") {
 		t.Fatalf("resolved endpoint missing from opencode config: %s", text)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("decode resolved opencode config: %v", err)
+	}
+	if config["model"] != endpoint.Model {
+		t.Fatalf("configured model = %v, want CLI model %q", config["model"], endpoint.Model)
+	}
+	providers := config["providers"].(map[string]any)
+	if len(providers) != 1 {
+		t.Fatalf("configured providers = %v, want only provider", providers)
+	}
+	models := providers["provider"].(map[string]any)["models"].(map[string]any)
+	if models["team/model"].(map[string]any)["modelID"] != "team/model" {
+		t.Fatalf("registered model does not match CLI model: %v", models)
 	}
 }
 
