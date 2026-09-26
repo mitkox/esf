@@ -26,11 +26,11 @@ local value before running `make temporal-up`. Never commit `.env`.
 
 | Service | Image | Host binding | Purpose |
 | --- | --- | --- | --- |
-| `postgresql` | `postgres:16.10-alpine` | `127.0.0.1:5433` | Temporal persistence + visibility store |
-| `temporal-admin-tools` | `temporalio/admin-tools:1.31.0` | — | one-shot schema setup |
-| `temporal` | `temporalio/server:1.31.0` | `127.0.0.1:7233` | gRPC frontend |
-| `temporal-create-namespace` | `temporalio/admin-tools:1.31.0` | — | one-shot namespace creation |
-| `temporal-ui` | `temporalio/ui:2.49.1` | `127.0.0.1:8233` | web UI |
+| `postgresql` | `postgres:16.15-alpine3.24` | `127.0.0.1:5433` | Temporal persistence + visibility store |
+| `temporal-admin-tools` | `temporalio/admin-tools:1.32.0` | — | one-shot schema setup |
+| `temporal` | `temporalio/server:1.32.0` | `127.0.0.1:7233` | gRPC frontend |
+| `temporal-create-namespace` | `temporalio/admin-tools:1.32.0` | — | one-shot namespace creation |
+| `temporal-ui` | `temporalio/ui:2.54.1` | `127.0.0.1:8233` | web UI |
 
 ### Deliberate deviations from upstream
 
@@ -90,7 +90,7 @@ holds workflow state only.
 ```bash
 make temporal-up
 make temporal-status
-make temporal-hello        # runs a trivial workflow end-to-end
+make temporal-hello        # runs a tagged integration workflow end-to-end
 ```
 
 `make temporal-hello` is the proof that gRPC is reachable, the namespace exists,

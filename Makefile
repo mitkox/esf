@@ -85,7 +85,8 @@ fmt: ## Format all Go code
 
 .PHONY: temporal-up
 temporal-up: ## Start the Temporal development stack and wait for health
-	$(COMPOSE) up -d --wait
+	$(COMPOSE) up -d
+	./$(TEMPORAL_DIR)/scripts/wait-ready.sh
 	@echo "Temporal gRPC: 127.0.0.1:7233"
 	@echo "Temporal UI:   http://127.0.0.1:8233"
 
@@ -111,7 +112,7 @@ temporal-logs: ## Tail Temporal server logs
 
 .PHONY: temporal-hello
 temporal-hello: ## Prove a workflow can execute end to end
-	$(GO) test ./internal/factory -run TestTemporalHelloWorkflow -count=1 -v
+	$(GO) test -tags=integration ./internal/factory -run '^TestTemporalHelloWorkflow$$' -count=1 -v
 
 # ── CubeSandbox ─────────────────────────────────────────────────────────────
 

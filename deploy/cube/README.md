@@ -16,7 +16,7 @@ mutable tag, using the operator's `cubemastercli tpl create-from-image` flow:
 cubemastercli tpl create-from-image \
   --image ghcr.io/mitkox/esf-cube-template@sha256:<qualified-digest> \
   --writable-layer-size 1G \
-  --expose-port 49999 --expose-port 49983 --probe 49999
+  --expose-port 49999 --expose-port 49983 --probe 49983
 cubemastercli tpl watch --job-id <job-id>
 ```
 

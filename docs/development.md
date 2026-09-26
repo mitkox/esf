@@ -2,9 +2,13 @@
 
 ## Requirements
 
-- Go 1.26.6 or newer
-- Node.js and npm for the control-plane frontend
-- `just` to use the repository shortcuts
+- Go 1.27.1 and Node.js 24.21.0, pinned in `.mise.toml`
+- Python 3.14.7 for the optional intake and brief lab tests
+- `just` for Machinist commands and `make` for factory commands
+
+Run `mise install` to install the pinned local toolchains. CI checks the same
+Go and Node versions. Python tests can also run in the pinned intake image via
+`make test-python-docker`.
 
 ## Build
 
