@@ -23,7 +23,7 @@ Python entry point uses the safe cache configuration remain RC gates.
 Grype 0.119.0 scanned the locally built images with its refreshed database.
 These are scanner matches, not an exploitability assessment. Raw JSON reports
 are retained outside the repository in
-`/home/mitko/.local/share/esf/upgrades/grype-*-20260927.json`.
+`$HOME/.local/share/esf/upgrades/grype-*-20260927.json`.
 
 | Image | High | Critical | Main finding |
 | --- | ---: | ---: | --- |

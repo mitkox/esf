@@ -16,7 +16,7 @@ concurrent runs on each target, followed by a 24-hour soak.
   `v0.5.0-rc.3`. The extracted `factory version --json` reports that commit,
   v0.5.0, and `temporal_replay=passed`.
 - The installed `factory` and `machinist` symlinks now point to
-  `/home/mitko/.local/opt/esf/v0.5.0-e23f422`. The previous versioned
+  `$HOME/.local/opt/esf/v0.5.0-e23f422`. The previous versioned
   directory remains available for rollback. No factory or Machinist worker
   process was running when the symlinks changed.
 - GitHub attestation verification was not rerun on the host: this host's
@@ -48,7 +48,7 @@ concurrent runs on each target, followed by a 24-hour soak.
 
 An owner-only qualification CA, 90-day Temporal server/client certificates,
 and a random 256-bit payload keyring were generated outside Git under
-`/home/mitko/.local/share/esf/credentials/qualification-temporal`. The
+`$HOME/.local/share/esf/credentials/qualification-temporal`. The
 directory is mode 0700 and its files are mode 0600. OpenSSL verified both
 certificates against the CA. The server certificate is now used by a
 separate Temporal 1.32.0 stack with its own PostgreSQL 16.15 volume, bound
@@ -85,7 +85,7 @@ The published v0.5.0 binary ran the deterministic fixture at the requested
 CubeSandbox 0.7.2. All 13 runs passed build and test gates on one agent
 attempt, verified cleanup, and left no live sandbox. Raw results and worker
 logs are retained at
-`/home/mitko/.local/share/esf/qualification/benchmark-v050-tls-20260927-01`.
+`$HOME/.local/share/esf/qualification/benchmark-v050-tls-20260927-01`.
 
 | Runs | Batch wall time | P95 run duration | Worker peak RSS |
 | ---: | ---: | ---: | ---: |
@@ -114,7 +114,7 @@ behavior under load, or a 24-hour soak.
   recovered `changes.patch` SHA-256 matched the source artifact:
   `365194a7478c8a4a35e3f59104b27496b1a3eb1f52166cc27c78bfdae8af2769`.
 - Evidence is under
-  `/home/mitko/.local/share/esf/qualification/restore-drill-20260927`.
+  `$HOME/.local/share/esf/qualification/restore-drill-20260927`.
   This covers an isolated TLS qualification stack. It does not exercise a
   production VM backup service, Kubernetes volumes and Secrets, external
   credential re-provisioning, or the operator's disaster-recovery runbook.
@@ -129,11 +129,11 @@ and arm64 for factory, console, managed worker, and intake; amd64 for the Cube
 template. These are candidate images built after the v0.5.0 binary release,
 not promoted release image digests. The SBOM artifacts are retained in the
 workflow run and were downloaded for inspection under
-`/home/mitko/.local/share/esf/qualification/candidate-images-20260927/sboms`.
+`$HOME/.local/share/esf/qualification/candidate-images-20260927/sboms`.
 
 Grype 0.119.0 scanned each candidate SBOM with its 2026-09-26 database. Raw
 reports and SHA-256 checksums are preserved alongside the SBOMs under
-`/home/mitko/.local/share/esf/qualification/candidate-images-20260927`.
+`$HOME/.local/share/esf/qualification/candidate-images-20260927`.
 The two architectures reported equal high/critical counts for each
 multi-platform component.
 
