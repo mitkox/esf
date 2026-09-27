@@ -11,8 +11,8 @@ Report vulnerabilities through [SECURITY.md](SECURITY.md), not a public issue.
 
 Install:
 
-- Go 1.26.6
-- Node.js 22.22.2 or a compatible newer release, plus npm
+- Go 1.27.1
+- Node.js 24.21.0 or a compatible newer release, plus npm (both pinned in `.mise.toml`)
 - Git
 - `just` for repository shortcuts
 - the agent CLI needed for any real execution checks
