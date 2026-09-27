@@ -42,8 +42,6 @@ jobs:
           set -euo pipefail
           [[ '${{ inputs.image_tag }}' =~ ^v0\.5\.0-(candidate|rc)\.[0-9]+$ ]]
           python3 scripts/verify-release-inventory.py
-      - name: Build dependency SBOM
-        run: python3 scripts/generate-sbom.py sbom.cdx.json
       - name: Log in to GHCR
         uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
         with:
@@ -71,12 +69,41 @@ jobs:
           subject-name: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
-      - name: Attest image SBOM
+      - name: Generate linux/amd64 image SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        env:
+          SYFT_PLATFORM: linux/amd64
+        with:
+          image: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}@${{ steps.push.outputs.digest }}
+          format: cyclonedx-json
+          output-file: image-sbom-linux-amd64.cdx.json
+          artifact-name: image-sbom-${{ matrix.component }}-linux-amd64.cdx.json
+          upload-release-assets: false
+      - name: Attest linux/amd64 image SBOM
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}
           subject-digest: ${{ steps.push.outputs.digest }}
-          sbom-path: sbom.cdx.json
+          sbom-path: image-sbom-linux-amd64.cdx.json
+          push-to-registry: true
+      - name: Generate linux/arm64 image SBOM
+        if: matrix.component != 'cube-template'
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        env:
+          SYFT_PLATFORM: linux/arm64
+        with:
+          image: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}@${{ steps.push.outputs.digest }}
+          format: cyclonedx-json
+          output-file: image-sbom-linux-arm64.cdx.json
+          artifact-name: image-sbom-${{ matrix.component }}-linux-arm64.cdx.json
+          upload-release-assets: false
+      - name: Attest linux/arm64 image SBOM
+        if: matrix.component != 'cube-template'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: image-sbom-linux-arm64.cdx.json
           push-to-registry: true
       - name: Record qualified candidate input
         run: echo '${{ matrix.component }}=${{ steps.push.outputs.digest }}' >> "$GITHUB_STEP_SUMMARY"

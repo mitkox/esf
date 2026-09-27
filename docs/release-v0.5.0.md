@@ -36,10 +36,14 @@ exact match.
    bytes under final asset names, and attests those same bytes for the final
    tag. It does not rebuild binaries.
 4. Before production deployment, build candidate factory, console,
-   managed-worker, optional intake, and Cube template images. Record qualified
-   image digests after VM and Kubernetes acceptance. Complete the failure and
-   security matrix, concurrency benchmarks, 24-hour soak, and isolated
-   backup/restore drills. Keep the console on loopback with a read-only factory
+   managed-worker, optional intake, and Cube template images. The candidate
+   workflow scans each pushed image digest for Linux/amd64 and Linux/arm64
+   (Cube template: Linux/amd64 only), retains the resulting image SBOMs, and
+   attests them separately. The source dependency SBOM attached to the binary
+   release is not an image inventory. Record qualified image digests after VM
+   and Kubernetes acceptance. Complete the per-platform image and transitive
+   license reviews, failure and security matrix, concurrency benchmarks,
+   24-hour soak, and isolated backup/restore drills. Keep the console on loopback with a read-only factory
    token. Follow Cube 0.7.2's node-drain and `hostNetworkChangeAck` procedure
    for existing Kubernetes clusters. Mark a deployment gate `passed` only after
    retaining its test record, then rerun `--require-qualified`.
