@@ -1,6 +1,12 @@
 # Deploying the factory worker
 
-The supported deployment uses an operator-managed Temporal cluster, CubeSandbox,
+The v0.5.0 archives are a binary preview. This guide describes the intended
+deployment configuration, but no production deployment is qualified by the
+release. Complete the relevant live, security, backup, restore, and soak checks
+for your environment before production use; see the
+[release inventory](../release/inventory.json) for recorded evidence.
+
+The target deployment uses an operator-managed Temporal cluster, CubeSandbox,
 and durable local storage on a dedicated factory host. Multiple workers on
 different hosts must share the same artifact filesystem. Cube template resources
 and egress policy must be set by the operator; the provider does not enforce the

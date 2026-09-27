@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rename a qualified RC release set without rebuilding any archive bytes."""
+"""Rename a verified RC release set without rebuilding any archive bytes."""
 
 import hashlib
 import json

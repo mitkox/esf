@@ -1,5 +1,6 @@
 {
   "release": "v0.5.0",
+  "release_profile": "binary-preview",
   "baseline": "399504f439e8abe3e3931b60b5db645ab6da7c22",
   "machinist": {
     "revision": "39435164faf1ff7fad49e41c38a7eb1a00538f21",

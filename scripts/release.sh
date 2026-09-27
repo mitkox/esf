@@ -11,9 +11,11 @@ if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
   exit 2
 fi
 
-if [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(test|rc)\.[1-9][0-9]*$ ]]; then
+if [[ "$version" == v0.5.0 ]]; then
+  python3 scripts/verify-release-inventory.py --require-preview
+elif [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(test|rc)\.[1-9][0-9]*$ ]]; then
   # A prerelease is a validation artifact. Pending deployment qualifications
-  # remain visible in the embedded inventory and cannot pass final promotion.
+  # remain visible in the embedded inventory and do not imply production use.
   python3 scripts/verify-release-inventory.py
 else
   python3 scripts/verify-release-inventory.py --require-qualified

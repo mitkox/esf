@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      checks: read
       id-token: write
       attestations: write
     env:
@@ -54,6 +55,16 @@ jobs:
           test "$(git cat-file -t "refs/tags/$RELEASE_VERSION")" = tag
           test "$(git rev-parse "refs/tags/$RELEASE_VERSION^{}")" = "$GITHUB_SHA"
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: Verify main CI for tagged commit
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ci_result=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs" \
+            --jq '[.check_runs[] | select(.name == "check")] | max_by(.id).conclusion')
+          test "$ci_result" = success
       - name: Build and verify frontend
         if: github.ref_name != 'v0.5.0'
         working-directory: internal/controlplane/web
@@ -71,7 +82,7 @@ jobs:
         run: |
           bash scripts/release.sh "$RELEASE_VERSION" dist-repeat
           diff -qr dist dist-repeat
-      - name: Promote qualified RC archives
+      - name: Promote verified RC archives
         if: github.ref_name == 'v0.5.0'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,13 +91,17 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$QUALIFIED_RC" =~ ^v0\.5\.0-rc\.[0-9]+$ ]]
-          python3 scripts/verify-release-inventory.py --require-qualified
+          python3 scripts/verify-release-inventory.py --require-preview
           test "$(git rev-parse "refs/tags/$QUALIFIED_RC^{}")" = "$GITHUB_SHA"
           mkdir rc-assets
           gh release download "$QUALIFIED_RC" --repo "$GITHUB_REPOSITORY" --dir rc-assets
           (cd rc-assets && shasum -a 256 -c checksums.txt)
           for archive in rc-assets/esf_*.tar.gz; do
             gh attestation verify "$archive" -R "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-ref "refs/tags/$QUALIFIED_RC"
+            gh attestation verify "$archive" -R "$GITHUB_REPOSITORY" \
+              --predicate-type https://cyclonedx.org/bom \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
               --source-ref "refs/tags/$QUALIFIED_RC"
           done
@@ -132,8 +147,10 @@ jobs:
         run: |
           set -euo pipefail
           flags=(--verify-tag --generate-notes)
-          if [[ "$RELEASE_VERSION" == *-* ]]; then
-            flags+=(--prerelease --notes "Validation candidate. Production qualification is recorded in dependency-inventory.json; pending gates must pass before v0.5.0 promotion.")
+          if [[ "$RELEASE_VERSION" == 'v0.5.0' ]]; then
+            flags+=(--notes "Binary preview: archives have verified checksums, reproducible RC inputs, and provenance. VM, Kubernetes, images, security, restore, and soak qualifications remain pending in dependency-inventory.json. Qualify your deployment before production use.")
+          elif [[ "$RELEASE_VERSION" == *-* ]]; then
+            flags+=(--prerelease --notes "Validation candidate for the v0.5.0 binary preview. Deployment qualifications remain pending in dependency-inventory.json.")
           fi
           gh release create "$RELEASE_VERSION" dist/* \
             --title "ESF $RELEASE_VERSION" \

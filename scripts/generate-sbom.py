@@ -2,11 +2,13 @@
 """Generate a CycloneDX inventory from the frozen Go, npm, and Python graphs."""
 
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 import sys
 import tomllib
 from urllib.parse import quote
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -55,12 +57,15 @@ def main():
         for ecosystem, name, version in source:
             purl = f"pkg:{ecosystem}/{quote(name, safe='/')}@{quote(version, safe='.+-')}"
             components[purl] = {"type": "library", "bom-ref": purl, "name": name, "version": version, "purl": purl}
+    ordered = [components[key] for key in sorted(components)]
+    component_digest = hashlib.sha256(json.dumps(ordered, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     bom = {
         "bomFormat": "CycloneDX",
         "specVersion": "1.6",
+        "serialNumber": f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, 'https://github.com/mitkox/esf/sbom/' + component_digest)}",
         "version": 1,
         "metadata": {"component": {"type": "application", "name": "esf", "version": "0.5.0"}},
-        "components": [components[key] for key in sorted(components)],
+        "components": ordered,
     }
     Path(sys.argv[1]).write_text(json.dumps(bom, indent=2, sort_keys=True) + "\n")
 

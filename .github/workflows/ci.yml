@@ -38,6 +38,10 @@ jobs:
         run: npm ci
       - name: Check frozen release inventory
         run: python3 scripts/verify-release-inventory.py
+      - name: Validate release SBOM
+        run: |
+          python3 scripts/generate-sbom.py /tmp/esf-ci-sbom.json
+          python3 -c 'import json, uuid; b=json.load(open("/tmp/esf-ci-sbom.json")); assert b["bomFormat"] == "CycloneDX" and b["specVersion"] == "1.6" and b["serialNumber"].startswith("urn:uuid:"); uuid.UUID(b["serialNumber"][9:])'
       - name: Audit frontend npm graph
         working-directory: internal/controlplane/web
         run: npm audit --audit-level=high

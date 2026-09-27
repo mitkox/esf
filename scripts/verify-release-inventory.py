@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check pinned release inputs and refuse an unqualified RC/final release."""
+"""Check pinned inputs and the requested distribution or deployment gate."""
 
 import argparse
 import hashlib
@@ -14,7 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--require-qualified", action="store_true")
+    gate = parser.add_mutually_exclusive_group()
+    gate.add_argument("--require-preview", action="store_true")
+    gate.add_argument("--require-qualified", action="store_true")
     args = parser.parse_args()
     inventory = json.loads((ROOT / "release/inventory.json").read_text())
     embedded_inventory = ROOT / "internal/releaseinfo/inventory.json"
@@ -57,6 +59,9 @@ def main() -> int:
     require(hashlib.sha256(template.encode()).hexdigest() == inventory["templates"]["recipe_sha256"], "Cube template recipe differs from inventory")
     dspy = next((package.get("version") for package in python["package"] if package["name"] == "dspy"), None)
     require(dspy == dependencies["dspy"], "DSPy lock differs from inventory")
+    if args.require_preview:
+        require(inventory.get("release_profile") == "binary-preview", "v0.5.0 binary preview profile is not declared")
+        require(inventory["qualification"].get("temporal_replay") == "passed", "Temporal history replay is not qualified")
     if args.require_qualified:
         for name, status in inventory["qualification"].items():
             require(status == "passed", f"qualification {name} is {status}")
@@ -70,7 +75,8 @@ def main() -> int:
         print(f"inventory: {issue}", file=sys.stderr)
     if issues:
         return 1
-    print("release inventory pins match lockfiles" + ("; qualification gates passed" if args.require_qualified else ""))
+    suffix = "; deployment qualification gates passed" if args.require_qualified else "; binary preview gate passed" if args.require_preview else ""
+    print("release inventory pins match lockfiles" + suffix)
     return 0
 
 

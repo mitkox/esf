@@ -29,6 +29,9 @@ and adds factory orchestration. See [upstream attribution](docs/upstream.md).
 This is actively developed software. Review the [validated behavior and
 operational requirements](docs/production-readiness.md) before deployment.
 ESF produces changes for review; it does not decide what ships.
+The v0.5.0 archives are a binary preview. VM, Kubernetes, container-image,
+security, restore, and soak qualifications are recorded separately in the
+[release inventory](release/inventory.json) and are not complete.
 
 ## QMS is optional
 
