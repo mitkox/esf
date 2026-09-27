@@ -78,6 +78,25 @@ minted locally.
   back; the TLS-only stack and doctor were healthy again. Frontend client
   authentication needs a separately qualified Temporal configuration.
 
+## TLS-backed VM concurrency fixture
+
+The published v0.5.0 binary ran the deterministic fixture at the requested
+1/4/8 concurrency levels against the isolated TLS Temporal service and
+CubeSandbox 0.7.2. All 13 runs passed build and test gates on one agent
+attempt, verified cleanup, and left no live sandbox. Raw results and worker
+logs are retained at
+`/home/mitko/.local/share/esf/qualification/benchmark-v050-tls-20260927-01`.
+
+| Runs | Batch wall time | P95 run duration | Worker peak RSS |
+| ---: | ---: | ---: | ---: |
+| 1 | 1.30 s | 1.15 s | 51.7 MB |
+| 4 | 1.71 s | 1.42 s | 58.8 MB |
+| 8 | 2.21 s | 1.89 s | 67.7 MB |
+
+Each level has only one batch of a deterministic fixture. This does not
+qualify model-backed workload latency, the Kubernetes target, failure
+behavior under load, or a 24-hour soak.
+
 ## Gates remaining
 
 The release inventory correctly leaves VM, Kubernetes, restore, security,
