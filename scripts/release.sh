@@ -11,14 +11,16 @@ if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
   exit 2
 fi
 
-if [[ "$version" == *-test* ]]; then
+if [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(test|rc)\.[1-9][0-9]*$ ]]; then
+  # A prerelease is a validation artifact. Pending deployment qualifications
+  # remain visible in the embedded inventory and cannot pass final promotion.
   python3 scripts/verify-release-inventory.py
 else
   python3 scripts/verify-release-inventory.py --require-qualified
-  if [[ -n $(git status --porcelain --untracked-files=normal) ]]; then
-    echo "release builds require a clean checkout" >&2
-    exit 1
-  fi
+fi
+if [[ "$version" != *-test.* && -n $(git status --porcelain --untracked-files=normal) ]]; then
+  echo "release builds require a clean checkout" >&2
+  exit 1
 fi
 
 mkdir -p "$output_dir"

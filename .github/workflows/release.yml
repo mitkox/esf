@@ -50,6 +50,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[1-9][0-9]*)?$ ]]
           test "$(git cat-file -t "refs/tags/$RELEASE_VERSION")" = tag
           test "$(git rev-parse "refs/tags/$RELEASE_VERSION^{}")" = "$GITHUB_SHA"
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
@@ -132,7 +133,7 @@ jobs:
           set -euo pipefail
           flags=(--verify-tag --generate-notes)
           if [[ "$RELEASE_VERSION" == *-* ]]; then
-            flags+=(--prerelease)
+            flags+=(--prerelease --notes "Validation candidate. Production qualification is recorded in dependency-inventory.json; pending gates must pass before v0.5.0 promotion.")
           fi
           gh release create "$RELEASE_VERSION" dist/* \
             --title "ESF $RELEASE_VERSION" \
