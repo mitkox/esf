@@ -97,12 +97,69 @@ Each level has only one batch of a deterministic fixture. This does not
 qualify model-backed workload latency, the Kubernetes target, failure
 behavior under load, or a 24-hour soak.
 
+## Isolated TLS restore exercise
+
+- The TLS qualification stack's Temporal and visibility databases were backed
+  up with `pg_dump -Fc`. Factory data, configuration, and the CA, certificate,
+  and payload keyring were copied into an owner-only backup directory. All 21
+  backup files matched recorded SHA-256 checksums before recovery.
+- The databases were restored with `pg_restore --clean --if-exists` into a
+  second PostgreSQL volume. A separate Temporal 1.32.0 service was started on
+  loopback port 7245 while the source stack stayed on port 7244. The recovered
+  service became healthy and the published factory binary passed every
+  production-profile doctor check using the recovered configuration.
+- The recovered Temporal database served the conformance run's full 95-event
+  history over TLS; its final event was workflow completion. The recovered
+  factory manifest still reported `SUCCEEDED` and verified cleanup. The
+  recovered `changes.patch` SHA-256 matched the source artifact:
+  `365194a7478c8a4a35e3f59104b27496b1a3eb1f52166cc27c78bfdae8af2769`.
+- Evidence is under
+  `/home/mitko/.local/share/esf/qualification/restore-drill-20260927`.
+  This covers an isolated TLS qualification stack. It does not exercise a
+  production VM backup service, Kubernetes volumes and Secrets, external
+  credential re-provisioning, or the operator's disaster-recovery runbook.
+  The release inventory's restore gate remains pending.
+
+## Published candidate image inventory and scanner matches
+
+[Candidate image workflow run](https://github.com/mitkox/esf/actions/runs/36327428784)
+completed successfully from this qualification branch. It built five images
+and uploaded and attested nine platform-specific CycloneDX image SBOMs: amd64
+and arm64 for factory, console, managed worker, and intake; amd64 for the Cube
+template. These are candidate images built after the v0.5.0 binary release,
+not promoted release image digests. The SBOM artifacts are retained in the
+workflow run and were downloaded for inspection under
+`/home/mitko/.local/share/esf/qualification/candidate-images-20260927/sboms`.
+
+Grype 0.119.0 scanned each candidate SBOM with its 2026-09-26 database. Raw
+reports and SHA-256 checksums are preserved alongside the SBOMs under
+`/home/mitko/.local/share/esf/qualification/candidate-images-20260927`.
+The two architectures reported equal high/critical counts for each
+multi-platform component.
+
+| Candidate image | High | Critical |
+| --- | ---: | ---: |
+| Factory | 0 | 0 |
+| Console | 0 | 0 |
+| Managed worker | 90 | 29 |
+| Intake | 64 | 10 |
+| Cube template | 24 | 8 |
+
+The Cube template includes `/usr/bin/envd` with Go 1.25.4 and
+`golang.org/x/crypto` 0.49.0; Grype lists fixed versions for its critical
+matches. SBOM-based Go matching lacks symbol reachability, so these are
+findings for triage rather than exploitability conclusions. The image security
+gate remains open. A preliminary license inspection also found unknown license
+metadata for seven distinct optional-intake Python packages and many license
+expressions in the large Debian-based images; transitive license approval is
+still pending.
+
 ## Gates remaining
 
 The release inventory correctly leaves VM, Kubernetes, restore, security,
 performance, 24-hour soak, agent acceptance, Cube lifecycle, and migration
 pending. This host update closes none of those gates. Continue with a
 production TLS and client-auth deployment, valid CubeEgress credentials,
-the live L7 probe, published candidate-image digests and per-platform
-scans, isolated restore and rollback, and the 1/4/8-run and 24-hour
+the live L7 probe, candidate-image security triage and transitive license
+review, production restore and rollback, and the 1/4/8-run and 24-hour
 matrices before changing the inventory.
