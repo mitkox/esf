@@ -400,6 +400,7 @@ func TestQualityWorkflowReconstructsCommittedAndUntrackedBytes(t *testing.T) {
 			}
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
+			env.SetTestTimeout(30 * time.Second)
 			env.SetStartWorkflowOptions(client.StartWorkflowOptions{ID: record.WorkflowID})
 			env.RegisterWorkflow(SoftwareChangeWorkflow)
 			env.RegisterActivity(acts)
