@@ -147,23 +147,37 @@ func (r *Runtime) Activities() (*Activities, error) {
 
 // TemporalClient dials Temporal. The caller must Close the returned client.
 func (r *Runtime) TemporalClient() (client.Client, error) {
-	connection, err := r.Config.Temporal.connectionOptions()
+	return NewTemporalClient(r.Config, r.Log)
+}
+
+// NewTemporalClient dials Temporal from configuration without building a
+// runtime.
+//
+// Containment commands use it deliberately: stopping a run must not depend on
+// the configuration being policy-compliant. A worker refuses to start on an
+// unacknowledged open egress policy, but an operator must still be able to halt
+// the runs that are already in flight.
+func NewTemporalClient(cfg Config, log *slog.Logger) (client.Client, error) {
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+	connection, err := cfg.Temporal.connectionOptions()
 	if err != nil {
 		return nil, err
 	}
 	opts := client.Options{
-		HostPort:  r.Config.Temporal.HostPort,
-		Namespace: r.Config.Temporal.Namespace,
+		HostPort:  cfg.Temporal.HostPort,
+		Namespace: cfg.Temporal.Namespace,
 		// Identity makes it obvious in the Temporal UI which worker handled a
 		// task, and distinguishes concurrent workers on one host.
-		Identity:          workerIdentity(r.Config.Temporal.IdentityPrefix),
-		Logger:            newTemporalLogger(r.Log),
+		Identity:          workerIdentity(cfg.Temporal.IdentityPrefix),
+		Logger:            newTemporalLogger(log),
 		ConnectionOptions: connection,
 	}
-	if name := r.Config.Temporal.APIKeyEnv; name != "" {
+	if name := cfg.Temporal.APIKeyEnv; name != "" {
 		opts.Credentials = client.NewAPIKeyStaticCredentials(os.Getenv(name))
 	}
-	if path := r.Config.Temporal.PayloadKeyring; path != "" {
+	if path := cfg.Temporal.PayloadKeyring; path != "" {
 		codec, err := loadPayloadCodec(path)
 		if err != nil {
 			return nil, err
@@ -173,7 +187,7 @@ func (r *Runtime) TemporalClient() (client.Client, error) {
 	}
 	c, err := client.Dial(opts)
 	if err != nil {
-		return nil, fmt.Errorf("dial temporal at %s: %w", r.Config.Temporal.HostPort, err)
+		return nil, fmt.Errorf("dial temporal at %s: %w", cfg.Temporal.HostPort, err)
 	}
 	return c, nil
 }

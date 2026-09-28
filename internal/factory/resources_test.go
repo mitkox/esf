@@ -21,7 +21,7 @@ func boolPtr(v bool) *bool { return &v }
 
 // resourceConfig builds a configuration with one of each resource kind.
 func resourceConfig() Config {
-	cfg := Default()
+	cfg := hardenedDefaults()
 	cfg.Cube.APIURL = "http://127.0.0.1:4000"
 	cfg.Cube.TemplateID = "tpl-test"
 	cfg.Repositories.Allowed = []string{"https://github.com/acme/", "https://github.com/other/"}

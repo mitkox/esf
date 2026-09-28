@@ -10,7 +10,9 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/mitkox/esf/internal/agentharness"
+	"github.com/mitkox/esf/internal/notify"
 	"github.com/mitkox/esf/internal/repository"
+	"github.com/mitkox/esf/internal/threatmon"
 	"github.com/mitkox/esf/internal/verification"
 )
 
@@ -117,6 +119,17 @@ type workflowState struct {
 	budgetExceeded []string
 	changeID       string
 	changeRecorded bool
+
+	// ── Hardening ───────────────────────────────────────────────────────────
+	// Every field here is derived from an activity result, so it is
+	// deterministic under replay.
+	egressProbe   *EgressProbeResult
+	behavior      *threatmon.Report
+	behaviorError string
+	gateIntegrity *GateIntegrity
+	blocked       bool
+	blockedReason string
+	alerts        []AlertRecord
 }
 
 // SoftwareChangeWorkflow is the factory's durable run:
@@ -434,13 +447,59 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	s.setCondition(ctx, ConditionInventoryWritten, ConditionTrue, "Published",
 		"path="+inventory.Path+" digest="+inventory.Digest)
 
-	// ── 5. Lock down runtime egress ──────────────────────────────────────────
+	// ── 5. Lock down runtime egress and then MEASURE it ────────────────────
+	// The lockdown is a request to the provider. The probe is the factory's
+	// evidence about what actually happened. If the two disagree, the run stops
+	// before untrusted code executes: a boundary that is believed but not in
+	// effect is worse than a boundary that is known to be absent.
 	s.status.CurrentStep = "sandbox.network.lockdown"
-	if err := executeActivity(ctx, acts.ApplyRuntimeNetwork, infraRetry(), ApplyRuntimeNetworkInput{
-		RunID: req.RunID, SandboxID: s.sandboxID, Harness: req.AgentHarness,
-	}).Get(ctx, nil); err != nil {
-		s.status.State = StateInfrastructureFailed
-		return fmt.Errorf("apply runtime network policy: %w", err)
+	var lockdown ApplyRuntimeNetworkOutput
+	lockdownErr := executeActivity(ctx, acts.ApplyRuntimeNetwork, infraRetry(), ApplyRuntimeNetworkInput{
+		RunID:      req.RunID,
+		SandboxID:  s.sandboxID,
+		Harness:    req.AgentHarness,
+		ExpectDeny: !s.resources.Egress.AllowsInternet(),
+		Policy:     s.resources.EgressPolicy,
+	}).Get(ctx, &lockdown)
+	if lockdownErr != nil {
+		s.status.State = StateEgressUnverified
+		s.setCondition(ctx, ConditionEgressVerified, ConditionFalse, "ProbeFailed", lockdownErr.Error())
+		s.recordAlert(ctx, acts, req, AlertEgressViolated, notify.SeverityCritical,
+			"sandbox egress could not be verified", map[string]string{"error": lockdownErr.Error()})
+		s.collect(ctx, acts, req, "")
+		return fmt.Errorf("verify sandbox egress: %w", lockdownErr)
+	}
+	if probe := lockdown.Probe; probe != nil {
+		s.egressProbe = probe
+		if lockdown.ProbeEvidenceError != "" {
+			// The measurement happened but its durable record did not. That is
+			// an evidence failure like any other: a run may not report SUCCEEDED
+			// while its boundary evidence is missing.
+			s.collectionFailed = true
+			s.status.Error = "egress probe evidence persistence failed: " + lockdown.ProbeEvidenceError
+		}
+		if len(probe.Violations) > 0 {
+			// Fail closed: the boundary the run depends on is not the boundary
+			// the factory believed it had. The agent never runs.
+			detail := strings.Join(probe.Violations, "; ")
+			s.status.State = StateEgressUnverified
+			s.setCondition(ctx, ConditionEgressVerified, ConditionFalse, "BoundaryViolated", detail)
+			s.recordAlert(ctx, acts, req, AlertEgressViolated, notify.SeverityCritical,
+				"sandbox security invariants violated", map[string]string{
+					"violations": detail,
+					"canary":     probeSummary(*probe),
+				})
+			s.collect(ctx, acts, req, "")
+			return fmt.Errorf("sandbox security invariants violated: %s", detail)
+		}
+		s.setCondition(ctx, ConditionEgressVerified, ConditionTrue, "Probed", probeSummary(*probe))
+	} else {
+		s.setCondition(ctx, ConditionEgressVerified, ConditionUnknown, "ProbeDisabled",
+			"hardening.egress_probe is disabled: the applied network policy was not measured")
+		if lockdown.ProbeEvidenceError != "" {
+			s.collectionFailed = true
+			s.status.Error = "egress probe evidence persistence failed: " + lockdown.ProbeEvidenceError
+		}
 	}
 
 	// ── 6. Run the coding agent ─────────────────────────────────────────────
@@ -479,7 +538,14 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 		s.status.AgentOutcome = OutcomeError
 		s.status.State = StateAgentFailed
 		s.setCondition(ctx, ConditionAgentCompleted, ConditionFalse, "ActivityFailed", agentErr.Error())
-		s.collect(ctx, acts, req, "")
+		// An activity can fail after the agent changed the tree. Audit that
+		// partial work before recording an ordinary agent failure.
+		if err := s.auditAndScan(ctx, acts, req); err != nil {
+			return err
+		}
+		if err := s.quarantineIfTripped(ctx, acts, req, -1); err != nil {
+			return err
+		}
 		return fmt.Errorf("agent execution failed: %w", agentErr)
 	}
 
@@ -490,6 +556,10 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	s.agent = agentOut.Result
 	s.agentRan = true
 	s.agentAttmpt = agentOut.Attempt
+	s.blocked = agentOut.Blocked
+	s.blockedReason = agentOut.BlockedReason
+	s.behavior = agentOut.Behavior
+	s.behaviorError = agentOut.BehaviorError
 	switch {
 	case agentOut.Result.Succeeded():
 		s.agentOutcome = OutcomeSuccess
@@ -500,28 +570,72 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	}
 	s.status.AgentOutcome = s.agentOutcome
 
+	// ── 6a. Behavior quarantine ─────────────────────────────────────────────
+	// A tripped monitor stops the run BEFORE verification and before any
+	// success can be recorded. The patch is still collected as evidence, but it
+	// is never presented as a deliverable that passed its gates.
+	//
+	// The scan covers the agent's output AND the collected patch. The decision
+	// is made once, after both, so a rule that matches the patch (a rewritten
+	// build script, for example) cannot be missed by scanning only stdout.
+
+	// ── 6b. The agent's documented stop signal ──────────────────────────────
+	// BLOCKED is a legitimate outcome, not a failure. It exists so a stuck
+	// agent has an honest exit instead of improvising around its sandbox.
+	//
+	// Gate integrity is checked BEFORE the stop signal is honoured. Otherwise an
+	// agent that rewrote a gate could end the run as BLOCKED — a documented
+	// "not a security event" — and never reach GATE_TAMPERED.
+	if agentOut.Blocked {
+		if err := s.auditAndScan(ctx, acts, req); err != nil {
+			return err
+		}
+		if err := s.quarantineIfTripped(ctx, acts, req, agentOut.Result.ExitCode); err != nil {
+			return err
+		}
+		s.status.VerifyOutcome = OutcomeSkipped
+		s.status.State = StateBlocked
+		s.setCondition(ctx, ConditionAgentBlocked, ConditionTrue, "AgentReportedBlocked", s.blockedReason)
+		s.setCondition(ctx, ConditionAgentCompleted, ConditionFalse, "Blocked", s.blockedReason)
+		if s.resources.Hardening.AlertOnBlocked {
+			s.recordAlert(ctx, acts, req, AlertBlocked, notify.SeverityWarning,
+				"agent reported BLOCKED", map[string]string{"reason": s.blockedReason})
+		}
+		return fmt.Errorf("agent reported blocked: %s", s.blockedReason)
+	}
+	s.setCondition(ctx, ConditionAgentBlocked, ConditionFalse, "NotBlocked", agentOut.BlockedSignalError)
+
 	if !agentOut.Result.Succeeded() {
 		// There is nothing meaningful to verify when the agent did not
 		// succeed. Verification is recorded as SKIPPED, never silently absent.
+		// A partial patch is still collected and audited: a failed agent that
+		// rewrote its gates is still a gate violation.
+		if err := s.auditAndScan(ctx, acts, req); err != nil {
+			return err
+		}
+		if err := s.quarantineIfTripped(ctx, acts, req, agentOut.Result.ExitCode); err != nil {
+			return err
+		}
 		s.status.VerifyOutcome = OutcomeSkipped
 		s.status.State = StateAgentFailed
 		s.setCondition(ctx, ConditionAgentCompleted, ConditionFalse, agentFailureReason(agentOut.Result),
 			fmt.Sprintf("exit=%d timed_out=%v", agentOut.Result.ExitCode, agentOut.Result.TimedOut))
-		// The partial patch is still collected: evidence for a failed run is as
-		// valuable as for a successful one.
-		s.collect(ctx, acts, req, "")
 		return fmt.Errorf("agent did not succeed: exit code %d, timed out=%v",
 			agentOut.Result.ExitCode, agentOut.Result.TimedOut)
 	}
 	s.setCondition(ctx, ConditionAgentCompleted, ConditionTrue, "ExitZero",
 		fmt.Sprintf("attempt=%d duration=%s", agentOut.Attempt, agentOut.Result.Duration))
 
-	// ── 6. Capture the agent's contribution BEFORE verification ─────────────
-	// This ordering matters: a verification gate can rewrite tracked files (a
-	// build step regenerating a lockfile, for example). Capturing the patch
-	// after the gates would attribute that side effect to the agent and put
-	// sandbox-local paths into the deliverable.
-	s.collect(ctx, acts, req, "")
+	// ── 6. Capture the agent's contribution and audit it ────────────────────
+	// Collection happens BEFORE verification because a gate can rewrite tracked
+	// files (a build step regenerating a lockfile): capturing afterwards would
+	// attribute that side effect to the agent.
+	if err := s.auditAndScan(ctx, acts, req); err != nil {
+		return err
+	}
+	if err := s.quarantineIfTripped(ctx, acts, req, agentOut.Result.ExitCode); err != nil {
+		return err
+	}
 
 	// ── 7. Deterministic verification ───────────────────────────────────────
 	s.status.CurrentStep = "verify"
@@ -592,17 +706,177 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	}
 
 	// ── 9. Decide the factory result ────────────────────────────────────────
-	// Only deterministic exit codes decide this. The model never does, and
-	// neither does a human decision: a reviewer's rejection is recorded in
-	// HumanResult and returns the change to OPEN, but it does not falsify what
-	// the gates reported.
+	// Deterministic exit codes decide whether the CHANGE IS GOOD. A human
+	// decision decides whether it is ACCEPTED. When review is configured the two
+	// are separate outcomes: a rejection means the gates passed but a person
+	// refused the change, which must never be reported as SUCCEEDED. Recording
+	// it as SUCCEEDED would make the human gate decorative.
 	if !verified.Result.Passed {
 		s.status.State = StateVerificationFailed
 		return fmt.Errorf("verification failed: gates [%s] did not pass",
 			strings.Join(verified.Result.FailingSteps(), ", "))
 	}
+	if s.reviewRequested && s.reviewOutcome == HumanResultRejected {
+		s.status.State = StateRejected
+		return fmt.Errorf("change rejected by human review: %s", s.reviewNote)
+	}
 	s.status.State = StateSucceeded
 	return nil
+}
+
+// auditGates collects the agent's contribution and checks gate integrity.
+//
+// It returns true when a gate was modified. Every exit path that captures a
+// patch goes through here, so "the agent failed" or "the agent reported
+// blocked" can never hide a rewritten gate.
+func (s *workflowState) auditGates(ctx workflow.Context, acts *Activities, req RunRequest) (bool, error) {
+	s.collect(ctx, acts, req, "")
+
+	var integrity CheckGateIntegrityOutput
+	if err := executeActivity(ctx, acts.CheckGateIntegrity, noRetry(), CheckGateIntegrityInput{
+		RunID:         req.RunID,
+		SandboxID:     s.sandboxID,
+		RepositoryDir: req.EffectiveRepositoryDir(),
+		BaselineSHA:   s.baseline.SHA,
+		GatePaths:     s.resources.Hardening.GatePaths,
+		Allowed:       s.resources.Hardening.AllowGateSelfModification,
+	}).Get(ctx, &integrity); err != nil {
+		// A check that could not run is not a clean gate.
+		s.status.State = StateInfrastructureFailed
+		s.setCondition(ctx, ConditionGateIntegrity, ConditionFalse, "CheckFailed", err.Error())
+		return false, fmt.Errorf("check gate integrity: %w", err)
+	}
+	s.gateIntegrity = &integrity.Integrity
+	if integrity.EvidenceError != "" {
+		s.collectionFailed = true
+		s.status.Error = "gate integrity evidence persistence failed: " + integrity.EvidenceError
+	}
+	if len(integrity.Integrity.Modified) > 0 {
+		detail := strings.Join(integrity.Integrity.Modified, ", ")
+		s.status.VerifyOutcome = OutcomeSkipped
+		s.status.State = StateGateTampered
+		s.setCondition(ctx, ConditionGateIntegrity, ConditionFalse, "GateModified", detail)
+		s.recordAlert(ctx, acts, req, AlertGateTampered, notify.SeverityCritical,
+			"agent modified the gates that judge it", map[string]string{"paths": detail})
+		return true, nil
+	}
+	if !integrity.Integrity.Checked {
+		// Never report an unperformed check as clean.
+		s.setCondition(ctx, ConditionGateIntegrity, ConditionUnknown, "NotChecked",
+			"gate integrity was not checked")
+		return false, nil
+	}
+	s.setCondition(ctx, ConditionGateIntegrity, ConditionTrue, "Unmodified",
+		fmt.Sprintf("method=%s gates=%d", integrity.Integrity.Method, len(integrity.Integrity.GatePaths)))
+	return false, nil
+}
+
+// auditAndScan collects the patch, checks gate integrity, and scans the patch.
+//
+// It is the single audit step every exit path runs, so no agent outcome can
+// skip it. A gate violation or an infrastructure failure ends the run here.
+func (s *workflowState) auditAndScan(ctx workflow.Context, acts *Activities, req RunRequest) error {
+	tampered, err := s.auditGates(ctx, acts, req)
+	if err != nil {
+		return err
+	}
+	if tampered {
+		return fmt.Errorf("gate integrity violated: the agent modified %s",
+			strings.Join(s.gateIntegrity.Modified, ", "))
+	}
+	if !s.resources.Hardening.BehaviorMonitorEnabled {
+		return nil
+	}
+	var out ScanPatchOutput
+	if err := executeActivity(ctx, acts.ScanPatch, noRetry(), ScanPatchInput{
+		RunID:                     req.RunID,
+		AllowGateSelfModification: s.resources.Hardening.AllowGateSelfModification,
+	}).Get(ctx, &out); err != nil {
+		// A scan that could not run is recorded, never silently skipped: an
+		// unscanned patch must not look like a clean one.
+		s.behaviorError = appendError(s.behaviorError, "patch scan: "+err.Error())
+		return nil
+	}
+	s.behavior = mergeThreatReports(s.behavior, out.Report)
+	if out.Error != "" {
+		s.behaviorError = appendError(s.behaviorError, out.Error)
+	}
+	return nil
+}
+
+// quarantineIfTripped stops the run when the behavior monitor tripped, and
+// records the scan outcome otherwise.
+//
+// It runs after every scan has contributed, so the verdict covers the agent's
+// output and the collected patch together.
+func (s *workflowState) quarantineIfTripped(ctx workflow.Context, acts *Activities, req RunRequest, exitCode int) error {
+	if s.behavior == nil {
+		reason := "MonitorDisabled"
+		message := "hardening.behavior_monitor is disabled: agent output was not scanned"
+		if s.behaviorError != "" {
+			reason = "ScanError"
+			message = s.behaviorError
+		}
+		s.setCondition(ctx, ConditionBehaviorScanned, ConditionUnknown, reason, message)
+		return nil
+	}
+	if s.behavior.Tripped {
+		s.status.VerifyOutcome = OutcomeSkipped
+		s.status.State = StateQuarantined
+		s.setCondition(ctx, ConditionBehaviorScanned, ConditionFalse, "Tripped", threatReportSummary(*s.behavior))
+		s.setCondition(ctx, ConditionAgentCompleted, ConditionFalse, "Quarantined",
+			fmt.Sprintf("exit=%d findings=%d", exitCode, len(s.behavior.Findings)))
+		s.recordAlert(ctx, acts, req, AlertQuarantine, notify.SeverityCritical,
+			"agent behavior monitor tripped", threatReportDetail(*s.behavior))
+		return fmt.Errorf("run quarantined by behavior monitor: %s", threatReportSummary(*s.behavior))
+	}
+	reason := "Clean"
+	if len(s.behavior.Findings) > 0 {
+		reason = "FindingsBelowThreshold"
+	}
+	message := threatReportSummary(*s.behavior)
+	if s.behaviorError != "" {
+		message = appendError(message, s.behaviorError)
+	}
+	s.setCondition(ctx, ConditionBehaviorScanned, ConditionTrue, reason, message)
+	return nil
+}
+
+// recordAlert delivers one security alert through an activity.
+//
+// Alerting is deliberately outside the run's success criteria: a webhook outage
+// must not become a factory outage. The record, delivered or not, is carried
+// into the manifest so a silent alerting failure stays visible.
+func (s *workflowState) recordAlert(
+	ctx workflow.Context,
+	acts *Activities,
+	req RunRequest,
+	kind string,
+	severity notify.Severity,
+	summary string,
+	detail map[string]string,
+) {
+	opts := workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
+	}
+	var out AlertOutput
+	if err := executeActivity(ctx, acts.RaiseAlert, opts, AlertInput{
+		RunID:    req.RunID,
+		Kind:     kind,
+		Severity: string(severity),
+		Summary:  summary,
+		Detail:   detail,
+	}).Get(ctx, &out); err != nil {
+		s.alerts = append(s.alerts, AlertRecord{
+			Kind:     kind,
+			Severity: string(severity),
+			Summary:  summary,
+			Error:    err.Error(),
+		})
+		return
+	}
+	s.alerts = append(s.alerts, out.Record)
 }
 
 // reviewGate pauses a run for a human decision.
@@ -619,7 +893,15 @@ func (s *workflowState) reviewGate(ctx workflow.Context, acts *Activities, req R
 		"timeout="+s.resources.ReviewTimeout.Std().String())
 
 	// 1. Publish previews while the sandbox is definitely awake.
-	if len(s.reviewPorts) > 0 {
+	//
+	// Publication is an INBOUND exposure of the sandbox, so it is gated on the
+	// same operator switch as `factory preview`. The review gate previously
+	// published regardless of [sandbox] allow_preview, which made the
+	// documented default-closed posture untrue for the review path.
+	if len(s.reviewPorts) > 0 && !s.resources.AllowPreview {
+		s.previewOutcome = OutcomeSkipped
+		s.reviewError = appendError(s.reviewError, "preview: skipped because [sandbox] allow_preview is not set")
+	} else if len(s.reviewPorts) > 0 {
 		var previews PreviewOutput
 		if err := executeActivity(ctx, acts.PreviewSandbox, infraRetry(), PreviewInput{
 			RunID:     req.RunID,
@@ -802,6 +1084,7 @@ func (s *workflowState) collect(ctx workflow.Context, acts *Activities, req RunR
 		RunID:         req.RunID,
 		SandboxID:     s.sandboxID,
 		RepositoryDir: req.EffectiveRepositoryDir(),
+		BaselineSHA:   s.baseline.SHA,
 		Phase:         phase,
 	}).Get(ctx, &collected); err != nil {
 		s.collectionFailed = true
@@ -965,6 +1248,13 @@ func finalizeRun(
 		ReviewError:             state.reviewError,
 		Previews:                state.previews,
 		BudgetExceeded:          state.budgetExceeded,
+		Hardening: &HardeningEvidence{
+			EgressProbe:   state.egressProbe,
+			Behavior:      state.behavior,
+			BehaviorError: state.behaviorError,
+			GateIntegrity: state.gateIntegrity,
+			Alerts:        state.alerts,
+		},
 	}
 
 	var out FinalizeOutput

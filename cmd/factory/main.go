@@ -82,6 +82,9 @@ verification, one verified patch out.`,
 		newDoctorCommand(&configPath),
 		newSandboxesCommand(&configPath),
 		newInitCommand(),
+		newCancelCommand(&configPath),
+		newHaltCommand(&configPath),
+		newThreatsCommand(&configPath),
 	)
 	return root
 }
@@ -243,6 +246,9 @@ execute an arbitrary program.`,
 			run, err := temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 				ID:        workflowID,
 				TaskQueue: cfg.Temporal.TaskQueue,
+				// The memo is what makes `factory halt --harness/--scope`
+				// possible without registering cluster search attributes.
+				Memo: factory.RunMemoFor(req),
 			}, factory.SoftwareChangeWorkflow, req)
 			if err != nil {
 				return fmt.Errorf("start workflow: %w", err)
@@ -343,6 +349,7 @@ func printRunResult(runtime *factory.Runtime, manifest factory.RunManifest, runI
 	if len(manifest.BudgetExceeded) > 0 {
 		fmt.Printf("BUDGET:         EXCEEDED (%s)\n", strings.Join(manifest.BudgetExceeded, "; "))
 	}
+	printHardeningSummary(manifest.Hardening)
 	if manifest.VerificationResult != "" {
 		if manifest.VerificationResult == factory.OutcomeSuccess {
 			fmt.Printf("VERIFICATION:   PASSED\n")
@@ -688,6 +695,21 @@ func newDoctorCommand(configPath *string) *cobra.Command {
 				fmt.Printf("Configuration validation:\n  [FAIL] %v\n\n", err)
 				problems++
 			}
+
+			fmt.Println("Hardening:")
+			fmt.Printf("  egress probe:    %v\n", cfg.Hardening.EgressProbeEnabled())
+			fmt.Printf("  behavior monitor:%v (trip at %s)\n", cfg.Hardening.BehaviorMonitorEnabled(), cfg.Hardening.TripLevel())
+			fmt.Printf("  gate self-mod:   %v\n", cfg.Hardening.AllowGateSelfModification)
+			fmt.Printf("  require non-root:%v\n", cfg.Hardening.RequireNonRoot)
+			fmt.Printf("  alerts:          %v\n", cfg.Hardening.AlertsEnabled())
+			fmt.Printf("  open egress ack: %v\n", cfg.Hardening.AcknowledgeOpenEgress)
+			for _, warning := range cfg.HardeningWarnings() {
+				fmt.Printf("  [WARN] %s\n", warning)
+			}
+			if len(cfg.HardeningWarnings()) == 0 {
+				fmt.Println("  [ok]   no hardening warnings")
+			}
+			fmt.Println()
 
 			fmt.Println("CubeSandbox:")
 			if offline {

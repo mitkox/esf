@@ -326,6 +326,29 @@ type ResolvedResources struct {
 	PreviewPorts []int `json:"preview_ports,omitempty"`
 	// Suspend requests checkpointing while paused.
 	Suspend bool `json:"suspend,omitempty"`
+	// AllowPreview is the resolved [sandbox] allow_preview switch. The review
+	// gate honours it too, so an inbound preview can never be published by a
+	// path that the operator has not enabled.
+	AllowPreview bool `json:"allow_preview,omitempty"`
+	// Hardening is the resolved defense-in-depth policy for this run. Workflow
+	// code reads it from here rather than from the live config, because a
+	// config change mid-run would break replay.
+	Hardening ResolvedHardening `json:"hardening,omitempty"`
+}
+
+// ResolvedHardening is the subset of hardening policy the workflow itself must
+// decide on. Everything else is read by activities, which are not replayed.
+type ResolvedHardening struct {
+	// BehaviorMonitorEnabled records whether the agent's output is scanned.
+	BehaviorMonitorEnabled bool `json:"behavior_monitor_enabled"`
+	// AlertOnBlocked records whether a blocked agent raises an alert.
+	AlertOnBlocked bool `json:"alert_on_blocked"`
+	// AllowGateSelfModification records whether a patch may modify its own
+	// gates.
+	AllowGateSelfModification bool `json:"allow_gate_self_modification"`
+	// GatePaths are the repository-relative gate programs a patch must not
+	// modify, in stable order.
+	GatePaths []string `json:"gate_paths,omitempty"`
 }
 
 // Digest is a stable hash of the whole resolved resource set, recorded in the
@@ -480,6 +503,13 @@ func (c Config) ResolveResources(req RunRequest) (ResolvedResources, error) {
 		review = *req.Review
 	}
 	out.Review = review
+	out.AllowPreview = c.Sandbox.AllowPreview
+	out.Hardening = ResolvedHardening{
+		BehaviorMonitorEnabled:    c.Hardening.BehaviorMonitorEnabled(),
+		AlertOnBlocked:            c.Hardening.AlertOnBlockedEnabled(),
+		AllowGateSelfModification: c.Hardening.AllowGateSelfModification,
+		GatePaths:                 c.GateScriptPaths(),
+	}
 	if review {
 		timeout := c.Review.Timeout.Std()
 		if timeout <= 0 {

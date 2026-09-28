@@ -50,6 +50,21 @@ const (
 	// ceiling. It is evidence, never enforcement: the factory does not rewrite a
 	// result because a budget was hit.
 	ConditionBudgetExceeded ConditionType = "BudgetExceeded"
+	// ConditionEgressVerified reports that the sandbox boundary was measured
+	// after the runtime policy was applied, and matched the policy.
+	ConditionEgressVerified ConditionType = "EgressVerified"
+	// ConditionBehaviorScanned reports that the agent's output was scanned for
+	// out-of-bounds behavior.
+	ConditionBehaviorScanned ConditionType = "BehaviorScanned"
+	// ConditionGateIntegrity reports that the agent's patch did not modify the
+	// deterministic gates that judge it.
+	ConditionGateIntegrity ConditionType = "GateIntegrity"
+	// ConditionAgentBlocked reports that the agent reported BLOCKED through the
+	// documented contract rather than failing.
+	ConditionAgentBlocked ConditionType = "AgentBlocked"
+	// ConditionAlerted reports whether a security alert was delivered to the
+	// configured webhook. A delivery failure is recorded, never fatal.
+	ConditionAlerted ConditionType = "Alerted"
 )
 
 // ConditionStatus is the tri-state used by every condition.

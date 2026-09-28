@@ -51,7 +51,7 @@ func TestWorkflowReviewGateApprovedPausesAndResumes(t *testing.T) {
 	}
 
 	manifest, err := runWorkflowOpts(t, fake, baseRequest(t), workflowRunOptions{
-		mutateConfig: func(cfg *Config) { cfg.Review = reviewConfig(time.Hour) },
+		mutateConfig: func(cfg *Config) { cfg.Review = reviewConfig(time.Hour); cfg.Sandbox.AllowPreview = true },
 	}, envSetup)
 	if err != nil {
 		t.Fatalf("workflow returned an error: %v", err)
@@ -153,10 +153,12 @@ func TestBudgetWallClockDoesNotCancelRun(t *testing.T) {
 	}
 }
 
-// TestWorkflowReviewGateRejectionDoesNotFalsifyGates proves the separation: the
-// gates passed, so the factory result stays SUCCEEDED, while the human decision
-// is recorded as REJECTED and the change returns to OPEN.
-func TestWorkflowReviewGateRejectionDoesNotFalsifyGates(t *testing.T) {
+// TestWorkflowReviewGateRejectionIsNotSuccess proves the separation: the gates
+// passed, and that fact is preserved in VerificationResult, but the factory
+// result is REJECTED because a human refused the change. Reporting SUCCEEDED
+// here would make the human gate decorative: the change would be recorded as a
+// successful factory output that an operator merely annotated.
+func TestWorkflowReviewGateRejectionIsNotSuccess(t *testing.T) {
 	fake := sandbox.NewFake()
 	fake.ExecuteFunc = wrapWithBuildSuccess(gitAwareExecute("diff --git a/greeting.py b/greeting.py"))
 
@@ -174,8 +176,8 @@ func TestWorkflowReviewGateRejectionDoesNotFalsifyGates(t *testing.T) {
 		t.Fatalf("workflow returned an error: %v", err)
 	}
 
-	if manifest.FactoryResult != StateSucceeded {
-		t.Fatalf("factory_result = %s, want SUCCEEDED: a human rejection must not rewrite the gate result", manifest.FactoryResult)
+	if manifest.FactoryResult != StateRejected {
+		t.Fatalf("factory_result = %s, want REJECTED: a human rejection is not a successful factory output", manifest.FactoryResult)
 	}
 	if manifest.HumanResult != HumanResultRejected {
 		t.Fatalf("human_result = %q, want REJECTED", manifest.HumanResult)
@@ -183,8 +185,14 @@ func TestWorkflowReviewGateRejectionDoesNotFalsifyGates(t *testing.T) {
 	if manifest.ReviewNote != "the greeting should be formal" {
 		t.Fatalf("review_note = %q, want the durable rework instruction", manifest.ReviewNote)
 	}
+	// The gates are not falsified by the decision: their outcome is a separate
+	// fact and stays SUCCESS.
 	if manifest.VerificationResult != OutcomeSuccess {
 		t.Fatalf("verification_result = %s, want SUCCESS: the gate passed and that is a fact", manifest.VerificationResult)
+	}
+	verified, ok := ConditionFor(manifest.Conditions, ConditionVerified)
+	if !ok || verified.Status != ConditionTrue {
+		t.Fatalf("Verified condition = %+v, want True: the gates passed even though the change was rejected", verified)
 	}
 }
 
@@ -207,7 +215,12 @@ func TestWorkflowReviewGateWithoutSuspendCapabilityIsHonest(t *testing.T) {
 	provider := capsOverride{Fake: base, caps: sandbox.Capabilities{}}
 
 	manifest, err := runWorkflowOpts(t, provider, baseRequest(t), workflowRunOptions{
-		mutateConfig: func(cfg *Config) { cfg.Review = reviewConfig(30 * time.Minute) },
+		// Previews are enabled so this test reaches the capability check rather
+		// than the allow_preview gate; that gate has its own test.
+		mutateConfig: func(cfg *Config) {
+			cfg.Review = reviewConfig(30 * time.Minute)
+			cfg.Sandbox.AllowPreview = true
+		},
 	})
 	if err != nil {
 		t.Fatalf("workflow returned an error: %v", err)

@@ -3,7 +3,30 @@ package factory
 import (
 	"fmt"
 	"time"
+
+	"github.com/mitkox/esf/internal/threatmon"
 )
+
+// HardeningEvidence is the defense-in-depth record for one run.
+//
+// It exists because "the agent succeeded and the gates passed" is not the same
+// claim as "the run stayed inside its boundary". The two are recorded
+// separately so a green run never implies an unviolated one.
+type HardeningEvidence struct {
+	// EgressProbe is what the sandbox could actually reach after the runtime
+	// network policy was applied.
+	EgressProbe *EgressProbeResult `json:"egress_probe,omitempty"`
+	// Behavior is the deterministic scan of the agent's output.
+	Behavior *threatmon.Report `json:"behavior,omitempty"`
+	// BehaviorError records why the scan could not run. A silent skip would be
+	// indistinguishable from a clean scan, which is the failure mode this whole
+	// layer exists to avoid.
+	BehaviorError string `json:"behavior_error,omitempty"`
+	// GateIntegrity records whether the patch modified the gates that judge it.
+	GateIntegrity *GateIntegrity `json:"gate_integrity,omitempty"`
+	// Alerts are the security alerts raised for this run.
+	Alerts []AlertRecord `json:"alerts,omitempty"`
+}
 
 // RunState is the terminal or in-flight state of a factory run.
 //
@@ -40,13 +63,47 @@ const (
 	// harness, a missing revision.
 	StateInvalidRequest RunState = "INVALID_REQUEST"
 	StateQualityFailed  RunState = "QUALITY_FAILED"
+
+	// StateBlocked means the agent reported, through the documented contract,
+	// that it could not satisfy the task. It is a legitimate outcome, not a
+	// failure: an agent with no honest way to stop will look for a dishonest
+	// one, which is the mechanism that produced the incident this hardening
+	// exists to prevent.
+	StateBlocked RunState = "BLOCKED"
+	// StateQuarantined means the behavior monitor found indicators of
+	// out-of-bounds activity and the run was stopped before verification.
+	StateQuarantined RunState = "QUARANTINED"
+	// StateGateTampered means the agent's patch modified the deterministic
+	// gates that judge it, and the operator has not allowed that.
+	StateGateTampered RunState = "GATE_TAMPERED"
+	// StateEgressUnverified means a security invariant about the sandbox
+	// boundary was proved false: the sandbox reached the internet although the
+	// policy denied it, reached the cloud metadata endpoint, or ran as uid 0
+	// when the operator required otherwise.
+	StateEgressUnverified RunState = "EGRESS_UNVERIFIED"
+	// StateRejected means every gate passed but a human reviewer rejected the
+	// change. A human decision is a gate, so it cannot coexist with SUCCEEDED.
+	StateRejected RunState = "REJECTED"
 )
 
 // Valid reports whether s is a known state.
 func (s RunState) Valid() bool {
 	switch s {
 	case StateRequested, StateRunning, StatePaused, StateAgentFailed, StateVerificationFailed,
-		StateSucceeded, StateCancelled, StateInfrastructureFailed, StateInvalidRequest, StateQualityFailed:
+		StateSucceeded, StateCancelled, StateInfrastructureFailed, StateInvalidRequest, StateQualityFailed,
+		StateBlocked, StateQuarantined, StateGateTampered, StateEgressUnverified, StateRejected:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsSecurityTerminal reports whether the state is a security stop rather than a
+// build outcome. Operators triage these differently: the patch is not the
+// interesting artifact, the evidence around the stop is.
+func (s RunState) IsSecurityTerminal() bool {
+	switch s {
+	case StateQuarantined, StateGateTampered, StateEgressUnverified:
 		return true
 	default:
 		return false
@@ -96,7 +153,8 @@ type PreviewLink struct {
 // snapshot lineage, model accounting and human review outcome, and adding those
 // fields later must not require rewriting the manifest.
 type RunManifest struct {
-	Quality *QualitySummary `json:"quality,omitempty"`
+	Quality   *QualitySummary    `json:"quality,omitempty"`
+	Hardening *HardeningEvidence `json:"hardening,omitempty"`
 	// ── Identity ────────────────────────────────────────────────────────────
 	RunID          string `json:"run_id"`
 	FactoryVersion string `json:"factory_version"`
@@ -245,6 +303,19 @@ const (
 	ArtifactPostVerificationPatch  = "verification/post-verification.patch"
 	ArtifactPostVerificationStatus = "verification/post-verification.status"
 	ArtifactManifestDir            = "."
+
+	// ArtifactEgressProbe records what the sandbox could actually reach after
+	// the runtime network policy was applied. It is the difference between the
+	// policy the factory requested and the policy in effect.
+	ArtifactEgressProbe = "hardening/egress-probe.json"
+	// ArtifactBehavior records the behavior monitor's findings for a run.
+	ArtifactBehavior = "hardening/behavior.json"
+	// ArtifactPatchScan records the behavior monitor's findings over the
+	// collected patch, which is a separate input from the agent's output.
+	ArtifactPatchScan = "hardening/patch-scan.json"
+	// ArtifactGateIntegrity records whether the agent modified the
+	// deterministic gates it is judged by.
+	ArtifactGateIntegrity = "hardening/gate-integrity.json"
 )
 
 // RunRequest is the input to a factory run.

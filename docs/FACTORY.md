@@ -192,6 +192,25 @@ A caller can name an approved repository at an approved revision with a task.
 It can never name an executable, a host path, an environment variable, or a
 credential. See `docs/adr/0006-control-plane-security-boundary.md`.
 
+### Defense in depth at execution time
+
+ADR 0006 governs what a caller may control. ADR 0007 governs what the agent may
+reach once it runs:
+
+| Control | Default | Stops |
+| --- | --- | --- |
+| `acknowledge_open_egress` | required for an open policy | An undeclared network posture |
+| Per-run egress probe | on | A boundary that is requested but not in effect |
+| Behavior monitor (`trip_severity = HIGH`) | on | Privilege escalation, credential access, recon, reverse shells, exfiltration |
+| `blocked.json` stop signal | available | The pressure that produces out-of-bounds probing |
+| Gate-integrity check | on | A tree that rewrites the gates judging it, even when the patch shows nothing |
+| Review rejection | `REJECTED`, not `SUCCEEDED` | A human gate that does not gate |
+| Alerts | recorded per run; delivered when configured | Silent security events |
+| `factory cancel` / `halt` | available | A run that must be stopped now |
+
+`factory threats` aggregates this evidence across runs; `factory doctor` reports
+the posture. See [`docs/adr/0007-defense-in-depth.md`](docs/adr/0007-defense-in-depth.md).
+
 ## Documentation
 
 | Document | Contents |
@@ -199,8 +218,8 @@ credential. See `docs/adr/0006-control-plane-security-boundary.md`.
 | [`docs/upstream.md`](docs/upstream.md) | Upstream URLs, commits and pinned dependency versions |
 | [`docs/architecture/current-state.md`](docs/architecture/current-state.md) | What Machinist does today, analysed package by package |
 | [`docs/architecture/target-state.md`](docs/architecture/target-state.md) | The architecture this project implements, and its Phase 2 seams |
-| [`docs/adr/`](docs/adr/) | Six architecture decision records |
-| [`docs/operator-guide.md`](docs/operator-guide.md) | Run, inspect, cancel, extend, and troubleshoot |
+| [`docs/adr/`](docs/adr/) | Architecture decision records, including defense in depth (0007) |
+| [`docs/operator-guide.md`](docs/operator-guide.md) | Run, inspect, cancel, harden, extend, and troubleshoot |
 | [`docs/backlog/phase-2.md`](docs/backlog/phase-2.md) | The prioritised Phase 2 backlog |
 
 ## A required credential

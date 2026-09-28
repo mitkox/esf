@@ -57,6 +57,11 @@ type Config struct {
 	// narrow the operator's global policy, never widen it.
 	Scopes map[string]ScopeConfig `toml:"scopes"`
 
+	// Hardening is the defense-in-depth policy: egress acknowledgement, the
+	// per-run egress probe, behavior monitoring, gate self-modification and
+	// security alerting.
+	Hardening HardeningConfig `toml:"hardening"`
+
 	// Review configures the human review gate.
 	Review  ReviewConfig  `toml:"review"`
 	Quality QualityConfig `toml:"quality"`
@@ -293,6 +298,17 @@ func Default() Config {
 			Suspend: true,
 		},
 		Intake: IntakeConfig{Model: "jev-latest", Timeout: tomlx.FromStd(15 * time.Second)},
+		Hardening: HardeningConfig{
+			// Deliberately fail-closed: a deployment whose egress policy does
+			// not deny public internet must acknowledge that explicitly. Nil
+			// pointer fields leave the egress probe, behavior monitor and
+			// blocked-agent alerting enabled.
+			AcknowledgeOpenEgress: false,
+			TripSeverity:          DefaultTripSeverity,
+			EgressCanaryURL:       DefaultEgressCanaryURL,
+			MetadataProbeURL:      DefaultMetadataProbeURL,
+			AlertTimeout:          tomlx.FromStd(DefaultAlertTimeout),
+		},
 		Observability: ObservabilityConfig{
 			OTLPEndpoint: envOr("FACTORY_OTEL_ENDPOINT", ""),
 			ServiceName:  "factory",
@@ -367,6 +383,9 @@ func (c Config) Validate() error {
 	}
 	if err := c.Intake.Validate(); err != nil {
 		problems = append(problems, "intake: "+err.Error())
+	}
+	if err := c.validateHardening(); err != nil {
+		problems = append(problems, err.Error())
 	}
 	if c.Temporal.PayloadKeyring != "" {
 		if _, err := loadPayloadCodec(c.Temporal.PayloadKeyring); err != nil {

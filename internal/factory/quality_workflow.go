@@ -3,6 +3,7 @@ package factory
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/mitkox/esf/internal/assurance"
@@ -47,12 +48,24 @@ func controlledWorkflow(ctx workflow.Context, req RunRequest, admitted assurance
 	if err != nil {
 		failure = err.Error()
 		outcome = StateQualityFailed
+	} else if author.EgressProbe != nil && len(author.EgressProbe.Violations) > 0 {
+		failure = "author sandbox security invariants violated: " + strings.Join(author.EgressProbe.Violations, "; ")
+		outcome = StateEgressUnverified
+	} else if author.Behavior != nil && author.Behavior.Tripped {
+		// Security wins over every other outcome: a tripped author stops the
+		// controlled path before its gates run, exactly as it does on the
+		// primary path.
+		failure = "author quarantined by behavior monitor: " + threatReportSummary(*author.Behavior)
+		outcome = StateQuarantined
+	} else if author.Blocked {
+		failure = "author reported blocked: " + author.BlockedReason
+		outcome = StateBlocked
 	} else if !author.Agent.Succeeded() {
 		failure = "author did not complete successfully"
 		outcome = StateAgentFailed
 	}
 	var record assurance.Run
-	if err == nil {
+	if err == nil && failure == "" {
 		status.CurrentStep = "quality-candidate"
 		err = workflow.ExecuteActivity(compute, acts.QualityCandidate, in).Get(compute, &record)
 		if err != nil {

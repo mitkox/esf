@@ -19,8 +19,18 @@ func TestDefaultConfigIsValid(t *testing.T) {
 	t.Setenv("CUBE_TEMPLATE_ID", "tpl-test")
 
 	cfg := Default()
+	// The default configuration is deliberately NOT valid on its own: it
+	// inherits the deployment's network default, which permits public egress,
+	// and the factory refuses to run an agent behind an unacknowledged open
+	// boundary. This test pins that contract, because a future change that
+	// quietly re-opens the default would otherwise pass unnoticed.
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "acknowledge_open_egress") {
+		t.Fatalf("default configuration must fail closed on unacknowledged egress, got %v", err)
+	}
+	cfg.Hardening.AcknowledgeOpenEgress = true
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("the default configuration must be valid: %v", err)
+		t.Fatalf("acknowledged default configuration must be valid: %v", err)
 	}
 	if cfg.Cube.TemplateID != "tpl-test" {
 		t.Fatalf("template = %q", cfg.Cube.TemplateID)
@@ -70,7 +80,7 @@ func TestConfigRejectsMissingCubeURL(t *testing.T) {
 	t.Setenv("E2B_API_URL", "")
 	// The SDK's own default (port 3000) is deliberately NOT used: an unnoticed
 	// fallback to the wrong port produces a confusing failure.
-	cfg := Default()
+	cfg := hardenedDefaults()
 	cfg.Cube.APIURL = ""
 	cfg.Cube.TemplateID = "tpl-test"
 	if err := cfg.Validate(); err == nil {
@@ -92,6 +102,9 @@ func TestConfigValidationProblems(t *testing.T) {
 			},
 			Verification: defaultVerificationProfiles(),
 			Limits:       LimitsConfig{AgentTimeout: tomlx.FromStd(time.Minute), TotalTimeout: tomlx.FromStd(time.Hour)},
+			// The base fixture is deliberately an acknowledged-open deployment:
+			// the fail-closed egress rule is asserted by its own cases below.
+			Hardening: HardeningConfig{AcknowledgeOpenEgress: true},
 		}
 		return cfg
 	}
@@ -112,6 +125,31 @@ func TestConfigValidationProblems(t *testing.T) {
 		{"agent timeout exceeds total", func(c *Config) {
 			c.Limits.AgentTimeout = tomlx.FromStd(2 * time.Hour)
 		}, "must not exceed"},
+		{"unacknowledged open deployment default", func(c *Config) {
+			c.Hardening.AcknowledgeOpenEgress = false
+			c.Egress = nil
+		}, "acknowledge_open_egress"},
+		{"unacknowledged open policy", func(c *Config) {
+			c.Hardening.AcknowledgeOpenEgress = false
+			c.Egress = map[string]EgressPolicyConfig{"open": {AllowInternet: boolPtr(true)}}
+		}, "acknowledge_open_egress"},
+		{"unacknowledged nil-internet policy", func(c *Config) {
+			c.Hardening.AcknowledgeOpenEgress = false
+			c.Egress = map[string]EgressPolicyConfig{"implicit": {}}
+		}, "acknowledge_open_egress"},
+		{"explicit deny needs no acknowledgement", func(c *Config) {
+			c.Hardening.AcknowledgeOpenEgress = false
+			c.Egress = map[string]EgressPolicyConfig{"strict": {AllowInternet: boolPtr(false)}}
+		}, ""},
+		{"invalid trip severity", func(c *Config) {
+			c.Hardening.TripSeverity = "APOCALYPTIC"
+		}, "trip_severity"},
+		{"canary requires https", func(c *Config) {
+			c.Hardening.EgressCanaryURL = "http://example.com/"
+		}, "egress_canary_url"},
+		{"webhook rejects embedded credentials", func(c *Config) {
+			c.Hardening.AlertWebhookURL = "https://user:pass@hooks.example.com/x"
+		}, "alert_webhook_url"},
 	}
 
 	for _, tc := range cases {
@@ -139,7 +177,7 @@ func TestConfigValidationProblems(t *testing.T) {
 
 func TestBuildHarnessesRejectsUnknownType(t *testing.T) {
 	t.Parallel()
-	cfg := Default()
+	cfg := hardenedDefaults()
 	cfg.Harnesses = map[string]HarnessConfig{
 		"mystery": {Type: "quantum", Timeout: tomlx.FromStd(time.Minute)},
 	}
@@ -150,7 +188,7 @@ func TestBuildHarnessesRejectsUnknownType(t *testing.T) {
 
 func TestBuildHarnessesRegistersConfiguredNames(t *testing.T) {
 	t.Parallel()
-	cfg := Default()
+	cfg := hardenedDefaults()
 	registry, err := cfg.BuildHarnesses()
 	if err != nil {
 		t.Fatalf("BuildHarnesses: %v", err)
@@ -168,7 +206,7 @@ func TestBuildHarnessesRegistersConfiguredNames(t *testing.T) {
 
 func TestBuildHarnessesCreatesUnrealHarness(t *testing.T) {
 	t.Parallel()
-	cfg := Default()
+	cfg := hardenedDefaults()
 	cfg.Harnesses = map[string]HarnessConfig{
 		"unreal": {
 			Type: "unreal", Binary: "/host/unreal-agent-runner",
@@ -197,7 +235,7 @@ func TestBuildHarnessesCreatesUnrealHarness(t *testing.T) {
 
 func TestBuildHarnessesRejectsUnrealPassEnv(t *testing.T) {
 	t.Parallel()
-	cfg := Default()
+	cfg := hardenedDefaults()
 	cfg.Harnesses = map[string]HarnessConfig{
 		"unreal": {
 			Type: "unreal", Binary: "/host/runner", Provider: "openai",
@@ -213,7 +251,7 @@ func TestBuildHarnessesRejectsUnrealPassEnv(t *testing.T) {
 
 func TestBuildHarnessesRejectsCustomUnrealInvocation(t *testing.T) {
 	t.Parallel()
-	cfg := Default()
+	cfg := hardenedDefaults()
 	cfg.Harnesses = map[string]HarnessConfig{
 		"unreal": {
 			Type: "unreal", Binary: "/host/runner", Provider: "openai",
@@ -249,6 +287,11 @@ data_dir = "` + dir + `/.factory"
 
 [sandbox]
 base_packages = ["git"]
+
+[hardening]
+# This fixture exercises config loading, not egress posture; the fail-closed
+# egress rule has its own cases in TestConfigValidationProblems.
+acknowledge_open_egress = true
 
 [harnesses.agent]
 type = "generic"
@@ -321,4 +364,21 @@ func TestWorkflowIDRoundTrip(t *testing.T) {
 	if _, ok := RunIDFromWorkflowID("unrelated"); ok {
 		t.Fatal("a foreign workflow id must not decode")
 	}
+}
+
+// hardenedDefaults returns the development defaults with the open-egress risk
+// acknowledged.
+//
+// Test fixtures care about the behavior under test, not the network posture;
+// the fail-closed egress rule has its own dedicated cases in
+// TestConfigValidationProblems and TestDefaultConfigIsValid.
+//
+// The per-run egress probe is disabled here because several fixtures use shim
+// sandboxes that execute commands on the HOST, where the probe would make real
+// network calls. The probe has dedicated tests in egress_probe_test.go.
+func hardenedDefaults() Config {
+	cfg := Default()
+	cfg.Hardening.AcknowledgeOpenEgress = true
+	cfg.Hardening.EgressProbe = boolPtr(false)
+	return cfg
 }

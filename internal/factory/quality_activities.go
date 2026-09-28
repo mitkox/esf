@@ -19,6 +19,7 @@ import (
 	"github.com/mitkox/esf/internal/repository"
 	"github.com/mitkox/esf/internal/sandbox"
 	"github.com/mitkox/esf/internal/sandbox/cube"
+	"github.com/mitkox/esf/internal/threatmon"
 	"github.com/mitkox/esf/internal/verification"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -47,6 +48,15 @@ type QualityAuthorOutput struct {
 	Evidence     []assurance.Evidence `json:"evidence"`
 	StartedAt    time.Time            `json:"started_at"`
 	CompletedAt  time.Time            `json:"completed_at"`
+	// Behavior is the deterministic scan of the author's output. It is carried
+	// to the workflow so the controlled path acts on a trip instead of only
+	// recording it.
+	Behavior      *threatmon.Report  `json:"behavior,omitempty"`
+	BehaviorError string             `json:"behavior_error,omitempty"`
+	EgressProbe   *EgressProbeResult `json:"egress_probe,omitempty"`
+	// Blocked records that the author used the documented stop signal.
+	Blocked       bool   `json:"blocked,omitempty"`
+	BlockedReason string `json:"blocked_reason,omitempty"`
 }
 type QualityGateInput struct {
 	RunID       string
@@ -350,8 +360,26 @@ func (a *Activities) QualityAuthor(ctx context.Context, in QualityRunInput) (Qua
 	if err = sb.WriteFile(ctx, "/workspace/.factory/quality-plan.json", planBytes); err != nil {
 		return out, err
 	}
-	if _, err = frozen.ApplyRuntimeNetwork(ctx, ApplyRuntimeNetworkInput{RunID: r.ID, SandboxID: sb.ID(), Harness: d.Request.AgentHarness}); err != nil {
+	lockdown, err := frozen.ApplyRuntimeNetwork(ctx, ApplyRuntimeNetworkInput{
+		RunID: r.ID, SandboxID: sb.ID(), Harness: d.Request.AgentHarness,
+		ExpectDeny: !d.Resources.Egress.AllowsInternet(), Policy: d.Resources.EgressPolicy,
+	})
+	if err != nil {
 		return out, err
+	}
+	out.EgressProbe = lockdown.Probe
+	if lockdown.ProbeEvidenceError != "" {
+		return out, fmt.Errorf("author egress probe evidence persistence: %s", lockdown.ProbeEvidenceError)
+	}
+	if out.EgressProbe != nil && len(out.EgressProbe.Violations) > 0 {
+		// Preserve the measured boundary and stop before the author runs. The
+		// workflow receives a result, not an activity error, so it can report
+		// EGRESS_UNVERIFIED with the probe evidence intact.
+		out.CompletedAt = time.Now().UTC()
+		if _, err = a.quality.Store.Checkpoint(ctx, r.ID, "author-completed", out); err != nil {
+			return out, err
+		}
+		return out, nil
 	}
 	model := d.Request.AgentModel
 	if d.Resources.ModelID != "" {
@@ -366,6 +394,10 @@ func (a *Activities) QualityAuthor(ctx context.Context, in QualityRunInput) (Qua
 		return out, err
 	}
 	out.Agent = agent.Result
+	out.Behavior = agent.Behavior
+	out.BehaviorError = agent.BehaviorError
+	out.Blocked = agent.Blocked
+	out.BlockedReason = agent.BlockedReason
 	if agent.EvidenceError != "" {
 		return out, fmt.Errorf("author evidence persistence: %s", agent.EvidenceError)
 	}
@@ -391,6 +423,18 @@ func (a *Activities) QualityAuthor(ctx context.Context, in QualityRunInput) (Qua
 	proposal, err := qualityGit(ctx, sb, "diff", "--cached", out.Baseline.SHA, "--binary", "--no-color", "--no-ext-diff", "--no-textconv")
 	if err != nil {
 		return out, err
+	}
+	if frozen.cfg.Hardening.BehaviorMonitorEnabled() {
+		monitor, ruleErr := frozen.newBehaviorMonitor()
+		monitor.Observe("patch", proposal)
+		report := monitor.Report()
+		if d.Resources.Hardening.AllowGateSelfModification {
+			report = dropFindings(report, gateTamperRuleIDs, threatmon.Severity(frozen.cfg.Hardening.TripLevel()))
+		}
+		out.Behavior = mergeThreatReports(out.Behavior, &report)
+		if ruleErr != nil {
+			out.BehaviorError = appendError(out.BehaviorError, a.redactor.Redact(ruleErr.Error()))
+		}
 	}
 	e, err = a.qualityEvidence("patch", []byte(proposal), "factory", "", "", "factory-observed", false)
 	if err != nil {
@@ -964,9 +1008,11 @@ func (a *Activities) QualityFinalize(ctx context.Context, in QualityFinalizeInpu
 		}
 		agentOutcome := OutcomeSkipped
 		if !author.StartedAt.IsZero() {
-			agentOutcome = OutcomeFailed
-			if author.Agent.Succeeded() {
-				agentOutcome = OutcomeSuccess
+			if author.EgressProbe == nil || len(author.EgressProbe.Violations) == 0 {
+				agentOutcome = OutcomeFailed
+				if author.Agent.Succeeded() {
+					agentOutcome = OutcomeSuccess
+				}
 			}
 		}
 		verifyOutcome := OutcomeSkipped
@@ -982,6 +1028,9 @@ func (a *Activities) QualityFinalize(ctx context.Context, in QualityFinalizeInpu
 		summary.Decision = &decision
 		summary.AttestationDigest = attestation
 		m := RunManifest{RunID: record.ID, ChangeID: d.Request.ChangeID, ParentRunID: d.Request.ParentRunID, Scope: d.Resources.Scope, FactoryVersion: d.FactoryVersion, WorkflowID: record.WorkflowID, WorkflowRunID: record.ExecutionID, Repository: d.Request.Repository, RepositoryKind: d.Request.RepositoryKind, RequestedRevision: d.Request.Revision, BaselineSHA: author.Baseline.SHA, TaskHash: repository.HashTask(d.Request.Task), AgentHarness: d.Request.AgentHarness, AgentVersion: author.Agent.Version, VerificationProfile: d.Request.VerificationProfile, StartedAt: record.CreatedAt, CompletedAt: decision.At, Duration: decision.At.Sub(record.CreatedAt), AgentResult: agentOutcome, AgentExitCode: author.Agent.ExitCode, VerificationResult: verifyOutcome, FactoryResult: state, CleanupResult: in.Cleanup, Artifacts: "runs/" + record.ID, Error: strings.Join(decision.Reasons, "; "), Quality: summary, TokensIn: author.Agent.TokensIn, TokensOut: author.Agent.TokensOut, InferenceCost: author.Agent.CostUSD}
+		if author.EgressProbe != nil || author.Behavior != nil || author.BehaviorError != "" {
+			m.Hardening = &HardeningEvidence{EgressProbe: author.EgressProbe, Behavior: author.Behavior, BehaviorError: author.BehaviorError}
+		}
 		if m.ChangeID == "" {
 			m.ChangeID = m.RunID
 		}

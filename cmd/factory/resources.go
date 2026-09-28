@@ -643,6 +643,7 @@ the existing workflow instead of starting a second one.`,
 			run, err := temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 				ID:        workflowID,
 				TaskQueue: cfg.Temporal.TaskQueue,
+				Memo:      factory.RunMemoFor(req),
 			}, factory.SoftwareChangeWorkflow, req)
 			if err != nil {
 				// Idempotent apply: an existing workflow is the desired state.

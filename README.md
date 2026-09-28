@@ -23,6 +23,9 @@ and adds factory orchestration. See [upstream attribution](docs/upstream.md).
 - Durable patches, logs, manifests, and verified cleanup outcomes.
 - Temporal TLS/mTLS, API-key authentication, and optional encrypted payloads.
 - Bounded execution, cancellation, and recovery after a lost create response.
+- Defense in depth at execution time: a measured egress boundary, a behavior
+  monitor that quarantines out-of-bounds runs, a documented agent stop signal,
+  gate-integrity checking, and `factory cancel` / `halt` / `threats`.
 - Optional patch assurance: frozen policies, independent review, authenticated
   approvals, attestations, and local non-conformance/CAPA records.
 
@@ -32,6 +35,11 @@ ESF produces changes for review; it does not decide what ships.
 The v0.5.0 archives are a binary preview. VM, Kubernetes, container-image,
 security, restore, and soak qualifications are recorded separately in the
 [release inventory](release/inventory.json) and are not complete.
+
+> **Upgrading:** the factory now refuses to start when an egress policy leaves
+> public internet possible unless you set `hardening.acknowledge_open_egress =
+> true`. This is deliberate; see [ADR 0007](docs/adr/0007-defense-in-depth.md).
+> Run `factory doctor` to see the posture and every warning.
 
 ## QMS is optional
 

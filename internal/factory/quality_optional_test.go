@@ -16,7 +16,7 @@ import (
 func TestFactoryWorksWithoutQMS(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
-	cfg := Default()
+	cfg := hardenedDefaults()
 	if cfg.Quality.Enabled() {
 		t.Fatal("QMS must be disabled by default")
 	}
@@ -66,7 +66,7 @@ func TestDisabledQMSCannotAcceptControlledAdmission(t *testing.T) {
 	if err == nil {
 		t.Fatal("controlled admission silently downgraded to standard execution")
 	}
-	cfg := Default()
+	cfg := hardenedDefaults()
 	cfg.Scopes[DefaultScope] = ScopeConfig{QualityPolicies: []string{"required"}}
 	if err = cfg.validateQuality(); err == nil {
 		t.Fatal("required scope policy silently disabled")

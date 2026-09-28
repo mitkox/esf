@@ -161,7 +161,7 @@ func (b *blockingProvider) release() {
 func newIntegrationFixture(t *testing.T, provider sandbox.Provider) (client.Client, string, *artifacts.Local) {
 	t.Helper()
 
-	base := Default()
+	base := hardenedDefaults()
 	base.Cube.TemplateID = "tpl-integration"
 	base.Sandbox.BasePackages = []string{"git"}
 

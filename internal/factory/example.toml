@@ -56,6 +56,53 @@ verification_timeout = "15m"
 total_timeout        = "90m"
 sandbox_idle_timeout = "60m"
 
+# ── Hardening ────────────────────────────────────────────────────────────────
+# Defense-in-depth policy. These settings exist so the security posture is
+# structural rather than aspirational: the factory measures the boundary it
+# depends on instead of assuming it.
+
+[hardening]
+# Repository preparation and package installation run INSIDE the sandbox, so the
+# setup phase needs a network path. Acknowledge that explicitly instead of
+# leaving it implicit.
+#
+# When your preparation needs no internet — a pre-warmed snapshot, or a local
+# git bundle — set this to false and deny egress instead. The factory then
+# refuses to start unless every [egress] policy sets allow_internet = false.
+acknowledge_open_egress = true
+
+# Verify, inside each run's sandbox, that a policy which claims to deny the
+# internet actually does. The probe runs after the runtime lockdown and its
+# result is durable evidence. Absent means enabled.
+egress_probe = true
+egress_canary_url = "https://example.com/"
+# Reaching the cloud metadata endpoint is always a finding: it is a credential
+# source that needs no third-party compromise.
+metadata_probe_url = "http://169.254.169.254/latest/meta-data/"
+
+# Fail a run whose agent would execute as uid 0. The CubeSandbox template
+# decides the user; this makes an unexpected root sandbox a visible failure.
+require_non_root = false
+
+# Scan the agent's captured output for out-of-bounds behavior (privilege
+# escalation, credential access, reconnaissance, reverse shells, exfiltration)
+# and quarantine a run that trips the threshold. Absent means enabled.
+# Operator rules are ADDED to the built-in ruleset; they cannot remove it.
+behavior_monitor = true
+trip_severity = "HIGH"
+# trip_rules_file = "/etc/factory/trip-rules.json"
+
+# A patch that modifies the build or test scripts it is judged by fails closed.
+# Set true only when the repository legitimately owns gate changes.
+allow_gate_self_modification = false
+
+# Security alerts. Empty disables delivery; every alert is still recorded in the
+# run's evidence. The token is a path, never a value.
+# alert_webhook_url = "https://hooks.example.org/esf"
+# alert_webhook_token_file = "/run/credentials/factory-worker.service/alert-token"
+alert_timeout = "5s"
+alert_on_blocked = true
+
 # Optional host-side DSPy/Jev task intake advice. The submitted task text is
 # sent to TypeSafe before a sandbox exists. This never blocks a validated run.
 [intake]

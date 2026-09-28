@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -27,15 +28,37 @@ import (
 
 const testSHA = "1111111111111111111111111111111111111111"
 
+// testBlobSHA stands in for a git blob hash in the fake sandbox. A gate whose
+// working-tree blob equals the baseline blob is unmodified.
+const testBlobSHA = "2222222222222222222222222222222222222222"
+
+// gateScriptExecute emulates the factory's gate-integrity script.
+//
+// The script is factory-owned shell code, so the fake answers it by extracting
+// the gate paths the script would hash and reporting them unchanged. A test that
+// needs a violation supplies its own ExecuteFunc instead.
+func gateScriptExecute(script string) sandbox.Execution {
+	var out strings.Builder
+	for _, match := range regexp.MustCompile(`git hash-object -- '([^']*)'`).FindAllStringSubmatch(script, -1) {
+		fmt.Fprintf(&out, "ESF_GATE %s %s %s\n", testBlobSHA, testBlobSHA, match[1])
+	}
+	return sandbox.Execution{ExitCode: 0, Stdout: out.String()}
+}
+
 // gitAwareExecute makes the fake sandbox answer the git commands the repository
 // provider issues, so workflow tests exercise the real provider logic without a
 // real repository.
 func gitAwareExecute(patch string) func(sandbox.Command) (sandbox.Execution, error) {
 	return func(cmd sandbox.Command) (sandbox.Execution, error) {
+		if cmd.Description == GateIntegrityScriptDescription {
+			return gateScriptExecute(cmd.Script), nil
+		}
 		argv := strings.Join(cmd.Argv, " ")
 		switch {
 		case strings.Contains(argv, "rev-parse --abbrev-ref"):
 			return sandbox.Execution{ExitCode: 0, Stdout: "main\n"}, nil
+		case strings.Contains(argv, "hash-object"):
+			return sandbox.Execution{ExitCode: 0, Stdout: testBlobSHA + "\n"}, nil
 		case strings.Contains(argv, "rev-parse"):
 			return sandbox.Execution{ExitCode: 0, Stdout: testSHA + "\n"}, nil
 		case strings.Contains(argv, "status --porcelain"):

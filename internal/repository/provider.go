@@ -333,14 +333,17 @@ func (p *Provider) Status(ctx context.Context, sb sandbox.Sandbox, dest string) 
 // Patch returns the complete diff of the agent's changes, including untracked
 // files.
 //
-// `git add -A` stages everything and `git diff --cached` renders it, which is
-// the only way to include new files in a diff without relying on the agent
-// having staged them.
-func (p *Provider) Patch(ctx context.Context, sb sandbox.Sandbox, dest string) (string, error) {
+// `git add -A` stages everything and `git diff --cached <baseline>` renders
+// changes against the revision the agent started from. Comparing with HEAD
+// would let an agent hide its entire contribution by committing it first.
+func (p *Provider) Patch(ctx context.Context, sb sandbox.Sandbox, dest, baseline string) (string, error) {
+	if baseline == "" {
+		return "", fmt.Errorf("repository: baseline revision is required to collect a patch")
+	}
 	steps := []sandbox.Command{
 		{Argv: []string{"git", "-C", dest, "add", "-A"}, Timeout: 2 * time.Minute, Description: "stage all changes"},
 		{
-			Argv:        []string{"git", "-C", dest, "diff", "--cached", "--no-color", "--no-ext-diff", "--binary"},
+			Argv:        []string{"git", "-C", dest, "diff", "--cached", "--no-color", "--no-ext-diff", "--binary", baseline},
 			Timeout:     2 * time.Minute,
 			Description: "render patch",
 		},

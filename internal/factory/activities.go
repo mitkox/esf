@@ -17,10 +17,118 @@ import (
 
 	"github.com/mitkox/esf/internal/agentharness"
 	"github.com/mitkox/esf/internal/factoryartifacts"
+	"github.com/mitkox/esf/internal/notify"
 	"github.com/mitkox/esf/internal/repository"
 	"github.com/mitkox/esf/internal/sandbox"
+	"github.com/mitkox/esf/internal/threatmon"
 	"github.com/mitkox/esf/internal/verification"
 )
+
+// AlertInput carries one security alert to the delivery activity.
+type AlertInput struct {
+	RunID    string            `json:"run_id"`
+	Kind     string            `json:"kind"`
+	Severity string            `json:"severity"`
+	Summary  string            `json:"summary"`
+	Detail   map[string]string `json:"detail,omitempty"`
+}
+
+// AlertOutput carries the durable record of one alert attempt.
+type AlertOutput struct {
+	Record AlertRecord `json:"record"`
+}
+
+// RaiseAlert delivers one security alert.
+//
+// It never returns an error for a delivery failure: the record carries the
+// outcome, and the workflow puts it in the manifest. A security control that
+// fails runs when its pager is down is a security control operators disable.
+func (a *Activities) RaiseAlert(ctx context.Context, in AlertInput) (AlertOutput, error) {
+	severity := notify.Severity(in.Severity)
+	if severity == "" {
+		severity = notify.SeverityWarning
+	}
+	return AlertOutput{Record: a.raiseAlert(ctx, in.RunID, in.Kind, severity, in.Summary, in.Detail)}, nil
+}
+
+// CheckGateIntegrityInput inspects the working tree against the gates.
+type CheckGateIntegrityInput struct {
+	RunID string `json:"run_id"`
+	// SandboxID and RepositoryDir locate the tree that will actually run the
+	// gates. The check reads the TREE, not the patch, because the patch is a
+	// staged diff that ordinary git operations can hide changes from.
+	SandboxID     string `json:"sandbox_id"`
+	RepositoryDir string `json:"repository_dir"`
+	// BaselineSHA is the revision the agent started from.
+	BaselineSHA string `json:"baseline_sha,omitempty"`
+	// GatePaths are repository-relative gate programs the agent must not touch.
+	GatePaths []string `json:"gate_paths,omitempty"`
+	// Allowed records that the operator permitted gate self-modification.
+	Allowed bool `json:"allowed,omitempty"`
+}
+
+// CheckGateIntegrityOutput carries the integrity record and any evidence error.
+type CheckGateIntegrityOutput struct {
+	Integrity     GateIntegrity `json:"integrity"`
+	EvidenceError string        `json:"evidence_error,omitempty"`
+}
+
+// CheckGateIntegrity fails closed when the tree modified the deterministic
+// gates that judge it.
+//
+// The comparison is content-based, inside the sandbox: `git hash-object` on the
+// working-tree file against the baseline blob. A diff-based check is defeated
+// by `git update-index --assume-unchanged`, by committing the tamper (which
+// leaves the staged diff empty), and by `diff.mnemonicPrefix`, none of which
+// appear in the patch an operator reviews.
+func (a *Activities) CheckGateIntegrity(ctx context.Context, in CheckGateIntegrityInput) (CheckGateIntegrityOutput, error) {
+	paths := repoGatePaths(in.GatePaths)
+	integrity := GateIntegrity{GatePaths: append([]string(nil), in.GatePaths...), Allowed: in.Allowed}
+	switch {
+	case in.Allowed:
+		// The operator permitted self-modification; the check is recorded as
+		// performed so "allowed" is distinguishable from "not checked".
+		integrity.Checked = true
+		integrity.Method = GateMethodAllowed
+	case len(paths) == 0:
+		integrity.Checked = true
+		integrity.Method = GateMethodNoGates
+	default:
+		sb, err := a.provider.Reattach(ctx, in.SandboxID)
+		if err != nil {
+			return CheckGateIntegrityOutput{}, err
+		}
+		script, err := gateIntegrityScript(in.RepositoryDir, in.BaselineSHA, paths)
+		if err != nil {
+			return CheckGateIntegrityOutput{}, err
+		}
+		exec, err := sb.Execute(ctx, sandbox.Command{
+			Script:      script,
+			Timeout:     2 * time.Minute,
+			Description: GateIntegrityScriptDescription,
+		})
+		if err != nil {
+			return CheckGateIntegrityOutput{}, fmt.Errorf("gate integrity check: %w", err)
+		}
+		if exec.ExitCode != 0 {
+			// A check that could not run is not a clean gate.
+			return CheckGateIntegrityOutput{}, fmt.Errorf("gate integrity check exited %d: %s", exec.ExitCode, strings.TrimSpace(exec.Stderr))
+		}
+		integrity.Checked = true
+		integrity.Method = GateMethodTreeHash
+		integrity.Modified = parseGateIntegrity(exec.Stdout, paths)
+	}
+
+	out := CheckGateIntegrityOutput{Integrity: integrity}
+	if a.artifactFactory != nil {
+		if store, err := a.artifactFactory.ForRun(in.RunID); err == nil {
+			if err := a.writeJSON(store, ArtifactGateIntegrity, integrity); err != nil {
+				out.EvidenceError = a.redactor.Redact(err.Error())
+			}
+		}
+	}
+	return out, nil
+}
 
 // Activities is the factory's side-effect layer.
 //
@@ -185,11 +293,24 @@ type ApplyRuntimeNetworkInput struct {
 	RunID     string `json:"run_id"`
 	SandboxID string `json:"sandbox_id"`
 	Harness   string `json:"harness"`
+	// ExpectDeny records that the caller believes public egress must be
+	// blocked. It is set from the resolved egress policy; an egress-managed
+	// harness implies it. When true, a reachable canary fails the run.
+	ExpectDeny bool `json:"expect_deny,omitempty"`
+	// Policy names the resolved egress policy, for evidence.
+	Policy string `json:"policy,omitempty"`
 }
 
-// ApplyRuntimeNetworkOutput records whether a harness-specific policy applied.
+// ApplyRuntimeNetworkOutput records whether a harness-specific policy applied,
+// and what the sandbox could actually reach afterwards.
 type ApplyRuntimeNetworkOutput struct {
 	Applied bool `json:"applied"`
+	// Probe is the measured egress and posture result. Nil when the probe is
+	// disabled.
+	Probe *EgressProbeResult `json:"probe,omitempty"`
+	// ProbeEvidenceError records that the probe ran but its evidence could not
+	// be persisted. It is reported, never swallowed.
+	ProbeEvidenceError string `json:"probe_evidence_error,omitempty"`
 }
 
 // RunAgentInput executes the coding agent inside the sandbox.
@@ -213,6 +334,22 @@ type RunAgentOutput struct {
 	Result        agentharness.Result `json:"result"`
 	Attempt       int32               `json:"attempt"`
 	EvidenceError string              `json:"evidence_error,omitempty"`
+	// Blocked reports that the agent used the documented stop signal instead of
+	// failing or improvising.
+	Blocked bool `json:"blocked,omitempty"`
+	// BlockedReason is the agent's own explanation. Untrusted text.
+	BlockedReason string `json:"blocked_reason,omitempty"`
+	// BlockedDetail is optional additional context. Untrusted text.
+	BlockedDetail string `json:"blocked_detail,omitempty"`
+	// Behavior is the deterministic scan of the agent's output. Nil when the
+	// monitor is disabled.
+	Behavior *threatmon.Report `json:"behavior,omitempty"`
+	// BehaviorError records a monitor configuration problem. The built-in
+	// ruleset still ran.
+	BehaviorError string `json:"behavior_error,omitempty"`
+	// BlockedSignalError records that the stop sentinel existed but could not be
+	// read. It is distinct from "the agent did not report blocked".
+	BlockedSignalError string `json:"blocked_signal_error,omitempty"`
 }
 
 // RunVerificationInput executes the deterministic gates.
@@ -235,6 +372,9 @@ type CollectArtifactsInput struct {
 	RunID         string `json:"run_id"`
 	SandboxID     string `json:"sandbox_id"`
 	RepositoryDir string `json:"repository_dir"`
+	// BaselineSHA is the commit the agent started from. Diffing against HEAD
+	// would lose changes the agent committed during its run.
+	BaselineSHA string `json:"baseline_sha"`
 	// Phase selects which artifact set is written.
 	//
 	// The empty phase is the AGENT's contribution — the deliverable — and is
@@ -312,6 +452,9 @@ type FinalizeInput struct {
 	// BudgetExceeded lists the ceilings the run crossed, computed by the
 	// workflow from recorded usage and the resolved budget.
 	BudgetExceeded []string `json:"budget_exceeded,omitempty"`
+	// Hardening is the defense-in-depth record: the measured egress posture,
+	// the behavior scan, gate integrity, and every alert attempt.
+	Hardening *HardeningEvidence `json:"hardening,omitempty"`
 }
 
 // FinalizeOutput returns the persisted manifest.
@@ -655,35 +798,102 @@ func (a *Activities) PrepareRepository(ctx context.Context, in PrepareRepository
 // ApplyRuntimeNetwork replaces setup-time networking with the agent policy.
 // The provider secret is resolved from the worker's secret source here, so it is
 // never serialized through Temporal or made visible inside the sandbox.
+//
+// It then measures the result. The runtime policy is applied by the provider but
+// can be overridden by a deployment or a template, and a policy that is
+// requested but not in effect is worse than no policy at all: it produces
+// evidence that lies. The probe is what makes this activity's claim checkable.
 func (a *Activities) ApplyRuntimeNetwork(ctx context.Context, in ApplyRuntimeNetworkInput) (ApplyRuntimeNetworkOutput, error) {
 	ctx, span := a.telemetry.Tracer().Start(ctx, SpanNetworkLockdown)
 	defer span.End()
 
+	out := ApplyRuntimeNetworkOutput{}
 	network, applies, err := a.cfg.runtimeNetworkForHarness(in.Harness)
 	if err != nil {
 		span.RecordError(err)
-		return ApplyRuntimeNetworkOutput{}, err
+		return out, err
 	}
-	if !applies {
-		return ApplyRuntimeNetworkOutput{}, nil
+	if applies {
+		sb, err := a.provider.Reattach(ctx, in.SandboxID)
+		if err != nil {
+			return out, err
+		}
+		updater, ok := sb.(sandbox.NetworkUpdater)
+		if !ok {
+			return out, fmt.Errorf("sandbox provider %q cannot apply the required runtime network policy", a.provider.Name())
+		}
+		if err := updater.UpdateNetwork(ctx, network); err != nil {
+			span.RecordError(err)
+			return out, fmt.Errorf("apply runtime network policy: %w", err)
+		}
+		out.Applied = true
+		a.log.InfoContext(ctx, "sandbox runtime network locked down",
+			slog.String("run.id", in.RunID),
+			slog.String("harness", in.Harness),
+			slog.Int("additional_allow_out", len(network.AllowOut)))
 	}
+
+	if !a.cfg.Hardening.EgressProbeEnabled() {
+		return out, nil
+	}
+
+	// The probe runs for every harness, not only egress-managed ones. For an
+	// unmanaged harness it cannot fail the run (there is no denial to verify),
+	// but it records the posture the agent actually ran under.
 	sb, err := a.provider.Reattach(ctx, in.SandboxID)
 	if err != nil {
-		return ApplyRuntimeNetworkOutput{}, err
+		return out, err
 	}
-	updater, ok := sb.(sandbox.NetworkUpdater)
-	if !ok {
-		return ApplyRuntimeNetworkOutput{}, fmt.Errorf("sandbox provider %q cannot apply the required runtime network policy", a.provider.Name())
-	}
-	if err := updater.UpdateNetwork(ctx, network); err != nil {
+	expectDeny := in.ExpectDeny || applies
+	probe, err := a.probeSandboxEgress(ctx, sb, in.Policy, expectDeny)
+	if err != nil {
 		span.RecordError(err)
-		return ApplyRuntimeNetworkOutput{}, fmt.Errorf("apply runtime network policy: %w", err)
+		return out, err
 	}
-	a.log.InfoContext(ctx, "sandbox runtime network locked down",
+	out.Probe = &probe
+
+	if a.artifactFactory != nil {
+		if store, storeErr := a.artifactFactory.ForRun(in.RunID); storeErr == nil {
+			if writeErr := a.writeJSON(store, ArtifactEgressProbe, probe); writeErr != nil {
+				// The probe result is the evidence that makes the boundary
+				// claim checkable. Losing it silently would leave the manifest
+				// asserting a policy with nothing to back it.
+				out.ProbeEvidenceError = a.redactor.Redact(writeErr.Error())
+				a.log.WarnContext(ctx, "egress probe evidence could not be stored",
+					slog.String("run.id", in.RunID), slog.String("error", out.ProbeEvidenceError))
+			}
+		} else {
+			out.ProbeEvidenceError = a.redactor.Redact(storeErr.Error())
+			a.log.WarnContext(ctx, "egress probe evidence store unavailable",
+				slog.String("run.id", in.RunID), slog.String("error", out.ProbeEvidenceError))
+		}
+	}
+
+	span.SetAttributes(
+		attribute.Bool("egress.canary_reachable", probe.Canary.Reachable),
+		attribute.Bool("egress.metadata_reachable", probe.Metadata.Reachable),
+		attribute.Int("egress.agent_uid", probe.AgentUID),
+		attribute.Int("egress.violations", len(probe.Violations)),
+	)
+	a.log.InfoContext(ctx, "sandbox egress probed",
 		slog.String("run.id", in.RunID),
 		slog.String("harness", in.Harness),
-		slog.Int("additional_allow_out", len(network.AllowOut)))
-	return ApplyRuntimeNetworkOutput{Applied: true}, nil
+		slog.Bool("expect_deny", probe.ExpectDeny),
+		slog.Bool("canary_reachable", probe.Canary.Reachable),
+		slog.Bool("metadata_reachable", probe.Metadata.Reachable),
+		slog.Int("agent_uid", probe.AgentUID),
+		slog.Int("violations", len(probe.Violations)))
+
+	if len(probe.Violations) > 0 {
+		// The measurement is a RESULT, not a transport failure: returning an
+		// error here would discard the probe evidence, because Temporal does not
+		// deliver an activity's output alongside an error. The workflow decides
+		// what a violation means and records it.
+		a.log.WarnContext(ctx, "sandbox security invariants violated",
+			slog.String("run.id", in.RunID),
+			slog.String("violations", strings.Join(probe.Violations, "; ")))
+	}
+	return out, nil
 }
 
 // RunAgent executes the coding agent inside the sandbox.
@@ -738,16 +948,55 @@ func (a *Activities) RunAgent(ctx context.Context, in RunAgentInput) (RunAgentOu
 		return RunAgentOutput{}, fmt.Errorf("run agent: %w", err)
 	}
 
+	// ── Hardening: read the stop signal and scan the output ────────────────
+	// Both run before any evidence is finalised and before the workflow can
+	// record success. The monitor is post-hoc within the run because the
+	// sandbox data plane returns buffered output; see scanAgentBehavior.
+	out := RunAgentOutput{Result: result, Attempt: attempt}
+	signal, blocked, signalErr := readBlockedSignal(ctx, sb, in.RepositoryDir)
+	if signalErr != nil {
+		// An unreadable sentinel is not the same fact as an absent one. It is
+		// recorded rather than dropped, because the agent may have tried to
+		// stop and the factory would otherwise never know.
+		out.BlockedSignalError = a.redactor.Redact(signalErr.Error())
+		a.log.WarnContext(ctx, "blocked sentinel could not be read",
+			slog.String("run.id", in.RunID), slog.String("error", out.BlockedSignalError))
+	}
+	if blocked {
+		out.Blocked = true
+		out.BlockedReason = signal.Reason
+		out.BlockedDetail = signal.Detail
+	}
+	if a.cfg.Hardening.BehaviorMonitorEnabled() {
+		report, scanErr := a.scanAgentBehavior(ctx, result.Stdout, result.Stderr)
+		out.Behavior = &report
+		if scanErr != nil {
+			out.BehaviorError = a.redactor.Redact(scanErr.Error())
+			a.log.WarnContext(ctx, "behavior monitor used the built-in ruleset only",
+				slog.String("run.id", in.RunID), slog.String("error", out.BehaviorError))
+		}
+	}
+
 	// Persist agent evidence immediately, redacted. A failed agent's output is
 	// exactly when the evidence matters most.
 	store, evidenceErr := a.artifactFactory.ForRun(in.RunID)
 	if evidenceErr == nil {
-		evidenceErr = errors.Join(
+		writes := []error{
 			store.Write(ArtifactAgentStdout, a.redactBytesString(result.Stdout)),
 			store.Write(ArtifactAgentStderr, a.redactBytesString(result.Stderr)),
 			store.Write(ArtifactAgentPrompt, a.redactBytesString(in.Prompt)),
 			a.writeJSON(store, ArtifactAgentResult, map[string]any{"result": result, "attempt": attempt}),
-		)
+		}
+		if out.Behavior != nil {
+			writes = append(writes, a.writeJSON(store, ArtifactBehavior, out.Behavior))
+		}
+		if out.Blocked {
+			writes = append(writes, a.writeJSON(store, "agent/blocked.json", BlockedSignal{
+				Reason: out.BlockedReason,
+				Detail: out.BlockedDetail,
+			}))
+		}
+		evidenceErr = errors.Join(writes...)
 	}
 	evidenceError := ""
 	if evidenceErr != nil {
@@ -761,15 +1010,29 @@ func (a *Activities) RunAgent(ctx context.Context, in RunAgentInput) (RunAgentOu
 	span.SetAttributes(
 		attribute.String(AttrAgentHarness, in.Harness),
 		attribute.Int(AttrAgentResult, result.ExitCode),
+		attribute.Bool("agent.blocked", out.Blocked),
+		attribute.Int("behavior.findings", len(findingsOf(out.Behavior))),
 	)
 	a.log.InfoContext(ctx, "agent finished",
 		slog.String("run.id", in.RunID),
 		slog.String("harness", in.Harness),
 		slog.Int("exit_code", result.ExitCode),
 		slog.Bool("timed_out", result.TimedOut),
+		slog.Bool("blocked", out.Blocked),
+		slog.Int("behavior_findings", len(findingsOf(out.Behavior))),
+		slog.Bool("behavior_tripped", out.Behavior != nil && out.Behavior.Tripped),
 		slog.Int64("attempt", int64(attempt)),
 		slog.Duration("duration", result.Duration))
-	return RunAgentOutput{Result: result, Attempt: attempt, EvidenceError: evidenceError}, nil
+	out.EvidenceError = evidenceError
+	return out, nil
+}
+
+// findingsOf is a nil-safe helper for logging and metrics.
+func findingsOf(report *threatmon.Report) []threatmon.Finding {
+	if report == nil {
+		return nil
+	}
+	return report.Findings
 }
 
 // RunVerification executes the deterministic gates.
@@ -854,7 +1117,7 @@ func (a *Activities) CollectArtifacts(ctx context.Context, in CollectArtifactsIn
 	}
 
 	// An empty patch is valid, but a failed extraction is missing evidence.
-	patch, err := a.repos.Patch(ctx, sb, in.RepositoryDir)
+	patch, err := a.repos.Patch(ctx, sb, in.RepositoryDir, in.BaselineSHA)
 	if err != nil {
 		span.RecordError(err)
 		return CollectArtifactsOutput{}, fmt.Errorf("extract patch: %w", err)
@@ -1019,6 +1282,7 @@ func (a *Activities) FinalizeResult(ctx context.Context, in FinalizeInput) (Fina
 		ReviewError:             a.redactor.Redact(in.ReviewError),
 		Previews:                in.Previews,
 		BudgetExceeded:          in.BudgetExceeded,
+		Hardening:               in.Hardening,
 		Intake:                  in.Intake,
 		// HumanResult is the same value under its Phase-2 name: it drives the
 		// change lifecycle, where an approval closes the change and a rejection

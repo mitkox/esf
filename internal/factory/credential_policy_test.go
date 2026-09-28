@@ -216,7 +216,7 @@ func TestOpenCodeGoCredentialFileScopesEgressToChatAPI(t *testing.T) {
 }
 
 func testValidConfigForCredentialPolicy() Config {
-	cfg := Default()
+	cfg := hardenedDefaults()
 	cfg.Cube.APIURL = "http://127.0.0.1:4000"
 	cfg.Cube.TemplateID = "tpl"
 	return cfg

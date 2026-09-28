@@ -196,6 +196,10 @@ Artifact layout:
   run.json                  the manifest
   cleanup.json              destroy outcome, verification, remaining sandboxes
   agent/{prompt.txt,stdout.log,stderr.log,result.json}
+  hardening/egress-probe.json    what the sandbox could actually reach
+  hardening/behavior.json        the behavior scan of the agent's output
+  hardening/patch-scan.json      the behavior scan of the collected patch
+  hardening/gate-integrity.json  whether the tree modified the gates it runs
   verification/{result.json,<gate>.stdout,<gate>.stderr}
 ```
 
@@ -205,19 +209,92 @@ Quick triage:
 R=.factory/runs/<run-id>
 jq '{factory_result,agent_result,verification_result,cleanup_result}' $R/run.json
 jq '.steps[] | {id,exit_code,passed,error}' $R/verification/result.json
+jq '.hardening' $R/run.json          # boundary, behavior, gates, alerts
 cat $R/changes.patch
 ```
 
+`factory status` prints the hardening record too, including an explicit
+`not measured` / `not scanned` when a control is disabled, so a clean run is
+distinguishable from an unmonitored one.
+
 ## 6. Cancelling a run
+
+```bash
+./bin/factory cancel <run-id>          # stop one run
+./bin/factory halt --harness unreal    # dry run: list what would stop
+./bin/factory halt --harness unreal --yes
+./bin/factory halt --scope payments --yes
+```
+
+`halt` filters on the harness, scope and repository recorded in the run's
+workflow memo, and is a **dry run** unless `--yes` is passed: stopping many runs
+at once is a containment action with real cost.
+
+Cancellation is durable: the workflow's cleanup runs from a **disconnected
+context**, so the microVM is destroyed even though the workflow was cancelled.
+This is covered by an integration test.
+
+If the product command is unavailable, the workflow can still be cancelled
+directly:
 
 ```bash
 temporal workflow cancel --address 127.0.0.1:7233 \
   --namespace default --workflow-id factory-run-<run-id>
 ```
 
-Cancellation is durable: the workflow's cleanup runs from a **disconnected
-context**, so the microVM is destroyed even though the workflow was cancelled.
-This is covered by an integration test.
+## 6a. Hardening: boundary, behavior, and containment
+
+The factory measures the sandbox boundary instead of assuming it, scans agent
+output for out-of-bounds behavior, and stops a run that crosses either line. See
+[ADR 0007](adr/0007-defense-in-depth.md) for why each control exists.
+
+```toml
+[hardening]
+# The factory refuses to start unless every egress policy denies public
+# internet, or you acknowledge the risk here. Preparation runs inside the
+# sandbox, so a setup phase usually needs a network path.
+acknowledge_open_egress = true
+
+# Measure, per run, what the sandbox can actually reach. Absent means enabled.
+egress_probe = true
+egress_canary_url = "https://example.com/"
+metadata_probe_url = "http://169.254.169.254/latest/meta-data/"
+require_non_root = false
+
+# Scan agent output and quarantine a run that trips the threshold.
+behavior_monitor = true
+trip_severity = "HIGH"
+# trip_rules_file = "/etc/factory/trip-rules.json"
+
+allow_gate_self_modification = false
+
+# alert_webhook_url = "https://hooks.example.org/esf"
+# alert_webhook_token_file = "/run/credentials/factory-worker.service/alert-token"
+alert_timeout = "5s"
+```
+
+Check the posture before running anything:
+
+```bash
+./bin/factory doctor        # prints the hardening posture and every warning
+./bin/factory threats       # aggregate hardening evidence across runs
+./bin/factory threats --json --limit 0
+```
+
+Terminal states that mean "stopped, not built":
+
+| State | Meaning | Operator action |
+| --- | --- | --- |
+| `EGRESS_UNVERIFIED` | The sandbox reached the internet although the policy denied it, reached the cloud metadata endpoint, or ran as uid 0 under `require_non_root`. | Fix the template or the egress policy. Do not re-run until `factory doctor` is clean. |
+| `QUARANTINED` | The behavior monitor found indicators of out-of-bounds activity. | Read `hardening/behavior.json`; treat the sandbox as compromised and rotate anything it could reach. |
+| `GATE_TAMPERED` | The tree modified a build or test script that judges it. This can happen with no trace in the patch (`git update-index --assume-unchanged`, a committed tamper), which is why the check reads the tree. | Review the tree by hand; do not accept the gate result. |
+| `BLOCKED` | The agent reported it could not satisfy the task. | Not a security event: fix the task or the missing prerequisite. |
+| `REJECTED` | Every gate passed but a human reviewer rejected the change. | Rework with `factory run --change <id> --parent-run <run-id>`. |
+
+The agent's stop signal is `blocked.json` in the factory metadata directory
+(`/workspace/.factory/blocked.json`), containing `{"reason": "..."}` or plain
+text. Document it in the task text you give an agent, so it knows the honest
+exit exists.
 
 ## 7. How cleanup works
 

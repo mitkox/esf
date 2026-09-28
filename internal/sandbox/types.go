@@ -69,6 +69,13 @@ type Network struct {
 	Rules []NetworkRule `json:"rules,omitempty"`
 }
 
+// AllowsInternet reports whether this request leaves public egress possible.
+//
+// A nil AllowInternet means "deployment default", which CubeSandbox documents
+// as public egress allowed with internal CIDRs denied. Only an explicit false
+// denies, so callers verifying a boundary must not treat nil as closed.
+func (n Network) AllowsInternet() bool { return n.AllowInternet == nil || *n.AllowInternet }
+
 // NetworkRule is a provider-neutral L7 egress rule. Match fields are ANDed.
 // Rules are evaluated in order and should therefore put narrow rules first.
 type NetworkRule struct {
