@@ -1,10 +1,6 @@
 {{- if .Values.factory.enabled }}
 {{- $name := include "esf.name" . -}}
 {{- $config := required "factory.configSecret is required" .Values.factory.configSecret -}}
-{{- if .Values.factory.quality.enabled }}
-{{- required "factory.quality.nodeName is required for local QMS authority" .Values.factory.quality.nodeName -}}
-{{- required "factory.quality.socketHostPath is required for local QMS authority" .Values.factory.quality.socketHostPath -}}
-{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,12 +17,8 @@ spec:
       serviceAccountName: {{ $name }}-factory
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 120
-      {{- if .Values.factory.quality.enabled }}
-      nodeName: {{ .Values.factory.quality.nodeName | quote }}
-      {{- else }}
       nodeSelector:
         {{- toYaml .Values.factory.nodeSelector | nindent 8 }}
-      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -64,9 +56,6 @@ spec:
             {{- if .Values.factory.agentClaim }}
             - {name: agents, mountPath: /opt/esf/agents, readOnly: true}
             {{- end }}
-            {{- if .Values.factory.quality.enabled }}
-            - {name: quality-socket, mountPath: /run/esf-quality}
-            {{- end }}
       volumes:
         - name: config
           secret: {secretName: {{ $config | quote }}, defaultMode: 0440}
@@ -82,9 +71,5 @@ spec:
         {{- if .Values.factory.agentClaim }}
         - name: agents
           persistentVolumeClaim: {claimName: {{ .Values.factory.agentClaim | quote }}}
-        {{- end }}
-        {{- if .Values.factory.quality.enabled }}
-        - name: quality-socket
-          hostPath: {path: {{ .Values.factory.quality.socketHostPath | quote }}, type: Directory}
         {{- end }}
 {{- end }}

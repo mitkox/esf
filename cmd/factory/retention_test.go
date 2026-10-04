@@ -14,7 +14,7 @@ func TestRetentionKeepsEvidenceAndRejectsChangedCandidates(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-60 * 24 * time.Hour)
-	for _, name := range []string{".artifact-interrupted", "run.json", "changes.patch", "quality-attestation.json"} {
+	for _, name := range []string{".artifact-interrupted", "run.json", "changes.patch"} {
 		path := filepath.Join(runDir, name)
 		if err := os.WriteFile(path, []byte(name), 0o600); err != nil {
 			t.Fatal(err)
@@ -55,7 +55,7 @@ func TestRetentionKeepsEvidenceAndRejectsChangedCandidates(t *testing.T) {
 	if _, err := os.Stat(items[0].path); !os.IsNotExist(err) {
 		t.Fatalf("orphan still present: %v", err)
 	}
-	for _, name := range []string{"run.json", "changes.patch", "quality-attestation.json"} {
+	for _, name := range []string{"run.json", "changes.patch"} {
 		if _, err := os.Stat(filepath.Join(runDir, name)); err != nil {
 			t.Fatalf("protected evidence %s: %v", name, err)
 		}

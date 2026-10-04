@@ -33,7 +33,7 @@ type retentionPlan struct {
 }
 
 // Only interrupted atomic writes are eligible. Completed manifests, patches,
-// logs, changes and QMS records never enter this retention set.
+// logs and change records never enter this retention set.
 func findOrphanArtifacts(root string, cutoff time.Time) ([]orphanArtifact, error) {
 	rootInfo, err := os.Stat(root)
 	if err != nil {

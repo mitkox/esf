@@ -33,7 +33,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
-	"github.com/mitkox/esf/internal/assurance"
 	"github.com/mitkox/esf/internal/factory"
 	"github.com/mitkox/esf/internal/factoryartifacts"
 )
@@ -68,7 +67,6 @@ verification, one verified patch out.`,
 		newStorageCommand(&configPath),
 		newRetentionCommand(&configPath),
 		newRunCommand(&configPath),
-		newQualityCommand(&configPath),
 		newGetCommand(&configPath),
 		newDescribeCommand(&configPath),
 		newApplyCommand(&configPath),
@@ -217,11 +215,6 @@ execute an arbitrary program.`,
 				req.SandboxTemplate = cfg.Cube.TemplateID
 			}
 
-			if protected, err := cfg.QualityRequired(req); err != nil {
-				return err
-			} else if protected {
-				return submitQuality(ctx, cfg, req, wait)
-			}
 			runtime, err := factory.NewRuntime(ctx, factory.RuntimeOptions{Config: cfg})
 			if err != nil {
 				return err
@@ -299,7 +292,7 @@ execute an arbitrary program.`,
 // workflow, so the operator still sees the evidence that was produced.
 func reportFailure(ctx context.Context, runtime *factory.Runtime, c client.Client, runID string, cause error) factory.RunManifest {
 	fmt.Fprintf(os.Stderr, "\nworkflow error: %v\n", cause)
-	manifest, err := runtime.ReadRunManifest(context.Background(), runID)
+	manifest, err := factory.ReadManifest(runtime.Artifacts, runID)
 	if err == nil {
 		return manifest
 	}
@@ -423,19 +416,6 @@ func newStatusCommand(configPath *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if cfg.Quality.Enabled() {
-				var record assurance.Run
-				err = factory.NewQualityClient(cfg.QualitySocket()).Call(ctx, "GET", "/v1/runs/"+runID, nil, &record)
-				if err == nil {
-					if record.Decision != nil {
-						return printJSON(record.Manifest)
-					}
-					return printJSON(record)
-				}
-				if !errors.Is(err, assurance.ErrNotFound) {
-					return err
-				}
-			}
 			runtime, err := factory.NewRuntime(ctx, factory.RuntimeOptions{Config: cfg})
 			if err != nil {
 				return err
@@ -443,7 +423,7 @@ func newStatusCommand(configPath *string) *cobra.Command {
 			defer runtime.Close(ctx)
 
 			// A completed run's authoritative record is its durable manifest.
-			if manifest, err := runtime.ReadRunManifest(context.Background(), runID); err == nil {
+			if manifest, err := factory.ReadManifest(runtime.Artifacts, runID); err == nil {
 				if asJSON {
 					return printJSON(manifest)
 				}

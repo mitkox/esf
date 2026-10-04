@@ -295,7 +295,6 @@ func (s *Server) routes() (http.Handler, error) {
 		mux.HandleFunc("GET /api/v1/factory/runs/{id}", s.authorizeFactoryRead(s.getFactoryRun))
 		mux.HandleFunc("GET /api/v1/factory/runs/{id}/conditions", s.authorizeFactoryRead(s.getFactoryConditions))
 		mux.HandleFunc("GET /api/v1/factory/runs/{id}/evidence", s.authorizeFactoryRead(s.getFactoryEvidence))
-		mux.HandleFunc("GET /api/v1/factory/runs/{id}/quality", s.authorizeFactoryRead(s.getFactoryQuality))
 		mux.HandleFunc("GET /api/v1/factory/runs/{id}/patch", s.authorizeFactoryRead(s.getFactoryPatch))
 		mux.HandleFunc("GET /api/v1/factory/changes", s.authorizeFactoryRead(s.listFactoryChanges))
 		mux.HandleFunc("GET /api/v1/factory/changes/{id}", s.authorizeFactoryRead(s.getFactoryChange))

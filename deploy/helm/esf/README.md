@@ -22,20 +22,13 @@ starting the worker. The NetworkPolicy denies ingress and permits only DNS plus
 the explicit egress CIDRs and ports you supply. Configure the CNI to enforce
 NetworkPolicy and include Cube control/data, Temporal, and OTLP destinations.
 
-For QMS, set `factory.quality.enabled`, `nodeName`, and `socketHostPath` to a
-dedicated Linux authority node and a narrowly scoped host directory. Its
-Unix-socket permissions must be managed on that host. Distinct approvers use
-distinct Linux UIDs over SSH; Kubernetes exec does not prove a separate human
-identity. Keep the QMS authority and its records outside the pod lifecycle.
-
 ## Upgrade and recovery
 
 1. Stop new submissions, allow active runs to finish, and verify sandbox
    cleanup and pending quality exports. Scale this chart's workloads to zero.
-2. Take consistent snapshots of the factory and console PVCs, QMS authority
-   state if enabled, and the operator-managed Temporal/PostgreSQL state. Save
-   configuration, payload keys, image digests, and the release inventory with
-   the snapshot.
+2. Take consistent snapshots of the factory and console PVCs and the
+   operator-managed Temporal/PostgreSQL state. Save configuration, payload
+   keys, image digests, and the release inventory with the snapshot.
 3. For an existing CubeSandbox Kubernetes installation upgrading to 0.7.2,
    follow the upstream node-drain procedure and acknowledge the host-network
    change with `hostNetworkChangeAck` before admitting ESF work.
@@ -46,7 +39,7 @@ identity. Keep the QMS authority and its records outside the pod lifecycle.
    submissions.
 
 Rollback after a schema migration means scaling down, restoring the matching
-PVC, QMS, and Temporal snapshots, and reinstalling the matching earlier images
+PVC and Temporal snapshots, and reinstalling the matching earlier images
 and chart. A binary downgrade against migrated state is unsupported. Perform a
 restore drill in an isolated namespace and storage set before production use.
 
