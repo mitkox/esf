@@ -1,6 +1,6 @@
 # Versioned CubeSandbox template
 
-`Dockerfile` builds the Linux/amd64 ESF v0.5.0 template from a pinned
+`Dockerfile` builds the Linux/amd64 ESF v0.6.0 template from a pinned
 CubeSandbox base. It includes Git, CA certificates, Python, the command-output
 limiter tools, OpenCode 2.0.18, and Unreal 0.2.0. The Docker build verifies
 both executable digests against the release inventory. Provider credentials
@@ -9,7 +9,10 @@ are absent from the image; CubeEgress injects them at runtime.
 Build and attest the candidate image through the `Candidate images` workflow.
 Record its immutable digest, the package versions in
 `/opt/esf/apt-package-versions.txt`, and the resulting READY Cube template ID
-in the release inventory. Create the Cube template from the **digest**, not a
+in the post-build qualification manifest. The source inventory records only
+immutable build inputs. Set the template's DNS resolver explicitly for the
+deployment; a healthy DNS service does not correct a template using another
+resolver. Create the Cube template from the **digest**, not a
 mutable tag, using the operator's `cubemastercli tpl create-from-image` flow:
 
 ```sh

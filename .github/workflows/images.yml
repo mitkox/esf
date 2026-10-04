@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: Candidate or RC tag, such as v0.5.0-candidate.1
+        description: Candidate or RC tag matching inventory, such as v0.6.0-rc.1
         required: true
         type: string
 
@@ -37,10 +37,16 @@ jobs:
         with:
           go-version: 1.27.1
       - name: Validate candidate tag and inventory
+        id: version
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
         shell: bash
         run: |
           set -euo pipefail
-          [[ '${{ inputs.image_tag }}' =~ ^v0\.5\.0-(candidate|rc)\.[0-9]+$ ]]
+          [[ "$IMAGE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(candidate|rc)\.[1-9][0-9]*$ ]]
+          inventory_version=$(python3 -c 'import json; print(json.load(open("release/inventory.json"))["release"])')
+          test "${IMAGE_TAG%%-*}" = "$inventory_version"
+          printf 'binary_version=%s\n' "${inventory_version#v}" >> "$GITHUB_OUTPUT"
           python3 scripts/verify-release-inventory.py
       - name: Log in to GHCR
         uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
@@ -61,7 +67,7 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}:${{ inputs.image_tag }}
           build-args: |
-            ESF_VERSION=0.5.0
+            ESF_VERSION=${{ steps.version.outputs.binary_version }}
             ESF_COMMIT=${{ github.sha }}
       - name: Attest image provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4

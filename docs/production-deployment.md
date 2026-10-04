@@ -1,14 +1,16 @@
 # Deploying the factory worker
 
-The v0.5.0 archives are a binary preview. This guide describes the intended
-deployment configuration, but no production deployment is qualified by the
-release. Complete the relevant live, security, backup, restore, and soak checks
-for your environment before production use; see the
-[release inventory](../release/inventory.json) for recorded evidence.
+The 0.6.0 candidate requires an attested companion qualification manifest for
+the exact source and built assets before production use. This guide describes
+the deployment configuration; it does not qualify a deployment. Complete the
+live, security, backup, restore, migration, load and soak checks in the
+[release procedure](release-v0.6.0.md). Input versions remain recorded in the
+[release inventory](../release/inventory.json).
 
 The target deployment uses an operator-managed Temporal cluster, CubeSandbox,
-and durable local storage on a dedicated factory host. Multiple workers on
-different hosts must share the same artifact filesystem. Cube template resources
+and durable local or block-backed storage on a dedicated factory host. Run one
+authoritative deployment and drain it for upgrades; HA and rolling upgrades are
+unsupported. Cube template resources
 and egress policy must be set by the operator; the provider does not enforce the
 optional CPU/memory/disk fields in the factory configuration.
 

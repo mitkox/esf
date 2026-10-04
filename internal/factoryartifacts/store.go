@@ -12,6 +12,7 @@
 package artifacts
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -98,14 +99,21 @@ func (l *Local) ForRun(runID string) (Store, error) {
 		return nil, fmt.Errorf("artifacts: invalid run id %q: %w", runID, err)
 	}
 	dir := filepath.Join(l.root, "runs", runID)
-	if err := os.MkdirAll(dir, 0o750); err != nil {
+	root, err := os.OpenRoot(l.root)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	location := filepath.ToSlash(filepath.Join("runs", runID))
+	if err := root.MkdirAll(location, 0o750); err != nil {
 		return nil, fmt.Errorf("artifacts: create run directory %q: %w", dir, err)
 	}
-	return &RunStore{dir: dir, location: filepath.ToSlash(filepath.Join("runs", runID)), maxArtifactBytes: l.maxArtifactBytes}, nil
+	return &RunStore{root: l.root, dir: dir, location: location, maxArtifactBytes: l.maxArtifactBytes}, nil
 }
 
 // RunStore is the artifact store for one run.
 type RunStore struct {
+	root             string
 	dir              string
 	location         string
 	maxArtifactBytes int64
@@ -126,16 +134,27 @@ func (s *RunStore) Write(relPath string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(full), 0o750); err != nil {
+	root, err := s.openRoot()
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	name, err := filepath.Rel(s.dir, full)
+	if err != nil {
+		return err
+	}
+	parent := filepath.Dir(name)
+	if err := root.MkdirAll(parent, 0o750); err != nil {
 		return fmt.Errorf("artifacts: create directory for %q: %w", relPath, err)
 	}
 	// Publish complete files atomically. Readers must never observe a
 	// truncated manifest while an activity retry replaces it.
-	tmp, err := os.CreateTemp(filepath.Dir(full), ".artifact-*")
+	tmpName := filepath.Join(parent, ".artifact-"+rand.Text())
+	tmp, err := root.OpenFile(tmpName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o640)
 	if err != nil {
 		return fmt.Errorf("artifacts: stage %q: %w", relPath, err)
 	}
-	defer os.Remove(tmp.Name())
+	defer root.Remove(tmpName)
 	defer tmp.Close()
 	if err := tmp.Chmod(0o640); err != nil {
 		return fmt.Errorf("artifacts: chmod %q: %w", relPath, err)
@@ -149,16 +168,26 @@ func (s *RunStore) Write(relPath string, data []byte) error {
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("artifacts: close %q: %w", relPath, err)
 	}
-	if err := os.Rename(tmp.Name(), full); err != nil {
+	if err := root.Rename(tmpName, name); err != nil {
 		return fmt.Errorf("artifacts: publish %q: %w", relPath, err)
 	}
-	dir, err := os.Open(filepath.Dir(full))
-	if err != nil {
-		return fmt.Errorf("artifacts: open parent of %q: %w", relPath, err)
-	}
-	defer dir.Close()
-	if err := dir.Sync(); err != nil {
-		return fmt.Errorf("artifacts: sync parent of %q: %w", relPath, err)
+	// Persist newly created ancestor directories as well as the file entry.
+	for parent := parent; ; parent = filepath.Dir(parent) {
+		dir, err := root.Open(parent)
+		if err != nil {
+			return fmt.Errorf("artifacts: open parent of %q: %w", relPath, err)
+		}
+		err = dir.Sync()
+		closeErr := dir.Close()
+		if err != nil {
+			return fmt.Errorf("artifacts: sync parent of %q: %w", relPath, err)
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		if parent == "." {
+			break
+		}
 	}
 	return nil
 }
@@ -169,7 +198,16 @@ func (s *RunStore) Read(relPath string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(full)
+	root, err := s.openRoot()
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	name, err := filepath.Rel(s.dir, full)
+	if err != nil {
+		return nil, err
+	}
+	data, err := root.ReadFile(name)
 	if err != nil {
 		return nil, fmt.Errorf("artifacts: read %q: %w", relPath, err)
 	}
@@ -182,7 +220,16 @@ func (s *RunStore) Exists(relPath string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, err = os.Stat(full)
+	root, err := s.openRoot()
+	if err != nil {
+		return false, err
+	}
+	defer root.Close()
+	name, err := filepath.Rel(s.dir, full)
+	if err != nil {
+		return false, err
+	}
+	_, err = root.Stat(name)
 	switch {
 	case err == nil:
 		return true, nil
@@ -203,8 +250,17 @@ func (s *RunStore) List(prefix string) ([]string, error) {
 		}
 		base = resolved
 	}
+	root, err := s.openRoot()
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	name, err := filepath.Rel(s.dir, base)
+	if err != nil {
+		return nil, err
+	}
 	var paths []string
-	err := filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(root.FS(), filepath.ToSlash(name), func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				return nil
@@ -214,11 +270,7 @@ func (s *RunStore) List(prefix string) ([]string, error) {
 		if d.IsDir() {
 			return nil
 		}
-		rel, err := filepath.Rel(s.dir, p)
-		if err != nil {
-			return err
-		}
-		paths = append(paths, filepath.ToSlash(rel))
+		paths = append(paths, p)
 		return nil
 	})
 	if err != nil {
@@ -226,6 +278,15 @@ func (s *RunStore) List(prefix string) ([]string, error) {
 	}
 	sort.Strings(paths)
 	return paths, nil
+}
+
+func (s *RunStore) openRoot() (*os.Root, error) {
+	root, err := os.OpenRoot(s.root)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return root.OpenRoot(s.location)
 }
 
 // resolve validates a store-relative path and returns its absolute form.

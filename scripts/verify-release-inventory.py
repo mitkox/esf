@@ -9,6 +9,8 @@ import re
 import sys
 import tomllib
 
+from release_qualification import verify_qualification
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -17,6 +19,8 @@ def main() -> int:
     gate = parser.add_mutually_exclusive_group()
     gate.add_argument("--require-preview", action="store_true")
     gate.add_argument("--require-qualified", action="store_true")
+    parser.add_argument("--qualification-manifest", type=Path)
+    parser.add_argument("--artifact-dir", type=Path)
     args = parser.parse_args()
     inventory = json.loads((ROOT / "release/inventory.json").read_text())
     embedded_inventory = ROOT / "internal/releaseinfo/inventory.json"
@@ -34,6 +38,20 @@ def main() -> int:
             issues.append(message)
 
     require(embedded_inventory.exists() and embedded_inventory.read_bytes() == (ROOT / "release/inventory.json").read_bytes(), "embedded factory inventory differs from release inventory")
+    version = inventory["release"].removeprefix("v")
+    root_python = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    require(root_python["project"]["version"] == version, "root Python version differs from inventory")
+    require(next((p.get("version") for p in python["package"] if p["name"] == "esf-optional-tools"), None) == version,
+            "root Python lock version differs from inventory")
+    require(re.search(rf'(?m)^var Version\s*=\s*"{re.escape(version)}"', (ROOT / "internal/factory/config.go").read_text()) is not None,
+            "factory default version differs from inventory")
+    chart = (ROOT / "deploy/helm/esf/Chart.yaml").read_text()
+    require(re.search(rf'(?m)^version: {re.escape(version)}$', chart) is not None and
+            re.search(rf'(?m)^appVersion: "{re.escape(version)}"$', chart) is not None,
+            "Helm chart versions differ from inventory")
+    for dockerfile in ("runtime", "managedworker", "intake"):
+        require(f"ARG ESF_VERSION={version}" in (ROOT / f"deploy/images/Dockerfile.{dockerfile}").read_text(),
+                f"{dockerfile} image version differs from inventory")
 
     require(re.search(rf"(?m)^go {re.escape(inventory['toolchains']['go'])}$", mod) is not None, "Go toolchain does not match inventory")
     require(dependencies["cubesandbox"]["go_sdk"] in mod, "Cube SDK does not match inventory")
@@ -60,9 +78,13 @@ def main() -> int:
     dspy = next((package.get("version") for package in python["package"] if package["name"] == "dspy"), None)
     require(dspy == dependencies["dspy"], "DSPy lock differs from inventory")
     if args.require_preview:
-        require(inventory.get("release_profile") == "binary-preview", "v0.5.0 binary preview profile is not declared")
+        require(inventory.get("release_profile") == "binary-preview", "binary preview profile is not declared")
         require(inventory["qualification"].get("temporal_replay") == "passed", "Temporal history replay is not qualified")
-    if args.require_qualified:
+    if args.require_qualified and inventory.get("qualification_mode") == "companion-manifest":
+        require(args.qualification_manifest is not None, "--qualification-manifest is required for production qualification")
+        if args.qualification_manifest is not None:
+            issues.extend(verify_qualification(ROOT, inventory, args.qualification_manifest, args.artifact_dir))
+    elif args.require_qualified:
         for name, status in inventory["qualification"].items():
             require(status == "passed", f"qualification {name} is {status}")
         for name, value in inventory["images"].items():
@@ -71,6 +93,8 @@ def main() -> int:
         require(inventory["templates"]["cube_template_id"] is not None and inventory["templates"]["qualification"] == "passed", "Cube template is not qualified")
         require(dependencies["unreal"]["binary_sha256"] is not None, "Unreal checksum is missing")
         require(inventory["transitive_licenses"] == "reviewed", "transitive licenses are not reviewed")
+    if args.qualification_manifest is not None and not args.require_qualified:
+        issues.extend(verify_qualification(ROOT, inventory, args.qualification_manifest, args.artifact_dir))
     for issue in issues:
         print(f"inventory: {issue}", file=sys.stderr)
     if issues:

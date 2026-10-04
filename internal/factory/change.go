@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/mitkox/esf/internal/factoryartifacts"
@@ -185,6 +186,38 @@ var ErrChangeNotFound = errors.New("change not found")
 
 // Save writes a change atomically with owner-only permissions.
 func (s *ChangeStore) Save(c Change) error {
+	unlock, err := s.lockChange(c.ChangeID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return s.save(c)
+}
+
+// Serialise each read/modify/write across worker activities and operator
+// processes. Atomic rename alone prevents torn files, but loses activations
+// when two completions read the same old record.
+func (s *ChangeStore) lockChange(changeID string) (func(), error) {
+	if _, err := s.pathFor(changeID); err != nil {
+		return nil, err
+	}
+	root, err := os.OpenRoot(s.root)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	lock, err := root.OpenFile(changeID+".lock", os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		lock.Close()
+		return nil, err
+	}
+	return func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN); _ = lock.Close() }, nil
+}
+
+func (s *ChangeStore) save(c Change) error {
 	path, err := s.pathFor(c.ChangeID)
 	if err != nil {
 		return err
@@ -228,6 +261,15 @@ func (s *ChangeStore) Save(c Change) error {
 	if err := os.Rename(tmpName, path); err != nil {
 		return fmt.Errorf("change store: rename: %w", err)
 	}
+	// The file's fsync does not persist its renamed directory entry.
+	dir, err := os.Open(s.root)
+	if err != nil {
+		return fmt.Errorf("change store: open directory: %w", err)
+	}
+	defer dir.Close()
+	if err := dir.Sync(); err != nil {
+		return fmt.Errorf("change store: sync directory: %w", err)
+	}
 	return nil
 }
 
@@ -262,12 +304,17 @@ func (s *ChangeStore) List() ([]Change, error) {
 // Idempotency matters because a retried run submission must not create a second
 // change with the same identity.
 func (s *ChangeStore) OpenChange(c Change) (Change, bool, error) {
+	unlock, err := s.lockChange(c.ChangeID)
+	if err != nil {
+		return Change{}, false, err
+	}
+	defer unlock()
 	if existing, err := s.Load(c.ChangeID); err == nil {
 		return existing, false, nil
 	} else if !errors.Is(err, ErrChangeNotFound) {
 		return Change{}, false, err
 	}
-	if err := s.Save(c); err != nil {
+	if err := s.save(c); err != nil {
 		return Change{}, false, err
 	}
 	return c, true, nil
@@ -286,6 +333,11 @@ func (s *ChangeStore) RecordRun(manifest RunManifest) (Change, error) {
 		// the older one-run-per-task behaviour is preserved.
 		changeID = manifest.RunID
 	}
+	unlock, err := s.lockChange(changeID)
+	if err != nil {
+		return Change{}, err
+	}
+	defer unlock()
 	change, err := s.Load(changeID)
 	if err != nil {
 		if !errors.Is(err, ErrChangeNotFound) {
@@ -351,10 +403,25 @@ func (s *ChangeStore) RecordRun(manifest RunManifest) (Change, error) {
 	change.TotalCostUSD, change.TotalTokens = recompute.cost, recompute.tokens
 
 	change.Status = deriveChangeStatus(change, manifest)
-	if err := s.Save(change); err != nil {
+	if err := s.save(change); err != nil {
 		return Change{}, err
 	}
 	return change, nil
+}
+
+// Abandon retains concurrent activations and their authoritative evidence.
+func (s *ChangeStore) Abandon(changeID string, now time.Time) error {
+	unlock, err := s.lockChange(changeID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	change, err := s.Load(changeID)
+	if err != nil {
+		return err
+	}
+	change.Status, change.UpdatedAt = ChangeAbandoned, now
+	return s.save(change)
 }
 
 // totals is the aggregate pair recomputed across activations.

@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - master
 
 permissions:
   contents: read
@@ -38,6 +38,8 @@ jobs:
         run: npm ci
       - name: Check frozen release inventory
         run: python3 scripts/verify-release-inventory.py
+      - name: Test release qualification boundaries
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
       - name: Validate release SBOM
         run: |
           python3 scripts/generate-sbom.py /tmp/esf-ci-sbom.json

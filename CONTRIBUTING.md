@@ -11,8 +11,9 @@ Report vulnerabilities through [SECURITY.md](SECURITY.md), not a public issue.
 
 Install:
 
-- Go 1.26.6
-- Node.js 22.22.2 or a compatible newer release, plus npm
+- Go 1.27.1
+- Node.js 24.21.0, plus npm
+- Python 3.14.7 and uv 0.11.14 for optional Python checks
 - Git
 - `just` for repository shortcuts
 - the agent CLI needed for any real execution checks
@@ -68,7 +69,7 @@ Do not replace a pinned SHA with a mutable tag.
 - Explain what was verified, including browser checks for UI work.
 - Do not commit credentials, local configuration, databases, or run artifacts.
 
-Changes to `main` must go through a pull request and pass the required `check`
+Changes to `master` must go through a pull request and pass the required `check`
 status. By participating, you agree to follow the
 [Code of Conduct](CODE_OF_CONDUCT.md). Contributions use the project's
 [MIT License](LICENSE).

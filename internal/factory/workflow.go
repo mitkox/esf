@@ -479,7 +479,11 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 			s.collect(ctx, acts, req, "")
 			return fmt.Errorf("sandbox security invariants violated: %s", detail)
 		}
-		s.setCondition(ctx, ConditionEgressVerified, ConditionTrue, "Probed", probeSummary(*probe))
+		if probe.Canary.Decided && probe.Metadata.Decided {
+			s.setCondition(ctx, ConditionEgressVerified, ConditionTrue, "Probed", probeSummary(*probe))
+		} else {
+			s.setCondition(ctx, ConditionEgressVerified, ConditionUnknown, "ProbeInconclusive", probeSummary(*probe))
+		}
 	} else {
 		s.setCondition(ctx, ConditionEgressVerified, ConditionUnknown, "ProbeDisabled",
 			"hardening.egress_probe is disabled: the applied network policy was not measured")

@@ -225,12 +225,33 @@ func TestControlPlaneEndpointRejectsQueryAndFragment(t *testing.T) {
 		"https://control.example.com?",
 		"https://control.example.com#api",
 		"https://control.example.com#",
+		"https://user:credential@control.example.com",
 	} {
 		t.Run(endpoint, func(t *testing.T) {
 			if _, err := controlPlaneEndpoint(endpoint); err == nil {
 				t.Fatalf("controlPlaneEndpoint(%q) succeeded", endpoint)
 			}
 		})
+	}
+}
+
+func TestControlPlaneClientDoesNotFollowCredentialedRedirects(t *testing.T) {
+	var redirected atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/redirected" {
+			redirected.Add(1)
+			response.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.Redirect(response, request, "/redirected", http.StatusTemporaryRedirect)
+	}))
+	defer server.Close()
+	c := newClient(server.URL, "fixture-token", server.Client())
+	if err := c.Post(context.Background(), "/submit", nil, nil); err == nil {
+		t.Fatal("redirect was treated as a successful credentialed request")
+	}
+	if redirected.Load() != 0 {
+		t.Fatal("forwarded worker credentials on a redirect")
 	}
 }
 

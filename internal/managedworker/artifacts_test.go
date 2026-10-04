@@ -202,4 +202,16 @@ func TestInputLocalFilesystemFailureDoesNotRetry(t *testing.T) {
 	if !errors.As(err, &response) || response.Retryable() || downloads.Load() != 1 {
 		t.Fatalf("local error retried: %v; downloads %d", err, downloads.Load())
 	}
+	outside := t.TempDir()
+	job := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(job, "outputs")); err != nil {
+		t.Fatal(err)
+	}
+	_, err = worker.prepareInputs(protocol.RunSpec{Inputs: map[string]protocol.Artifact{"__workspace__/plan": {ID: "file", Size: 3}}})(ctx, filepath.Join(job, "inputs"))
+	if err == nil {
+		t.Fatal("materialized input outside its job through a symlink")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "plan")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("external input was written: %v", err)
+	}
 }

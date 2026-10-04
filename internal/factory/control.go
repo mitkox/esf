@@ -89,7 +89,11 @@ type OpenRun struct {
 // It pages through every result. A single unpaginated call would silently miss
 // runs past the first page, which is exactly the case that matters during a
 // halt: "some runs are still executing and the command said it stopped them".
-func ListOpenRuns(ctx context.Context, c client.Client, f HaltFilter) ([]OpenRun, error) {
+func ListOpenRuns(ctx context.Context, c client.Client, f HaltFilter, converters ...converter.DataConverter) ([]OpenRun, error) {
+	dc := converter.GetDefaultDataConverter()
+	if len(converters) > 0 && converters[0] != nil {
+		dc = converters[0]
+	}
 	query := fmt.Sprintf("ExecutionStatus = \"Running\" AND WorkflowType = \"%s\"", WorkflowName)
 	var runs []OpenRun
 	var pageToken []byte
@@ -107,7 +111,10 @@ func ListOpenRuns(ctx context.Context, c client.Client, f HaltFilter) ([]OpenRun
 			if !ok || runID == "" {
 				continue
 			}
-			memo := decodeRunMemo(info.GetMemo())
+			memo, err := decodeRunMemo(info.GetMemo(), dc)
+			if err != nil {
+				return nil, fmt.Errorf("decode run memo for %s: %w", runID, err)
+			}
 			if !f.Matches(memo) {
 				continue
 			}
@@ -136,27 +143,27 @@ func ListOpenRuns(ctx context.Context, c client.Client, f HaltFilter) ([]OpenRun
 
 // decodeRunMemo reads the factory summary from a workflow memo, tolerating a
 // workflow started before the memo existed.
-func decodeRunMemo(memo *commonpb.Memo) RunMemo {
+func decodeRunMemo(memo *commonpb.Memo, dc converter.DataConverter) (RunMemo, error) {
 	if memo == nil {
-		return RunMemo{}
+		return RunMemo{}, nil
 	}
 	payload, ok := memo.GetFields()[RunMemoKey]
 	if !ok || payload == nil {
-		return RunMemo{}
+		return RunMemo{}, nil
 	}
 	var out RunMemo
-	if err := converter.GetDefaultDataConverter().FromPayload(payload, &out); err != nil {
-		return RunMemo{}
+	if err := dc.FromPayload(payload, &out); err != nil {
+		return RunMemo{}, err
 	}
-	return out
+	return out, nil
 }
 
 // HaltRuns cancels every running workflow matching the filter.
 //
 // It returns the runs it attempted and an error that joins every cancellation
 // failure, so a partial halt is never reported as a complete one.
-func HaltRuns(ctx context.Context, c client.Client, f HaltFilter) ([]OpenRun, error) {
-	runs, err := ListOpenRuns(ctx, c, f)
+func HaltRuns(ctx context.Context, c client.Client, f HaltFilter, converters ...converter.DataConverter) ([]OpenRun, error) {
+	runs, err := ListOpenRuns(ctx, c, f, converters...)
 	if err != nil {
 		return nil, err
 	}

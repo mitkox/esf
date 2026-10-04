@@ -109,7 +109,7 @@ func (s *Store) PublishArtifact(ctx context.Context, run, instance, token, name 
 	if count >= 1000 || pending.Size > s.storageConfig.MaxRunBytes-size {
 		return empty, fmt.Errorf("%w: run output limit exceeded", ErrArtifactInvalid)
 	}
-	f, err := os.Open(pending.Path)
+	f, err := pending.Open()
 	if err != nil {
 		return empty, err
 	}

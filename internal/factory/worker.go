@@ -172,12 +172,11 @@ func NewTemporalClient(cfg Config, log *slog.Logger) (client.Client, error) {
 	if name := cfg.Temporal.APIKeyEnv; name != "" {
 		opts.Credentials = client.NewAPIKeyStaticCredentials(os.Getenv(name))
 	}
-	if path := cfg.Temporal.PayloadKeyring; path != "" {
-		codec, err := loadPayloadCodec(path)
-		if err != nil {
-			return nil, err
-		}
-		opts.DataConverter = converter.NewCodecDataConverter(converter.GetDefaultDataConverter(), codec)
+	opts.DataConverter, err = TemporalDataConverter(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.Temporal.PayloadKeyring != "" {
 		opts.FailureConverter = temporal.NewDefaultFailureConverter(temporal.DefaultFailureConverterOptions{EncodeCommonAttributes: true, DataConverter: opts.DataConverter})
 	}
 	c, err := client.Dial(opts)
@@ -185,6 +184,18 @@ func NewTemporalClient(cfg Config, log *slog.Logger) (client.Client, error) {
 		return nil, fmt.Errorf("dial temporal at %s: %w", cfg.Temporal.HostPort, err)
 	}
 	return c, nil
+}
+
+// TemporalDataConverter also decodes encrypted visibility memos for incident controls.
+func TemporalDataConverter(cfg Config) (converter.DataConverter, error) {
+	if cfg.Temporal.PayloadKeyring == "" {
+		return converter.GetDefaultDataConverter(), nil
+	}
+	codec, err := loadPayloadCodec(cfg.Temporal.PayloadKeyring)
+	if err != nil {
+		return nil, err
+	}
+	return converter.NewCodecDataConverter(converter.GetDefaultDataConverter(), codec), nil
 }
 
 // RunWorker starts the Temporal worker and blocks until ctx is cancelled.
@@ -259,6 +270,11 @@ func (r *Runtime) RunWorker(ctx context.Context) error {
 // collectSecrets gathers the values that must never appear in evidence.
 func collectSecrets(cfg Config, harnesses *agentharness.Registry) []string {
 	var secrets []string
+	if path := strings.TrimSpace(cfg.Hardening.AlertWebhookTokenFile); path != "" {
+		if value, err := readCredentialFile(path); err == nil {
+			secrets = append(secrets, value)
+		}
+	}
 	if name := cfg.Temporal.APIKeyEnv; name != "" {
 		secrets = append(secrets, os.Getenv(name))
 	}

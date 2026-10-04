@@ -9,7 +9,7 @@ fi
 
 esf_version=${ESF_VERSION:-${MACHINIST_VERSION:-}}
 if [[ ! $esf_version =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-  echo "set ESF_VERSION to the release being installed, such as v0.5.0" >&2
+  echo "set ESF_VERSION to the release being installed, such as v0.6.0" >&2
   exit 2
 fi
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

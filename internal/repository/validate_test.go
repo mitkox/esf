@@ -117,6 +117,29 @@ func TestRemoteRequiresAnAllowlist(t *testing.T) {
 	}
 }
 
+func TestRemotePolicyMatchesAuthorityAndPathBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		prefix, value string
+		allowed       bool
+	}{
+		{"https://github.com", "https://github.com.evil.example/acme/repo", false},
+		{"https://github.com/acme", "https://github.com/acme-private/repo", false},
+		{"https://github.com/acme/service", "https://github.com/acme/service-private", false},
+		{"https://github.com/acme/", "https://github.com/acme/../private/repo", false},
+		{"https://github.com/acme/", "https://github.com/acme/%2e%2e/private/repo", false},
+		{"https://github.com/acme/", "https://github.com/acme/repo?token=secret", false},
+		{"https://github.com/acme/", "https://github.com:8443/acme/repo", false},
+		{"https://github.com/acme/", "https://GITHUB.com:443/acme/repo", true},
+		{"https://github.com/acme/service", "https://github.com/acme/service", true},
+		{"https://github.com/acme/", "https://github.com/acme/service", true},
+	} {
+		err := New([]string{tc.prefix}).Validate(Request{Kind: SourceRemote, URL: tc.value, Revision: "main"})
+		if (err == nil) != tc.allowed {
+			t.Errorf("prefix %q URL %q: error=%v, allowed=%v", tc.prefix, tc.value, err, tc.allowed)
+		}
+	}
+}
+
 func TestLocalSourceValidation(t *testing.T) {
 	t.Parallel()
 	p := New(nil)

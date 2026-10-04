@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version to use for a dry-run build, such as v0.1.0-test.1
+        description: Unpublished candidate version matching inventory, such as v0.6.0-rc.1
         required: true
         type: string
 
@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      actions: read
       checks: read
       id-token: write
       attestations: write
@@ -44,6 +45,16 @@ jobs:
           node-version: 24.21.0
           cache: npm
           cache-dependency-path: internal/controlplane/web/package-lock.json
+      - name: Validate release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          inventory_version=$(python3 -c 'import json; print(json.load(open("release/inventory.json"))["release"])')
+          test "${RELEASE_VERSION%%-*}" = "$inventory_version"
+          [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[1-9][0-9]*)?$ ]]
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            [[ "$RELEASE_VERSION" == *-rc.* ]]
+          fi
       - name: Confirm toolchain
         run: test "$(go env GOVERSION)" = "go1.27.1"
       - name: Verify release tag
@@ -54,8 +65,8 @@ jobs:
           [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[1-9][0-9]*)?$ ]]
           test "$(git cat-file -t "refs/tags/$RELEASE_VERSION")" = tag
           test "$(git rev-parse "refs/tags/$RELEASE_VERSION^{}")" = "$GITHUB_SHA"
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-      - name: Verify main CI for tagged commit
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master
+      - name: Verify master CI for tagged commit
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -66,7 +77,7 @@ jobs:
             --jq '[.check_runs[] | select(.name == "check")] | max_by(.id).conclusion')
           test "$ci_result" = success
       - name: Build and verify frontend
-        if: github.ref_name != 'v0.5.0'
+        if: contains(env.RELEASE_VERSION, '-rc.')
         working-directory: internal/controlplane/web
         run: |
           npm ci
@@ -75,37 +86,45 @@ jobs:
           git diff --exit-code -- dist
           test -z "$(git status --porcelain --untracked-files=all -- dist)"
       - name: Build release set
-        if: github.ref_name != 'v0.5.0'
+        if: contains(env.RELEASE_VERSION, '-rc.')
         run: bash scripts/release.sh "$RELEASE_VERSION" dist
       - name: Prove reproducible release set
-        if: github.ref_name != 'v0.5.0'
+        if: contains(env.RELEASE_VERSION, '-rc.')
         run: |
           bash scripts/release.sh "$RELEASE_VERSION" dist-repeat
           diff -qr dist dist-repeat
       - name: Promote verified RC archives
-        if: github.ref_name == 'v0.5.0'
+        if: "!contains(env.RELEASE_VERSION, '-rc.')"
         env:
           GH_TOKEN: ${{ github.token }}
-          QUALIFIED_RC: ${{ vars.ESF_PROMOTION_SOURCE }}
+          CANDIDATE_RUN_ID: ${{ vars.ESF_PROMOTION_RUN_ID }}
+          QUALIFICATION_RUN_ID: ${{ vars.ESF_QUALIFICATION_RUN_ID }}
+          RC_ASSET_DIR: ${{ runner.temp }}/esf-rc-assets
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$QUALIFIED_RC" =~ ^v0\.5\.0-rc\.[0-9]+$ ]]
-          python3 scripts/verify-release-inventory.py --require-preview
-          test "$(git rev-parse "refs/tags/$QUALIFIED_RC^{}")" = "$GITHUB_SHA"
-          mkdir rc-assets
-          gh release download "$QUALIFIED_RC" --repo "$GITHUB_REPOSITORY" --dir rc-assets
-          (cd rc-assets && shasum -a 256 -c checksums.txt)
-          for archive in rc-assets/esf_*.tar.gz; do
+          [[ "$CANDIDATE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          mkdir "$RC_ASSET_DIR"
+          gh run download "$CANDIDATE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name esf-release-assets --dir "$RC_ASSET_DIR"
+          gh run download "$QUALIFICATION_RUN_ID" --repo "$GITHUB_REPOSITORY" --name esf-qualification --dir "$RC_ASSET_DIR"
+          QUALIFIED_RC=$(python3 -c 'import json,os; print(json.load(open(os.path.join(os.environ["RC_ASSET_DIR"],"release-manifest.json")))["release"])')
+          gh attestation verify "$RC_ASSET_DIR/qualification-manifest.json" -R "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/qualification.yml" \
+            --source-digest "$GITHUB_SHA"
+          python3 scripts/verify-release-inventory.py --require-qualified \
+            --qualification-manifest "$RC_ASSET_DIR/qualification-manifest.json" --artifact-dir "$RC_ASSET_DIR"
+          (cd "$RC_ASSET_DIR" && shasum -a 256 -c checksums.txt)
+          for archive in "$RC_ASSET_DIR"/esf_*.tar.gz; do
             gh attestation verify "$archive" -R "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
-              --source-ref "refs/tags/$QUALIFIED_RC"
+              --source-digest "$GITHUB_SHA"
             gh attestation verify "$archive" -R "$GITHUB_REPOSITORY" \
               --predicate-type https://cyclonedx.org/bom \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
-              --source-ref "refs/tags/$QUALIFIED_RC"
+              --source-digest "$GITHUB_SHA"
           done
-          python3 scripts/promote-release.py "$QUALIFIED_RC" "$RELEASE_VERSION" rc-assets dist
+          python3 scripts/promote-release.py "$QUALIFIED_RC" "$RELEASE_VERSION" "$RC_ASSET_DIR" dist "$RC_ASSET_DIR/qualification-manifest.json"
       - name: Verify release set
         run: bash scripts/verify-release.sh dist "$RELEASE_VERSION"
       - name: Attest release files
@@ -147,11 +166,15 @@ jobs:
         run: |
           set -euo pipefail
           flags=(--verify-tag --generate-notes)
-          if [[ "$RELEASE_VERSION" == 'v0.5.0' ]]; then
-            flags+=(--notes "Binary preview: archives have verified checksums, reproducible RC inputs, and provenance. VM, Kubernetes, images, security, restore, and soak qualifications remain pending in dependency-inventory.json. Qualify your deployment before production use.")
-          elif [[ "$RELEASE_VERSION" == *-* ]]; then
-            flags+=(--prerelease --notes "Validation candidate for the v0.5.0 binary preview. Deployment qualifications remain pending in dependency-inventory.json.")
+          if [[ "$RELEASE_VERSION" == *-* ]]; then
+            flags+=(--prerelease --notes "Validation candidate. Production qualification requires the matching attested companion manifest and retained evidence.")
+          else
+            flags+=(--notes "Promoted from immutable qualified RC assets. Qualification is recorded in qualification-manifest.json; deployments use a single authority and drained upgrades.")
           fi
-          gh release create "$RELEASE_VERSION" dist/* \
+          files=()
+          for file in dist/*; do
+            [[ -f "$file" ]] && files+=("$file")
+          done
+          gh release create "$RELEASE_VERSION" "${files[@]}" \
             --title "ESF $RELEASE_VERSION" \
             "${flags[@]}"

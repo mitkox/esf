@@ -10,7 +10,7 @@ not open public issues for unpatched vulnerabilities.
 ## Supported versions
 
 ESF is under active development. Only the latest release and the latest
-commit on `main` receive security fixes. Go 1.26.6 is the minimum supported
+commit on `master` receive security fixes. Go 1.27.1 is the pinned supported
 toolchain. Dependency and toolchain minimums may increase when a security fix
 requires it.
 

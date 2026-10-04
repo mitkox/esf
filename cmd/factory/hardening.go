@@ -71,8 +71,16 @@ func newHaltCommand(configPath *string) *cobra.Command {
 			defer temporalClient.Close()
 
 			filter := factory.HaltFilter{Harness: harness, Scope: scope, Repository: repository}
+			cfg, err := loadConfig(*configPath)
+			if err != nil {
+				return err
+			}
+			dc, err := factory.TemporalDataConverter(cfg)
+			if err != nil {
+				return err
+			}
 			if !yes {
-				runs, err := factory.ListOpenRuns(ctx, temporalClient, filter)
+				runs, err := factory.ListOpenRuns(ctx, temporalClient, filter, dc)
 				if err != nil {
 					return err
 				}
@@ -88,7 +96,7 @@ func newHaltCommand(configPath *string) *cobra.Command {
 				return nil
 			}
 
-			runs, err := factory.HaltRuns(ctx, temporalClient, filter)
+			runs, err := factory.HaltRuns(ctx, temporalClient, filter, dc)
 			if asJSON {
 				if printErr := printJSON(runs); printErr != nil {
 					return printErr

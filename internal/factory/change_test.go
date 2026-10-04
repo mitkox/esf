@@ -2,13 +2,54 @@ package factory
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/mitkox/esf/internal/factoryartifacts"
 )
+
+func TestConcurrentRunCompletionsRetainAllActivations(t *testing.T) {
+	store, factory := newChangeFixture(t)
+	var manifests []RunManifest
+	for i := range 8 {
+		manifest := RunManifest{RunID: fmt.Sprintf("concurrent-%d", i), ChangeID: "shared", FactoryResult: StateSucceeded, CompletedAt: time.Now().UTC()}
+		writeManifest(t, factory, manifest)
+		manifests = append(manifests, manifest)
+	}
+	var wg sync.WaitGroup
+	for _, manifest := range manifests {
+		wg.Go(func() {
+			// Separate stores model different worker and operator processes.
+			other, err := NewChangeStore(factory.Root())
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			if _, err := other.RecordRun(manifest); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	change, err := store.Load("shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if change.Attempts != 8 || len(change.Activations) != 8 {
+		t.Fatalf("lost completed activations: %+v", change)
+	}
+	if err := store.Abandon("shared", time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	change, err = store.Load("shared")
+	if err != nil || change.Status != ChangeAbandoned || len(change.Activations) != 8 {
+		t.Fatal("abandon lost activations")
+	}
+}
 
 // mustJSON marshals a value or fails the test.
 func mustJSON(t *testing.T, v any) []byte {

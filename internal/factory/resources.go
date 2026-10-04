@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mitkox/esf/internal/repository"
 	"github.com/mitkox/esf/internal/sandbox"
 	"github.com/mitkox/esf/internal/tomlx"
 )
@@ -454,6 +455,13 @@ func (c Config) ResolveResources(req RunRequest) (ResolvedResources, error) {
 		out.EgressDigest = policy.Digest()
 		out.Egress = policy.Network()
 		out.EgressSummary = policy.Summary()
+	} else if !c.Hardening.AcknowledgeOpenEgress {
+		// A declared closed policy is not necessarily selected by this request.
+		// Never inherit Cube's open deployment default without acknowledgement.
+		policy := EgressPolicyConfig{AllowInternet: boolPointer(false)}
+		out.Egress = policy.Network()
+		out.EgressDigest = policy.Digest()
+		out.EgressSummary = policy.Summary()
 	}
 
 	// Model. Only req.Model names a declared resource: req.AgentModel is a raw
@@ -582,7 +590,7 @@ func narrowedPrefixes(global, scope []string) []string {
 		}
 		for _, g := range global {
 			g = strings.TrimSpace(g)
-			if g != "" && strings.HasPrefix(trimmed, g) {
+			if g != "" && repository.URLMatchesPrefix(trimmed, g) {
 				out = append(out, s)
 				break
 			}
@@ -594,7 +602,7 @@ func narrowedPrefixes(global, scope []string) []string {
 // matchesAnyPrefix reports whether value starts with any allowlisted prefix.
 func matchesAnyPrefix(value string, prefixes []string) bool {
 	for _, p := range prefixes {
-		if p != "" && strings.HasPrefix(value, p) {
+		if p != "" && repository.URLMatchesPrefix(value, p) {
 			return true
 		}
 	}

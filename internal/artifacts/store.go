@@ -2,6 +2,7 @@
 package artifacts
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -25,9 +26,24 @@ type Filesystem struct{ directory string }
 type Pending struct {
 	Path, Checksum string
 	Size           int64
+	root           *os.Root
+	relative       string
 }
 
-func (p *Pending) Close() { _ = os.Remove(p.Path) }
+func (p *Pending) Open() (*os.File, error) {
+	if p.root != nil {
+		return p.root.Open(p.relative)
+	}
+	return os.Open(p.Path)
+}
+func (p *Pending) Close() {
+	if p.root != nil {
+		_ = p.root.Remove(p.relative)
+		_ = p.root.Close()
+		return
+	}
+	_ = os.Remove(p.Path)
+}
 func ValidPath(value string) bool {
 	return value != "" && len(value) <= 1024 && value != "." && !strings.ContainsAny(value, "\\\x00\r\n") && !strings.HasPrefix(value, "/") && path.Clean(value) == value && value != ".." && !strings.HasPrefix(value, "../")
 }
@@ -42,14 +58,21 @@ func NewFilesystem(directory string) (*Filesystem, error) {
 	return &Filesystem{abs}, nil
 }
 func (s *Filesystem) Stage(reader io.Reader, limit int64) (pending *Pending, err error) {
-	f, err := os.CreateTemp(filepath.Join(s.directory, ".uploads"), "upload-")
+	root, err := os.OpenRoot(s.directory)
 	if err != nil {
+		return nil, err
+	}
+	relative := ".uploads/upload-" + rand.Text()
+	f, err := root.OpenFile(relative, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		root.Close()
 		return nil, err
 	}
 	defer f.Close()
 	defer func() {
 		if err != nil {
-			os.Remove(f.Name())
+			root.Remove(relative)
+			root.Close()
 		}
 	}()
 	hash := sha256.New()
@@ -63,22 +86,49 @@ func (s *Filesystem) Stage(reader io.Reader, limit int64) (pending *Pending, err
 	if err = f.Sync(); err != nil {
 		return nil, err
 	}
-	return &Pending{Path: f.Name(), Checksum: hex.EncodeToString(hash.Sum(nil)), Size: n}, nil
+	return &Pending{Path: filepath.Join(s.directory, relative), Checksum: hex.EncodeToString(hash.Sum(nil)), Size: n, root: root, relative: relative}, nil
 }
 func (s *Filesystem) Publish(p *Pending, key string) error {
 	if !ValidPath(key) {
 		return errors.New("invalid artifact key")
 	}
-	target := filepath.Join(s.directory, filepath.FromSlash(key))
-	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+	root, err := os.OpenRoot(s.directory)
+	if err != nil {
 		return err
 	}
-	if err := os.Link(p.Path, target); err != nil && !errors.Is(err, os.ErrExist) {
+	defer root.Close()
+	staged, err := filepath.Rel(s.directory, p.Path)
+	if err != nil || !ValidPath(filepath.ToSlash(staged)) || filepath.Dir(staged) != ".uploads" {
+		return errors.New("invalid staged artifact")
+	}
+	if err := root.MkdirAll(path.Dir(key), 0700); err != nil {
 		return err
+	}
+	if err := root.Link(staged, key); err != nil {
+		if !errors.Is(err, os.ErrExist) {
+			return err
+		}
+		// Retrying the same upload is safe; an existing, different artifact is not.
+		file, openErr := root.Open(key)
+		if openErr != nil {
+			return openErr
+		}
+		hash := sha256.New()
+		n, hashErr := io.Copy(hash, io.LimitReader(file, p.Size+1))
+		closeErr := file.Close()
+		if hashErr != nil {
+			return hashErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		if n != p.Size || hex.EncodeToString(hash.Sum(nil)) != p.Checksum {
+			return errors.New("artifact key already contains different content")
+		}
 	}
 	// Persist new directory entries all the way to the storage root.
-	for parent := filepath.Dir(target); ; parent = filepath.Dir(parent) {
-		dir, err := os.Open(parent)
+	for parent := path.Dir(key); ; parent = path.Dir(parent) {
+		dir, err := root.Open(parent)
 		if err != nil {
 			return err
 		}
@@ -90,7 +140,7 @@ func (s *Filesystem) Publish(p *Pending, key string) error {
 		if closeErr != nil {
 			return closeErr
 		}
-		if parent == s.directory {
+		if parent == "." {
 			break
 		}
 	}

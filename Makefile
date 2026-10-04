@@ -11,6 +11,8 @@ SHELL := /bin/bash
 GO ?= go
 UV ?= uv
 PYTHON_VERSION ?= 3.14.7
+ESF_VERSION ?= 0.6.0
+ESF_COMMIT := $(shell git rev-parse HEAD)
 
 BIN_DIR    := bin
 FACTORY    := $(BIN_DIR)/factory
@@ -30,7 +32,8 @@ help: ## Show this help
 .PHONY: build
 build: ## Build the factory and discovery binaries into ./bin
 	@mkdir -p $(BIN_DIR)
-	$(GO) build -o $(FACTORY) ./cmd/factory
+	$(GO) build -ldflags="-X github.com/mitkox/esf/internal/factory.Version=$(ESF_VERSION) -X main.buildCommit=$(ESF_COMMIT)" -o $(FACTORY) ./cmd/factory
+	$(GO) build -ldflags="-X main.version=v$(ESF_VERSION)" -o $(BIN_DIR)/machinist ./cmd/machinist
 	$(GO) build -o $(BIN_DIR)/cube-smoke ./tools/cube-smoke
 	$(GO) build -o $(BIN_DIR)/cube-netprobe ./tools/cube-netprobe
 	$(GO) build -o $(BIN_DIR)/cube-agent-spike ./tools/cube-agent-spike

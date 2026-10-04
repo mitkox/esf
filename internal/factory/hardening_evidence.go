@@ -3,7 +3,6 @@ package factory
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -75,14 +74,11 @@ func (c Config) newNotifier() (notify.Notifier, error) {
 	}
 	token := ""
 	if path := strings.TrimSpace(c.Hardening.AlertWebhookTokenFile); path != "" {
-		data, err := os.ReadFile(path)
+		value, err := readCredentialFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("read alert webhook token: %w", err)
 		}
-		token = strings.TrimSpace(string(data))
-		if token == "" {
-			return nil, fmt.Errorf("alert webhook token file %s is empty", path)
-		}
+		token = value
 	}
 	return notify.NewWebhook(notify.WebhookConfig{
 		URL:     strings.TrimSpace(c.Hardening.AlertWebhookURL),

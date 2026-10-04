@@ -104,6 +104,25 @@ func TestPathTraversalIsRejected(t *testing.T) {
 			}
 		})
 	}
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret"), []byte("private"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(store.Dir(), "escape")); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Write("escape/new", []byte("x")); err == nil {
+		t.Fatal("write escaped the store through a symlink")
+	}
+	if _, err := store.Read("escape/secret"); err == nil {
+		t.Fatal("read escaped the store through a symlink")
+	}
+	if _, err := store.Exists("escape/secret"); err == nil {
+		t.Fatal("stat escaped the store through a symlink")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "new")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("external file was created: %v", err)
+	}
 }
 
 func TestRunIDTraversalIsRejected(t *testing.T) {

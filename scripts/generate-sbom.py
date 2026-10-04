@@ -64,7 +64,7 @@ def main():
         "specVersion": "1.6",
         "serialNumber": f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, 'https://github.com/mitkox/esf/sbom/' + component_digest)}",
         "version": 1,
-        "metadata": {"component": {"type": "application", "name": "esf", "version": "0.5.0"}},
+        "metadata": {"component": {"type": "application", "name": "esf", "version": json.loads((ROOT / "release/inventory.json").read_text())["release"].removeprefix("v")}},
         "components": ordered,
     }
     Path(sys.argv[1]).write_text(json.dumps(bom, indent=2, sort_keys=True) + "\n")

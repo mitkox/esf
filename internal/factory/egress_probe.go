@@ -82,17 +82,15 @@ probe_http() {
       probe_emit "$name" reachable "http_$code"
       return
     fi
-    case "$rc" in
-      6|7|28) probe_emit "$name" blocked "curl_rc=$rc" ;;
-      *) probe_emit "$name" blocked "curl_rc=$rc" ;;
-    esac
+    # DNS, TLS, tool, and timeout failures cannot establish a denied boundary.
+    probe_emit "$name" unknown "curl_rc=$rc"
     return
   fi
   if command -v timeout >/dev/null 2>&1 && [ -x /bin/bash ]; then
     if timeout 6 /bin/bash -c "exec 3<>/dev/tcp/$host/$port" 2>/dev/null; then
       probe_emit "$name" reachable "tcp_connect"
     else
-      probe_emit "$name" blocked "tcp_failed"
+      probe_emit "$name" unknown "tcp_failed"
     fi
     return
   fi
@@ -237,10 +235,10 @@ func evaluateEgressProbe(result EgressProbeResult, requireNonRoot bool) EgressPr
 		}
 	}
 	if !result.Canary.Decided {
-		notes = append(notes, "the public-internet probe was undecided: neither curl nor /dev/tcp was usable in the sandbox")
+		notes = append(notes, "the public-internet probe was undecided (inconclusive): "+result.Canary.Detail)
 	}
 	if !result.Metadata.Decided {
-		notes = append(notes, "the metadata probe was undecided: neither curl nor /dev/tcp was usable in the sandbox")
+		notes = append(notes, "the metadata probe was undecided (inconclusive): "+result.Metadata.Detail)
 	}
 	if !result.Canary.Reachable && !result.ExpectDeny {
 		notes = append(notes, "the sandbox could not reach the public canary, although the policy does not require denial")

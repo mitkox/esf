@@ -60,7 +60,13 @@ func NewClient(workerConfig config.Worker) (*Client, error) {
 }
 
 func newClient(base, token string, httpClient *http.Client) *Client {
-	return &Client{base: strings.TrimRight(base, "/"), token: token, http: httpClient}
+	// Worker and lease credentials are scoped to this authority. The standard
+	// client may forward Authorization to subdomains on redirects.
+	pinned := *httpClient
+	pinned.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return &Client{base: strings.TrimRight(base, "/"), token: token, http: &pinned}
 }
 
 func (c *Client) Get(ctx context.Context, path string, output any) error {
@@ -116,6 +122,9 @@ func controlPlaneEndpoint(raw string) (string, error) {
 	}
 	if endpoint.RawQuery != "" || endpoint.ForceQuery || strings.Contains(raw, "#") {
 		return "", errors.New("control_plane.url must not contain a query or fragment")
+	}
+	if endpoint.User != nil {
+		return "", errors.New("control_plane.url must not contain credentials")
 	}
 	if endpoint.Scheme == "http" && !loopbackHost(endpoint.Hostname()) {
 		return "", errors.New("control_plane.url must use https for a non-loopback host")

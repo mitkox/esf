@@ -1,0 +1,65 @@
+name: Attest production qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: Successful unpublished Release workflow run for this exact commit
+        required: true
+        type: string
+      evidence_run_id:
+        description: Run containing a sanitized esf-qualification-evidence artifact
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download candidate and evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          EVIDENCE_RUN_ID: ${{ inputs.evidence_run_id }}
+          ASSET_DIR: ${{ runner.temp }}/esf-qualification-assets
+          QUALIFICATION_DIR: ${{ runner.temp }}/esf-qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EVIDENCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" --jq .head_sha)" = "$GITHUB_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID" --jq .conclusion)" = success
+          gh run download "$CANDIDATE_RUN_ID" -R "$GITHUB_REPOSITORY" --name esf-release-assets --dir "$ASSET_DIR"
+          gh run download "$EVIDENCE_RUN_ID" -R "$GITHUB_REPOSITORY" --name esf-qualification-evidence --dir "$QUALIFICATION_DIR"
+          for archive in "$ASSET_DIR"/esf_*.tar.gz; do
+            gh attestation verify "$archive" -R "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" --source-digest "$GITHUB_SHA"
+          done
+          python3 scripts/verify-release-inventory.py --require-qualified \
+            --qualification-manifest "$QUALIFICATION_DIR/qualification-manifest.json" --artifact-dir "$ASSET_DIR"
+      - name: Attest verified companion manifest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ runner.temp }}/esf-qualification/qualification-manifest.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: esf-qualification
+          path: |
+            ${{ runner.temp }}/esf-qualification/qualification-manifest.json
+            ${{ runner.temp }}/esf-qualification/evidence/
+          if-no-files-found: error
+          retention-days: 90

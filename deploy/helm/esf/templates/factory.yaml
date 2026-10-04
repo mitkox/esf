@@ -25,6 +25,23 @@ spec:
         runAsGroup: 10001
         fsGroup: 10001
         seccompProfile: {type: RuntimeDefault}
+      {{- if .Values.factory.credentialSecret }}
+      initContainers:
+        - name: private-credentials
+          image: {{ include "esf.image" .Values.factory.image | quote }}
+          command: ["/usr/local/bin/factory"]
+          args: ["credentials", "stage", "--source", "/credential-source", "--destination", "/credential-stage/private"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: credentials-source, mountPath: /credential-source, readOnly: true}
+            - {name: credentials, mountPath: /credential-stage}
+      {{- end }}
       containers:
         - name: factory
           image: {{ include "esf.image" .Values.factory.image | quote }}
@@ -51,7 +68,7 @@ spec:
             - {name: data, mountPath: /var/lib/esf/factory}
             - {name: tmp, mountPath: /tmp}
             {{- if .Values.factory.credentialSecret }}
-            - {name: credentials, mountPath: /etc/esf/credentials, readOnly: true}
+            - {name: credentials, mountPath: /etc/esf/credentials, subPath: private, readOnly: true}
             {{- end }}
             {{- if .Values.factory.agentClaim }}
             - {name: agents, mountPath: /opt/esf/agents, readOnly: true}
@@ -65,8 +82,10 @@ spec:
         - name: tmp
           emptyDir: {sizeLimit: 512Mi}
         {{- if .Values.factory.credentialSecret }}
-        - name: credentials
+        - name: credentials-source
           secret: {secretName: {{ .Values.factory.credentialSecret | quote }}, defaultMode: 0440}
+        - name: credentials
+          emptyDir: {medium: Memory, sizeLimit: 2Mi}
         {{- end }}
         {{- if .Values.factory.agentClaim }}
         - name: agents

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -55,6 +56,26 @@ func TestProbeSummaryDoesNotCallUndecidedBlocked(t *testing.T) {
 	summary := probeSummary(EgressProbeResult{AgentUID: -1})
 	if !strings.Contains(summary, "internet=unknown") || !strings.Contains(summary, "metadata=unknown") {
 		t.Fatalf("undecided reachability was shown as blocked: %s", summary)
+	}
+	// Run the actual probe against a failed DNS/TLS client. A connectivity
+	// failure is not proof that the configured firewall blocked the request.
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "curl"), []byte("#!/bin/sh\nexit 6\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	script, err := renderEgressProbeScript("https://example.com/", "http://169.254.169.254/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", "-c", script)
+	cmd.Env = append(os.Environ(), "PATH="+dir+":"+os.Getenv("PATH"))
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := parseEgressProbe("https://example.com/", "http://169.254.169.254/", string(out))
+	if result.Canary.Decided || result.Metadata.Decided {
+		t.Fatalf("failed client reported a verified boundary: %+v", result)
 	}
 }
 

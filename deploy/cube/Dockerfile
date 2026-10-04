@@ -1,4 +1,4 @@
-# ESF v0.5.0 Cube template. This image is qualified for Linux/amd64 only.
+# ESF v0.6.0 Cube template recipe. Qualification is recorded separately.
 ARG NODE_BASE=docker.io/library/node@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
 ARG DEBIAN_BASE=docker.io/library/debian@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
 ARG CUBE_BASE=ghcr.io/tencentcloud/cubesandbox-base@sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472

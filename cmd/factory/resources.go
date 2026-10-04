@@ -791,13 +791,7 @@ can erase the record of what an agent did is a liability, not a feature.`,
 				if err != nil {
 					return err
 				}
-				change, err := store.Load(name)
-				if err != nil {
-					return err
-				}
-				change.Status = factory.ChangeAbandoned
-				change.UpdatedAt = time.Now().UTC()
-				if err := store.Save(change); err != nil {
+				if err := store.Abandon(name, time.Now().UTC()); err != nil {
 					return err
 				}
 				fmt.Printf("abandoned change %s (runs and evidence retained)\n", name)

@@ -30,9 +30,10 @@ and adds factory orchestration. See [upstream attribution](docs/upstream.md).
 This is actively developed software. Review the [validated behavior and
 operational requirements](docs/production-readiness.md) before deployment.
 ESF produces changes for review; it does not decide what ships.
-The v0.5.0 archives are a binary preview. VM, Kubernetes, container-image,
-security, restore, and soak qualifications are recorded separately in the
-[release inventory](release/inventory.json) and are not complete.
+ESF 0.6.0 is a release candidate. Production qualification requires a matching,
+attested companion manifest for its exact source and asset digests. The
+[release procedure](docs/release-v0.6.0.md) and
+[review record](docs/review-v0.6.0.md) track the remaining gates.
 
 > **Upgrading:** the factory now refuses to start when an egress policy leaves
 > public internet possible unless you set `hardening.acknowledge_open_egress =
@@ -41,7 +42,7 @@ security, restore, and soak qualifications are recorded separately in the
 
 ## Quick start
 
-Requirements for v0.5.0 development: Go 1.27.1, Node.js 24.21.0, Git,
+Requirements for v0.6.0 development: Go 1.27.1, Node.js 24.21.0, Git,
 an existing CubeSandbox deployment with a READY template, and Temporal.
 Python tools use the frozen `uv.lock`; they are optional. Docker Compose can
 run the included local Temporal stack.
@@ -61,7 +62,7 @@ The example uses placeholder production endpoints and paths. Set these to
 your actual TLS-protected Cube and Temporal services, or loopback development
 services, before running `factory config validate`.
 
-The v0.5.0 release installs the factory archive by default. The console and
+The installer selects the factory archive by default. The console and
 managed worker use the separate Machinist archive or the optional combined
 archive. Install pinned agent binaries separately with
 `scripts/install-agents.sh`; `factory agents verify` checks configured digests.

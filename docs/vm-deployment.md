@@ -40,13 +40,17 @@ file on another VM.
 
 ## 2. Bootstrap the VM
 
+These commands apply after the qualified 0.6.0 release is published. For the
+unpublished candidate, use the verified assets and qualification procedure in
+[the candidate guide](release-v0.6.0.md).
+
 While connected to the VM, run:
 
 ```sh
 apt-get update && apt-get install -y git
-git clone --branch v0.5.0 https://github.com/mitkox/esf.git
+git clone --branch v0.6.0 https://github.com/mitkox/esf.git
 cd esf
-ESF_VERSION=v0.5.0 bash scripts/setup-vm.sh
+ESF_VERSION=v0.6.0 bash scripts/setup-vm.sh
 ```
 
 The script installs Git, GitHub CLI, and the provenance-verified Machinist

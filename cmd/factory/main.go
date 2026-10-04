@@ -63,6 +63,7 @@ verification, one verified patch out.`,
 	root.AddCommand(
 		newVersionCommand(),
 		newConfigCommand(&configPath),
+		newCredentialsCommand(),
 		newAgentsCommand(&configPath),
 		newStorageCommand(&configPath),
 		newRetentionCommand(&configPath),

@@ -249,6 +249,20 @@ func TestListOpenRunsPagesThroughEveryResult(t *testing.T) {
 	if len(filtered) != 1 || filtered[0].RunID != "run-2" {
 		t.Fatalf("filtered = %+v, want only run-2", filtered)
 	}
+	// Visibility memos use the same codec as workflow inputs in production.
+	dc := converter.NewCodecDataConverter(converter.GetDefaultDataConverter(), testCodec(t, "new"))
+	payload, err := dc.ToPayload(RunMemo{Harness: "unreal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second.Memo.Fields[RunMemoKey] = payload
+	filtered, err = ListOpenRuns(context.Background(), c, HaltFilter{Harness: "unreal"}, dc)
+	if err != nil || len(filtered) != 1 || filtered[0].RunID != "run-2" {
+		t.Fatalf("encrypted filtered memo = %+v, %v", filtered, err)
+	}
+	if _, err := ListOpenRuns(context.Background(), c, HaltFilter{Harness: "unreal"}); err == nil {
+		t.Fatal("undecodable memo silently excluded a running workflow")
+	}
 }
 
 func TestListOpenRunsSkipsUnownedWorkflowIDs(t *testing.T) {

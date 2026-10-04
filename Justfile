@@ -5,7 +5,7 @@ frontend:
 
 build: frontend
     mkdir -p bin
-    go build -o bin/machinist ./cmd/machinist
+    go build -ldflags="-X main.version=v0.6.0" -o bin/machinist ./cmd/machinist
 
 # Start the local control plane.
 control-plane: build
@@ -60,6 +60,7 @@ check:
     cd internal/controlplane/web && npm ci && npm test && npm run build
     just format-check
     python3 -m unittest discover -s evals -p 'test_*.py'
+    python3 -m unittest discover -s scripts/tests -p 'test_*.py'
     go vet ./...
     go test -race ./...
     go build ./...

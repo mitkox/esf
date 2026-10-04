@@ -3,6 +3,7 @@ package repository
 import (
 	"fmt"
 	"net/url"
+	"path"
 	"strings"
 )
 
@@ -52,15 +53,56 @@ func (r Request) validateRemote(allowed []string) error {
 	if parsed.User != nil {
 		return fmt.Errorf("%w: repository URL must not embed credentials", ErrRepositoryRejected)
 	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return fmt.Errorf("%w: repository URL must not contain a query or fragment", ErrRepositoryRejected)
+	}
 	if len(allowed) == 0 {
 		return fmt.Errorf("%w: no repositories are approved for remote access", ErrRepositoryRejected)
 	}
 	for _, prefix := range allowed {
-		if strings.HasPrefix(raw, prefix) {
+		if URLMatchesPrefix(raw, prefix) {
 			return nil
 		}
 	}
 	return fmt.Errorf("%w: repository %q is not in the approved list", ErrRepositoryRejected, raw)
+}
+
+// URLMatchesPrefix compares a repository's authority and path boundaries.
+// String prefixes alone would accept github.com.evil or an adjacent repository
+// such as service-private when only service was approved.
+func URLMatchesPrefix(raw, prefix string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	p, err := url.Parse(strings.TrimSpace(prefix))
+	if err != nil || p.Hostname() == "" || u.Hostname() == "" || u.User != nil || p.User != nil ||
+		u.RawQuery != "" || p.RawQuery != "" || u.Fragment != "" || p.Fragment != "" ||
+		!strings.EqualFold(u.Scheme, p.Scheme) || !strings.EqualFold(u.Hostname(), p.Hostname()) || urlPort(u) != urlPort(p) {
+		return false
+	}
+	for _, value := range []string{u.Path, p.Path} {
+		if strings.ContainsAny(value, "\\\x00\r\n\t") || (value != "" && path.Clean(value) != strings.TrimSuffix(value, "/") && value != "/") {
+			return false
+		}
+	}
+	base := strings.TrimSuffix(p.Path, "/")
+	return base == "" || u.Path == base || strings.HasPrefix(u.Path, base+"/")
+}
+
+func urlPort(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return "443"
+	case "ssh":
+		return "22"
+	case "git":
+		return "9418"
+	}
+	return ""
 }
 
 func (r Request) validateLocal() error {

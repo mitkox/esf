@@ -11,14 +11,18 @@ if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
   exit 2
 fi
 
-if [[ "$version" == v0.5.0 ]]; then
-  python3 scripts/verify-release-inventory.py --require-preview
-elif [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(test|rc)\.[1-9][0-9]*$ ]]; then
+inventory_version=$(python3 -c 'import json; print(json.load(open("release/inventory.json"))["release"])')
+if [[ "${version%%-*}" != "$inventory_version" ]]; then
+  echo "release version does not match the input inventory" >&2
+  exit 1
+fi
+if [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(test|rc)\.[1-9][0-9]*$ ]]; then
   # A prerelease is a validation artifact. Pending deployment qualifications
   # remain visible in the embedded inventory and do not imply production use.
   python3 scripts/verify-release-inventory.py
 else
-  python3 scripts/verify-release-inventory.py --require-qualified
+  echo "build an RC, qualify those assets, then use promote-release.py for the final release" >&2
+  exit 1
 fi
 if [[ "$version" != *-test.* && -n $(git status --porcelain --untracked-files=normal) ]]; then
   echo "release builds require a clean checkout" >&2

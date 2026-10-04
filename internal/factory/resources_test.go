@@ -147,6 +147,23 @@ func TestScopeCannotWidenRepositoryPolicy(t *testing.T) {
 	}
 }
 
+func TestUnselectedClosedPolicyDoesNotInheritOpenNetworking(t *testing.T) {
+	cfg := resourceConfig()
+	cfg.Hardening.AcknowledgeOpenEgress = false
+	cfg.Egress = map[string]EgressPolicyConfig{"closed": {AllowInternet: boolPtr(false)}}
+	resolved, err := cfg.ResolveResources(RunRequest{AgentHarness: "opencode2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Egress.AllowsInternet() || resolved.EgressDigest == "" {
+		t.Fatalf("unnamed policy was not resolved to explicit deny: %+v", resolved.Egress)
+	}
+	cfg.Scopes["payments"] = ScopeConfig{Repositories: []string{"https://github.com/acme-private/"}}
+	if _, err := cfg.ResolveResources(RunRequest{Scope: "payments", Repository: "https://github.com/acme-private/repo"}); err == nil {
+		t.Fatal("scope escaped global repository path boundary")
+	}
+}
+
 // TestUnknownResourceNameIsRejected proves that a typo fails loudly instead of
 // silently running with no policy.
 func TestUnknownResourceNameIsRejected(t *testing.T) {

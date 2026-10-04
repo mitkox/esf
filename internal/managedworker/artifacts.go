@@ -46,6 +46,11 @@ func (w *Worker) prepareInputs(spec protocol.RunSpec) func(context.Context, stri
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			return nil, err
 		}
+		root, err := os.OpenRoot(filepath.Dir(dir))
+		if err != nil {
+			return nil, err
+		}
+		defer root.Close()
 		paths := map[string]string{}
 		for alias, a := range spec.Inputs {
 			shared := strings.HasPrefix(alias, "__workspace__/")
@@ -54,9 +59,11 @@ func (w *Worker) prepareInputs(spec protocol.RunSpec) func(context.Context, stri
 				return nil, errors.New("invalid input alias")
 			}
 			dest := filepath.Join(dir, alias)
+			relative := filepath.Join(filepath.Base(dir), alias)
 			if shared {
 				dest = filepath.Join(filepath.Dir(dir), "outputs", filepath.FromSlash(name))
-				if err := os.MkdirAll(filepath.Dir(dest), 0700); err != nil {
+				relative = filepath.Join("outputs", filepath.FromSlash(name))
+				if err := root.MkdirAll(filepath.Dir(relative), 0700); err != nil {
 					return nil, err
 				}
 			}
@@ -66,7 +73,7 @@ func (w *Worker) prepareInputs(spec protocol.RunSpec) func(context.Context, stri
 					return err
 				}
 				defer resp.Body.Close()
-				f, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+				f, err := root.OpenFile(relative, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 				if err != nil {
 					return &ResponseError{Status: 422, Body: err.Error()}
 				}
