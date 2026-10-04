@@ -25,7 +25,7 @@ NetworkPolicy and include Cube control/data, Temporal, and OTLP destinations.
 ## Upgrade and recovery
 
 1. Stop new submissions, allow active runs to finish, and verify sandbox
-   cleanup and pending quality exports. Scale this chart's workloads to zero.
+   cleanup. Scale this chart's workloads to zero.
 2. Take consistent snapshots of the factory and console PVCs and the
    operator-managed Temporal/PostgreSQL state. Save configuration, payload
    keys, image digests, and the release inventory with the snapshot.

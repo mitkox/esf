@@ -89,6 +89,7 @@ const (
 func (s RunState) Valid() bool {
 	switch s {
 	case StateRequested, StateRunning, StatePaused, StateAgentFailed, StateVerificationFailed,
+		StateSucceeded, StateCancelled, StateInfrastructureFailed, StateInvalidRequest,
 		StateBlocked, StateQuarantined, StateGateTampered, StateEgressUnverified, StateRejected:
 		return true
 	default:

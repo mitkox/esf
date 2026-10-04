@@ -146,6 +146,11 @@ type workflowState struct {
 // No network, filesystem or process call happens here: that is what keeps the
 // workflow deterministic and therefore replayable.
 func SoftwareChangeWorkflow(ctx workflow.Context, req RunRequest) (RunManifest, error) {
+	// Retained for Temporal replay determinism: histories created while the
+	// assurance control plane existed carry this version marker. The routing
+	// decision is gone with the subsystem, so the returned version is unused.
+	_ = workflow.GetVersion(ctx, "assurance-control-plane-v1", workflow.DefaultVersion, 1)
+
 	// A zero-valued receiver identifies activity methods. It is never invoked
 	// from workflow code; only its method name is used for dispatch.
 	acts := &Activities{}

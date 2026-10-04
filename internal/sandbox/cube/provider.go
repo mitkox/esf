@@ -124,15 +124,24 @@ func (p *Provider) Resume(ctx context.Context, sandboxID string) error {
 	if err != nil {
 		return fmt.Errorf("connect to sandbox %s for resume: %w", sandboxID, classify(err))
 	}
-	// Client.Connect auto-resumes a paused sandbox; an explicit resume call
-	// makes the intent observable and covers deployments where Connect does not.
+	// Client.Connect auto-resumes a paused sandbox, and CubeMaster rejects an
+	// explicit resume of a sandbox that is already running with "no pause
+	// snapshot" (130400). Issuing that second call would turn a successful
+	// resume into an infrastructure failure, so it is reserved for deployments
+	// where Connect leaves the sandbox paused.
 	//
 	// The timeout is left to the server (nil): the factory's own wall-clock and
 	// its verified cleanup are the real bounds on a run, and imposing the
 	// configured idle timeout here would let a long run's sandbox expire
 	// mid-flight after a review.
-	if err := sb.Resume(ctx, nil); err != nil {
-		return fmt.Errorf("resume sandbox %s: %w", sandboxID, classify(err))
+	info, err := sb.GetInfo(ctx)
+	if err != nil {
+		return fmt.Errorf("inspect sandbox %s for resume: %w", sandboxID, classify(err))
+	}
+	if info.State == sandbox.StatePaused {
+		if err := sb.Resume(ctx, nil); err != nil {
+			return fmt.Errorf("resume sandbox %s: %w", sandboxID, classify(err))
+		}
 	}
 	p.log.InfoContext(ctx, "cube sandbox resumed", slog.String("sandbox.id", sandboxID))
 	return nil

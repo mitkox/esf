@@ -19,7 +19,9 @@ head -c %d <"$esf_output_dir/out.pipe" >"$esf_output_dir/out" &
 esf_out_pid=$!
 head -c %d <"$esf_output_dir/err.pipe" >"$esf_output_dir/err" &
 esf_err_pid=$!
-%s >"$esf_output_dir/out.pipe" 2>"$esf_output_dir/err.pipe"
+(
+%s
+) >"$esf_output_dir/out.pipe" 2>"$esf_output_dir/err.pipe"
 esf_exit=$?
 wait "$esf_out_pid" || true
 wait "$esf_err_pid" || true

@@ -49,3 +49,11 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the implemented security boundaries.
 The factory runs coding agents in CubeSandbox microVMs. Temporal authentication,
 encrypted workflow payloads, evidence storage, credential provisioning and
 operational boundaries are described in [the deployment guide](docs/production-deployment.md).
+
+Candidate source, task prompts and evidence can contain unpublished work even
+when they contain no detected credentials. Keep the database, object store,
+exports and integration-test artifacts private. Secret detection is a defense
+in depth, not a guarantee that arbitrary content is safe to publish.
+
+V1 readiness statements are unsigned and must be obtained from the trusted
+authority. They do not authorize deployment or establish regulatory compliance.

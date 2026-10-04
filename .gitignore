@@ -14,6 +14,12 @@ internal/controlplane/web/node_modules/
 !internal/controlplane/web/dist/
 !internal/controlplane/web/dist/**
 
+# Local agent/operator files: keep them out of the repository (AGENTS.md).
+/.rtk/
+/AGENTS.md
+/CLAUDE.md
+/factory.toml.pre-*
+
 # Factory local state
 /factory.toml
 /secrets/
