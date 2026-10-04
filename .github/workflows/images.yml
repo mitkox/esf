@@ -7,6 +7,11 @@ on:
         description: Candidate or RC tag matching inventory, such as v0.6.0-rc.1
         required: true
         type: string
+      publish:
+        description: Publish candidate images to GHCR; false retains unpublished OCI artifacts
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -49,6 +54,7 @@ jobs:
           printf 'binary_version=%s\n' "${inventory_version#v}" >> "$GITHUB_OUTPUT"
           python3 scripts/verify-release-inventory.py
       - name: Log in to GHCR
+        if: inputs.publish
         uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
         with:
           registry: ghcr.io
@@ -60,7 +66,7 @@ jobs:
           platforms: arm64
       - name: Create image builder
         run: docker buildx create --use
-      - name: Build and push candidate image
+      - name: Build candidate image
         id: push
         uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
         with:
@@ -68,52 +74,82 @@ jobs:
           file: ${{ matrix.file }}
           target: ${{ matrix.target }}
           platforms: ${{ matrix.platforms }}
-          push: true
+          push: ${{ inputs.publish }}
+          outputs: ${{ !inputs.publish && format('type=oci,dest={0}-image.oci.tar', matrix.component) || '' }}
           tags: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}:${{ inputs.image_tag }}
           build-args: |
             ESF_VERSION=${{ steps.version.outputs.binary_version }}
             ESF_COMMIT=${{ github.sha }}
       - name: Attest image provenance
+        if: inputs.publish
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+      - name: Attest unpublished OCI image
+        if: "!inputs.publish"
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ matrix.component }}-image.oci.tar
       - name: Generate linux/amd64 image SBOM
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         env:
           SYFT_PLATFORM: linux/amd64
         with:
-          image: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}@${{ steps.push.outputs.digest }}
+          image: ${{ inputs.publish && format('ghcr.io/{0}/esf-{1}@{2}', github.repository_owner, matrix.component, steps.push.outputs.digest) || format('oci-archive:{0}-image.oci.tar', matrix.component) }}
           format: cyclonedx-json
           output-file: image-sbom-linux-amd64.cdx.json
           artifact-name: image-sbom-${{ matrix.component }}-linux-amd64.cdx.json
           upload-release-assets: false
       - name: Attest linux/amd64 image SBOM
+        if: inputs.publish
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}
           subject-digest: ${{ steps.push.outputs.digest }}
           sbom-path: image-sbom-linux-amd64.cdx.json
           push-to-registry: true
+      - name: Attest unpublished linux/amd64 image SBOM
+        if: "!inputs.publish"
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ matrix.component }}-image.oci.tar
+          sbom-path: image-sbom-linux-amd64.cdx.json
       - name: Generate linux/arm64 image SBOM
         if: matrix.component != 'cube-template'
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         env:
           SYFT_PLATFORM: linux/arm64
         with:
-          image: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}@${{ steps.push.outputs.digest }}
+          image: ${{ inputs.publish && format('ghcr.io/{0}/esf-{1}@{2}', github.repository_owner, matrix.component, steps.push.outputs.digest) || format('oci-archive:{0}-image.oci.tar', matrix.component) }}
           format: cyclonedx-json
           output-file: image-sbom-linux-arm64.cdx.json
           artifact-name: image-sbom-${{ matrix.component }}-linux-arm64.cdx.json
           upload-release-assets: false
       - name: Attest linux/arm64 image SBOM
-        if: matrix.component != 'cube-template'
+        if: matrix.component != 'cube-template' && inputs.publish
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}
           subject-digest: ${{ steps.push.outputs.digest }}
           sbom-path: image-sbom-linux-arm64.cdx.json
           push-to-registry: true
+      - name: Attest unpublished linux/arm64 image SBOM
+        if: matrix.component != 'cube-template' && !inputs.publish
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ matrix.component }}-image.oci.tar
+          sbom-path: image-sbom-linux-arm64.cdx.json
+      - name: Retain unpublished image and SBOMs
+        if: "!inputs.publish"
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: esf-candidate-image-${{ matrix.component }}
+          path: |
+            ${{ matrix.component }}-image.oci.tar
+            image-sbom-*.cdx.json
+          if-no-files-found: error
+          retention-days: 90
       - name: Record qualified candidate input
         run: echo '${{ matrix.component }}=${{ steps.push.outputs.digest }}' >> "$GITHUB_STEP_SUMMARY"

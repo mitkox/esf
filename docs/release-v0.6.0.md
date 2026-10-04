@@ -26,6 +26,12 @@ license review, and provenance. Create the Cube template from its image digest;
 retain the READY template identity, snapshot hash, recipe hash, DNS configuration,
 and verified harness executable hashes.
 
+The image workflow defaults `publish` to false: it retains attested OCI archives
+and platform SBOMs as workflow artifacts. Its pinned ARM64 emulation runs on
+the hosted builder. Publishing candidate images to GHCR is a separate explicit
+choice; preserve archive and image-manifest digests when importing the
+unpublished inputs into a qualification registry.
+
 Post-build results belong in `qualification-manifest.json`, alongside sanitized
 files under `evidence/`. An image cannot embed its own digest. Required fields:
 
