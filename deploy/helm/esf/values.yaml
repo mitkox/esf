@@ -14,10 +14,6 @@ factory:
     requests: {cpu: 250m, memory: 512Mi}
     limits: {cpu: "2", memory: 2Gi}
   nodeSelector: {kubernetes.io/os: linux}
-  quality:
-    enabled: false
-    nodeName: ""
-    socketHostPath: "" # dedicated, operator-owned local host directory
 
 console:
   enabled: false

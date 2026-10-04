@@ -33,7 +33,7 @@ type factoryRead struct {
 }
 
 // ConfigureFactoryRead enables optional evidence views before Serve is called.
-// The console only reads the factory volume; it never opens QMS authority state.
+// The console only reads the factory volume; it never opens worker authority state.
 func (s *Server) ConfigureFactoryRead(root, tokenFile string) error {
 	if root == "" && tokenFile == "" {
 		return nil
@@ -223,22 +223,6 @@ func (s *Server) getFactoryConditions(response http.ResponseWriter, request *htt
 		return
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"conditions": result.Conditions})
-}
-
-func (s *Server) getFactoryQuality(response http.ResponseWriter, request *http.Request) {
-	manifest, err := s.readFactoryManifest(request.PathValue("id"))
-	if err != nil {
-		factoryReadError(response, err)
-		return
-	}
-	var result struct {
-		Quality json.RawMessage `json:"quality"`
-	}
-	if err := json.Unmarshal(manifest, &result); err != nil {
-		factoryReadError(response, err)
-		return
-	}
-	writeJSON(response, http.StatusOK, map[string]any{"quality": result.Quality})
 }
 
 func (s *Server) getFactoryEvidence(response http.ResponseWriter, request *http.Request) {

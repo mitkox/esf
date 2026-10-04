@@ -62,7 +62,6 @@ const (
 	// before any sandbox was created: a disallowed repository, an unknown
 	// harness, a missing revision.
 	StateInvalidRequest RunState = "INVALID_REQUEST"
-	StateQualityFailed  RunState = "QUALITY_FAILED"
 
 	// StateBlocked means the agent reported, through the documented contract,
 	// that it could not satisfy the task. It is a legitimate outcome, not a
@@ -90,7 +89,6 @@ const (
 func (s RunState) Valid() bool {
 	switch s {
 	case StateRequested, StateRunning, StatePaused, StateAgentFailed, StateVerificationFailed,
-		StateSucceeded, StateCancelled, StateInfrastructureFailed, StateInvalidRequest, StateQualityFailed,
 		StateBlocked, StateQuarantined, StateGateTampered, StateEgressUnverified, StateRejected:
 		return true
 	default:
@@ -153,7 +151,6 @@ type PreviewLink struct {
 // snapshot lineage, model accounting and human review outcome, and adding those
 // fields later must not require rewriting the manifest.
 type RunManifest struct {
-	Quality   *QualitySummary    `json:"quality,omitempty"`
 	Hardening *HardeningEvidence `json:"hardening,omitempty"`
 	// ── Identity ────────────────────────────────────────────────────────────
 	RunID          string `json:"run_id"`
@@ -324,9 +321,8 @@ const (
 // set of user-controlled values: task text, an approved repository, and an
 // approved revision.
 type RunRequest struct {
-	AdmissionID string `json:"admission_id,omitempty"`
-	RunID       string `json:"run_id"`
-	Repository  string `json:"repository"`
+	RunID      string `json:"run_id"`
+	Repository string `json:"repository"`
 	// RepositoryKind is "remote" or "local".
 	RepositoryKind string `json:"repository_kind,omitempty"`
 	// LocalPath is a host path, used by tests and by the acceptance fixture.

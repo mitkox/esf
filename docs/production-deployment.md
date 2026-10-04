@@ -240,10 +240,10 @@ The optional console factory view is read-only. Configure Machinist with
 `[factory_read] root = "/var/lib/factory"` and a private
 `token_file = "/etc/machinist/factory-read-token"` holding at least 32 random
 characters. The token has a separate identity from the worker token and grants
-no QMS authority. Give only the Machinist control-plane account read access to
-the factory evidence tree, for example through a dedicated read-only ACL or a
-systemd drop-in with `SupplementaryGroups=factory`; keep the QMS authority
-socket and records outside that tree. The console remains bound to loopback.
+no factory-write authority. Give only the Machinist control-plane account read
+access to the factory evidence tree, for example through a dedicated read-only
+ACL or a systemd drop-in with `SupplementaryGroups=factory`. The console
+remains bound to loopback.
 Its patch downloads require the read token and use attachment headers; previews
 are rendered as text.
 
@@ -252,7 +252,7 @@ Machinist database. It rebuilds the index from ordinary factory manifests at
 startup and refreshes it when the runs or changes directory changes. Paginated
 views read the index while individual manifests remain the source of truth.
 If the index is damaged, stop the console, remove only that index file, and
-restart it. QMS reads continue through the separate authority service.
+restart it.
 Use `factory storage usage --output json` to measure the durable evidence tree
 and its run count before sizing or restoring the volume. This command reads
 metadata only and leaves evidence intact.
@@ -260,7 +260,7 @@ metadata only and leaves evidence intact.
 orphaned `.artifact-*` files left by interrupted atomic writes. If the exact
 list is acceptable, pass its `plan_digest` to `factory retention apply
 --older-than-days 30 --plan-digest DIGEST`. Apply rejects a changed plan and
-never selects completed manifests, patches, logs, change records, or QMS data.
+never selects completed manifests, patches, logs, change records, or other evidence.
 There is no automatic deletion. Plan a separate reviewed policy before
 deleting historical evidence.
 Set `limits.artifact_bytes` to cap each durable artifact write (32 MiB by
@@ -270,13 +270,12 @@ for the separate bound applied before Cube command output reaches the SDK.
 Use local or block-backed storage for the factory and Machinist SQLite files.
 NFS and other shared network filesystems are unsupported. Before changing
 either binary, stop new submissions, wait for active factory runs to reach a
-terminal state, and reconcile sandbox cleanup and quality exports. Then stop
+terminal state, and reconcile sandbox cleanup. Then stop
 `factory-worker`, `machinist-worker`, and `machinist-control-plane`.
 
 Take an offline snapshot of the complete factory and Machinist state and the
 matching configuration. For the default VM paths, run the following as root
-with a private destination directory; add the operator-owned QMS state path if
-QMS is enabled:
+with a private destination directory:
 
 ```sh
 install -d -m 0700 /var/backups/esf
@@ -287,10 +286,9 @@ sha256sum pre-v0.5.0.tar.gz > pre-v0.5.0.tar.gz.sha256
 ```
 
 Back up Temporal with the operator's supported database procedure at the same
-drained point. Keep the payload keyring and QMS authority snapshot together
-with the matching application backup. Run `factory config migrate --dry-run`
-and `factory doctor --profile production --output json` before starting the
-new worker. Install and verify the pinned agents with `factory agents verify`.
+drained point. Keep the payload keyring with the matching application backup.
+Run `factory config migrate --dry-run` and `factory doctor --profile production
+--output json` before starting the new worker. Install and verify the pinned agents with `factory agents verify`.
 Machinist creates its own schema-2 backup before migrating to schema 5 and
 refuses unknown populated databases.
 
@@ -304,8 +302,8 @@ tar -tzf pre-v0.5.0.tar.gz
 tar --numeric-owner -C / -xzf pre-v0.5.0.tar.gz
 ```
 
-Restore the matching Temporal and QMS snapshots and the matching older ESF
-binaries before starting services. Never restore over a running authority.
+Restore the matching Temporal snapshot and the matching older ESF binaries
+before starting services. Never restore over a running service.
 After any schema upgrade, rollback requires this matching snapshot; replacing
 only the binary can corrupt or reject migrated state. Preserve the snapshot
 through the full retention and audit review period.

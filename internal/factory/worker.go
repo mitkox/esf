@@ -26,7 +26,6 @@ import (
 //
 // Constructing it validates configuration and connects nothing: Run connects.
 type Runtime struct {
-	Quality   *QualityRuntime
 	Config    Config
 	Provider  sandbox.Provider
 	Repos     *repository.Provider
@@ -115,9 +114,6 @@ func NewRuntime(ctx context.Context, opts RuntimeOptions) (*Runtime, error) {
 // Close releases resources held by the runtime.
 func (r *Runtime) Close(ctx context.Context) error {
 	var firstErr error
-	if r.Quality != nil {
-		firstErr = r.Quality.Store.Close()
-	}
 	if closer, ok := r.Provider.(interface{ Close() error }); ok {
 		if err := closer.Close(); err != nil {
 			firstErr = err
@@ -132,7 +128,6 @@ func (r *Runtime) Close(ctx context.Context) error {
 // Activities builds the activity set for this runtime.
 func (r *Runtime) Activities() (*Activities, error) {
 	return NewActivities(ActivitiesOptions{
-		Quality:         r.Quality,
 		Provider:        r.Provider,
 		Repositories:    r.Repos,
 		Harnesses:       r.Harnesses,
@@ -194,9 +189,6 @@ func NewTemporalClient(cfg Config, log *slog.Logger) (client.Client, error) {
 
 // RunWorker starts the Temporal worker and blocks until ctx is cancelled.
 func (r *Runtime) RunWorker(ctx context.Context) error {
-	if err := r.openQuality(); err != nil {
-		return err
-	}
 	acts, err := r.Activities()
 	if err != nil {
 		return err
@@ -231,7 +223,6 @@ func (r *Runtime) RunWorker(ctx context.Context) error {
 	})
 
 	w.RegisterWorkflowWithOptions(SoftwareChangeWorkflow, workflowRegistrationOptions())
-	w.RegisterWorkflow(CAPAWorkflow)
 
 	// RegisterActivity panics on a bad method set, so it has no error return.
 	w.RegisterActivity(acts)
@@ -257,13 +248,6 @@ func (r *Runtime) RunWorker(ctx context.Context) error {
 		return fmt.Errorf("temporal worker stopped: %w", err)
 	}
 	defer w.Stop()
-	if r.Quality != nil {
-		stop, err := r.serveQuality(ctx, temporalClient)
-		if err != nil {
-			return err
-		}
-		defer stop()
-	}
 	select {
 	case <-ctx.Done():
 		return nil

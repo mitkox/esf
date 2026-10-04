@@ -63,8 +63,7 @@ type Config struct {
 	Hardening HardeningConfig `toml:"hardening"`
 
 	// Review configures the human review gate.
-	Review  ReviewConfig  `toml:"review"`
-	Quality QualityConfig `toml:"quality"`
+	Review ReviewConfig `toml:"review"`
 	// Intake is an optional host-side advisory, never an execution policy.
 	Intake IntakeConfig `toml:"intake"`
 
@@ -330,13 +329,6 @@ func LoadConfig(path string) (Config, error) {
 			return Config{}, fmt.Errorf("parse factory config %q: %w", path, err)
 		}
 	}
-	if path != "" {
-		for i, p := range cfg.Quality.PolicyFiles {
-			if !filepath.IsAbs(p) {
-				cfg.Quality.PolicyFiles[i] = filepath.Join(filepath.Dir(path), p)
-			}
-		}
-	}
 	applyEnvOverrides(&cfg)
 	return cfg, nil
 }
@@ -377,9 +369,6 @@ func (c Config) Validate() error {
 	}
 	if err := c.Observability.validate(); err != nil {
 		problems = append(problems, "observability: "+err.Error())
-	}
-	if err := c.validateQuality(); err != nil {
-		problems = append(problems, "quality: "+err.Error())
 	}
 	if err := c.Intake.Validate(); err != nil {
 		problems = append(problems, "intake: "+err.Error())

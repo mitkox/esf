@@ -226,11 +226,6 @@ invisible in any single manifest.
   measurable and the escape loud; it does not make the microVM unbreakable.
   Non-root execution and independent host-side egress enforcement remain the
   highest-value follow-ups.
-- **The controlled (assurance) path acts on the probe, the monitor and the stop
-  signal, but not yet on gate integrity.** `QualityAuthor` calls the shared
-  `ApplyRuntimeNetwork` and `RunAgent` activities, so those controls apply and
-  their verdicts now stop the run. Both paths scan author output and the
-  collected patch. `CheckGateIntegrity` is only wired into the primary workflow.
 
 ## Alternatives considered
 
@@ -252,9 +247,3 @@ invisible in any single manifest.
   visible per run rather than only in the provider.
 - Non-root sandbox execution as a template property, rather than a probe that
   reports when the template runs the agent as uid 0.
-- Apply the gate-integrity check to the assurance (controlled) workflow path.
-  The egress probe, behavior monitor and blocked signal already cover it,
-  because `QualityAuthor` calls the shared `ApplyRuntimeNetwork` and `RunAgent`
-  activities and the controlled workflow now acts on their verdicts
-  (`QUARANTINED`, `BLOCKED`). Gate integrity is wired into the primary workflow
-  only.
