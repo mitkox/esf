@@ -273,3 +273,21 @@ description = "repository test script"
 # timeout       = "24h"
 # preview_ports = [3000]
 # suspend       = true
+
+# Opt-in Pi v1 candidate; requires a separately qualified READY template.
+# See docs/harness-pi.md. OpenCode remains the automatic default.
+# [harnesses.pi]
+# type = "pi"
+# preinstalled = true
+# binary = "/opt/esf/agents/pi-runner.mjs"
+# binary_sha256 = "9dab48151c793cf3265af4058ea7aac8671d1778b31873ee25ac3fc24afe0e2c"
+# runtime_binary = "/opt/esf/agents/node"
+# runtime_sha256 = "7fde7b8afa198da66257f42ee2001d874c7355631e6d1579a5fb5ef1f246df4c"
+# provider = "local"
+# base_url = "http://192.168.0.14:8000/v1"
+# model = "<approved-model-id>"
+# api = "openai-completions"
+# catalog_cache = "/absolute/path/to/validated-model.json"
+# thinking_level = "off"
+# max_process_restarts = 1
+# timeout = "30m"

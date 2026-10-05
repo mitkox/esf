@@ -26,7 +26,9 @@ jobs:
         with:
           node-version: 24.21.0
           cache: npm
-          cache-dependency-path: internal/controlplane/web/package-lock.json
+          cache-dependency-path: |
+            internal/controlplane/web/package-lock.json
+            agents/pi/package-lock.json
       - name: Test issue triage
         run: node --test .github/scripts/issue-triage.test.cjs
       - name: Confirm toolchain
@@ -40,6 +42,17 @@ jobs:
         run: python3 scripts/verify-release-inventory.py
       - name: Test release qualification boundaries
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - name: Verify Pi candidate inventory
+        run: python3 scripts/verify-pi-inventory.py
+      - name: Build and test pinned Pi runner
+        working-directory: agents/pi
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          node export-catalog.mjs
+          npm test
+          npm audit --audit-level=high
+          git diff --exit-code -- dist ../../internal/agentharness/pi-catalog.json
       - name: Validate release SBOM
         run: |
           python3 scripts/generate-sbom.py /tmp/esf-ci-sbom.json

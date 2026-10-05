@@ -230,6 +230,22 @@ func newAgentsCommand(configPath *string) *cobra.Command {
 					continue
 				}
 				fmt.Printf("[ok] %s: template sha256 %s\n", name, h.BinarySHA256)
+				if strings.EqualFold(h.Type, "pi") {
+					registry, err := cfg.BuildHarnesses()
+					if err != nil {
+						return err
+					}
+					harness, err := registry.Resolve(name)
+					if err != nil {
+						return err
+					}
+					if err := harness.Provision(cmd.Context(), templateSandbox); err != nil {
+						fmt.Printf("[FAIL] %s: execution chain: %v\n", name, err)
+						failures++
+					} else {
+						fmt.Printf("[ok] %s: runtime digest and runner self-check\n", name)
+					}
+				}
 				continue
 			}
 			file, err := os.Open(h.Binary)
@@ -307,7 +323,7 @@ func runStructuredDoctor(ctx context.Context, configPath, profile, output string
 		sort.Strings(names)
 		for _, name := range names {
 			h := cfg.Harnesses[name]
-			if h.Type == "opencode" || h.Type == "unreal" {
+			if h.Type == "opencode" || h.Type == "unreal" || h.Type == "pi" {
 				var e error
 				if !h.Preinstalled || len(h.Packages) != 0 {
 					e = fmt.Errorf("use a digest-pinned agent in the versioned Cube template without per-run package installs")

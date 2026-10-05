@@ -1,0 +1,3 @@
+# Preserve verbatim upstream license notices, including their whitespace.
+agents/pi/LICENSE.node -whitespace
+agents/pi/dist/THIRD_PARTY_NOTICES.txt -whitespace

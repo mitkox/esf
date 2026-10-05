@@ -18,6 +18,8 @@ and adds factory orchestration. See [upstream attribution](docs/upstream.md).
 ## Features
 
 - Named, operator-configured agent harnesses and repository policies.
+- Opt-in [Pi v1 harness candidate](docs/harness-pi.md) with bounded recovery
+  inside the same Cube microVM.
 - Isolated execution in an existing CubeSandbox deployment.
 - Deterministic verification gates; agent success alone is not factory success.
 - Durable patches, logs, manifests, and verified cleanup outcomes.

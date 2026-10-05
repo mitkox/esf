@@ -1,5 +1,8 @@
 # Versioned CubeSandbox template
 
+The opt-in Pi v1 candidate uses `Dockerfile.pi-v1` and a separate candidate
+inventory. See [Pi installation and qualification](../../docs/harness-pi.md).
+
 `Dockerfile` builds the Linux/amd64 ESF v0.6.0 template from a pinned
 CubeSandbox base. It includes Git, CA certificates, Python, the command-output
 limiter tools, OpenCode 2.0.18, and Unreal 0.2.0. The Docker build verifies

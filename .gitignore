@@ -11,6 +11,7 @@ __pycache__/
 /tools/brief_lab/dist/
 internal/controlplane/web/node_modules/
 /agents/opencode/node_modules/
+/agents/pi/node_modules/
 !internal/controlplane/web/dist/
 !internal/controlplane/web/dist/**
 

@@ -173,9 +173,14 @@ type ObservabilityConfig struct {
 //
 // A caller names one of these keys. It can never supply an executable.
 type HarnessConfig struct {
-	// Type selects the harness implementation: "opencode", "unreal", or
-	// "generic".
+	// Type selects "opencode", "unreal", "pi", or "generic".
 	Type string `toml:"type"`
+	// Pi runs a pinned Node interpreter and a bundled runner, with an explicit
+	// OpenAI-compatible protocol and bounded in-sandbox process recovery.
+	RuntimeBinary      string `toml:"runtime_binary"`
+	RuntimeSHA256      string `toml:"runtime_sha256"`
+	API                string `toml:"api"`
+	MaxProcessRestarts *int   `toml:"max_process_restarts"`
 	// Executable is the agent program (generic harness only).
 	Executable string `toml:"executable"`
 	// Args is the fixed argument vector (generic harness only).
@@ -185,9 +190,9 @@ type HarnessConfig struct {
 	// Model is the default model.
 	Model string `toml:"model"`
 	// Provider selects the model provider for harnesses with a native provider
-	// abstraction (currently unreal).
+	// abstraction (Unreal and Pi).
 	Provider string `toml:"provider"`
-	// ThinkingLevel controls reasoning effort for unreal-agent.
+	// ThinkingLevel controls reasoning effort for Unreal and Pi.
 	ThinkingLevel string `toml:"thinking_level"`
 	// Timeout bounds one agent run.
 	Timeout tomlx.Duration `toml:"timeout"`
@@ -400,10 +405,15 @@ func (c Config) Validate() error {
 		problems = append(problems, "sandbox.base_packages: "+err.Error())
 	}
 	for name, h := range c.Harnesses {
+		if strings.EqualFold(strings.TrimSpace(h.Type), "pi") {
+			if _, err := buildPiHarness(name, h); err != nil {
+				problems = append(problems, err.Error())
+			}
+		}
 		if h.Preinstalled {
 			kind := strings.ToLower(strings.TrimSpace(h.Type))
-			if kind != "opencode" && kind != "unreal" {
-				problems = append(problems, fmt.Sprintf("harness %q: preinstalled is supported only for opencode and unreal", name))
+			if kind != "opencode" && kind != "unreal" && kind != "pi" {
+				problems = append(problems, fmt.Sprintf("harness %q: preinstalled is supported only for opencode, unreal, and pi", name))
 			}
 			if !filepath.IsAbs(h.Binary) || len(h.BinarySHA256) != 64 || len(h.Packages) != 0 {
 				problems = append(problems, fmt.Sprintf("harness %q: preinstalled requires an absolute sandbox binary path, a SHA-256 digest, and no packages", name))
@@ -419,8 +429,8 @@ func (c Config) Validate() error {
 		if mode != "" && mode != "environment" && mode != "cube_egress" {
 			problems = append(problems, fmt.Sprintf("harness %q: credential_mode must be environment or cube_egress", name))
 		}
-		if mode == "cube_egress" && strings.ToLower(strings.TrimSpace(h.Type)) != "unreal" && strings.ToLower(strings.TrimSpace(h.Type)) != "opencode" {
-			problems = append(problems, fmt.Sprintf("harness %q: cube_egress credential mode requires unreal or opencode", name))
+		if mode == "cube_egress" && strings.ToLower(strings.TrimSpace(h.Type)) != "unreal" && strings.ToLower(strings.TrimSpace(h.Type)) != "opencode" && strings.ToLower(strings.TrimSpace(h.Type)) != "pi" {
+			problems = append(problems, fmt.Sprintf("harness %q: cube_egress credential mode requires unreal, opencode, or pi", name))
 		}
 		if strings.TrimSpace(h.APIKeyFile) != "" && mode != "cube_egress" {
 			problems = append(problems, fmt.Sprintf("harness %q: api_key_file requires credential_mode = cube_egress", name))
@@ -607,6 +617,8 @@ func (c Config) BuildHarnesses() (*agentharness.Registry, error) {
 				Timeout:       hc.Timeout.Std(),
 				Packages:      hc.Packages,
 			})
+		case "pi":
+			harness, err = buildPiHarness(name, hc)
 		default:
 			return nil, fmt.Errorf("harness %q: unknown type %q", name, hc.Type)
 		}
@@ -618,6 +630,24 @@ func (c Config) BuildHarnesses() (*agentharness.Registry, error) {
 		}
 	}
 	return registry, nil
+}
+
+func buildPiHarness(name string, hc HarnessConfig) (*agentharness.PiHarness, error) {
+	if hc.Executable != "" || len(hc.Args) != 0 || hc.ModelFlag != "" || hc.PromptMode != "" || len(hc.PassEnv) != 0 || len(hc.ProviderFiles) != 0 || len(hc.Packages) != 0 {
+		return nil, fmt.Errorf("harness %q: pi invocation is fixed; executable, args, model_flag, prompt_mode, pass_env, provider_files, and packages are not allowed", name)
+	}
+	h, err := agentharness.NewPi(agentharness.PiOptions{
+		Name: name, Binary: hc.Binary, BinarySHA256: hc.BinarySHA256, Preinstalled: hc.Preinstalled,
+		RuntimeBinary: hc.RuntimeBinary, RuntimeSHA256: hc.RuntimeSHA256,
+		Provider: hc.Provider, BaseURL: hc.BaseURL, Model: hc.Model, API: hc.API,
+		APIKeyEnv: hc.APIKeyEnv, ThinkingLevel: hc.ThinkingLevel, CatalogCache: hc.CatalogCache,
+		EgressManaged: strings.EqualFold(strings.TrimSpace(hc.CredentialMode), "cube_egress"),
+		Timeout:       hc.Timeout.Std(), MaxProcessRestarts: hc.MaxProcessRestarts,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("harness %q: %w", name, err)
+	}
+	return h, nil
 }
 
 // defaultVerificationProfiles provides a small, safe default so the factory can

@@ -519,6 +519,11 @@ func (a *Activities) ValidateRequest(ctx context.Context, in ValidateInput) (Val
 	if err != nil {
 		return ValidateOutput{}, fmt.Errorf("resolve resources: %w", err)
 	}
+	if validator, ok := harness.(agentharness.ModelEndpointValidator); ok {
+		if err := validator.ValidateModelEndpoint(agentharness.ModelEndpoint{Provider: resolved.ModelProvider, Model: resolved.ModelID, BaseURL: resolved.ModelBaseURL, APIKeyEnv: resolved.ModelAPIKeyEnv}); err != nil {
+			return ValidateOutput{}, err
+		}
+	}
 	// A scope narrows the global allowlist; it never widens it. The check is
 	// repeated here because the repository provider enforces only the global
 	// policy.
@@ -983,6 +988,18 @@ func (a *Activities) RunAgent(ctx context.Context, in RunAgentInput) (RunAgentOu
 			store.Write(ArtifactAgentStderr, a.redactBytesString(result.Stderr)),
 			store.Write(ArtifactAgentPrompt, a.redactBytesString(in.Prompt)),
 			a.writeJSON(store, ArtifactAgentResult, map[string]any{"result": result, "attempt": attempt}),
+		}
+		for name, data := range result.Evidence {
+			switch name {
+			case "agent/pi-terminal.json", "agent/usage.json", "agent/recovery.json":
+				if len(data) > 128<<10 {
+					writes = append(writes, fmt.Errorf("supplementary agent evidence exceeds limit"))
+					continue
+				}
+				writes = append(writes, store.Write(name, a.redactBytesString(string(data))))
+			default:
+				writes = append(writes, fmt.Errorf("supplementary agent evidence path is not allowed"))
+			}
 		}
 		if out.Behavior != nil {
 			writes = append(writes, a.writeJSON(store, ArtifactBehavior, out.Behavior))

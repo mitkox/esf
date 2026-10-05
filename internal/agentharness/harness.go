@@ -87,6 +87,12 @@ type ModelEndpointConfigurer interface {
 	ConfigureModelEndpoint(ctx context.Context, sb sandbox.Sandbox, endpoint ModelEndpoint) error
 }
 
+// ModelEndpointValidator checks a resolved endpoint before sandbox allocation.
+// This prevents credential/egress policy and the agent's provider from diverging.
+type ModelEndpointValidator interface {
+	ValidateModelEndpoint(endpoint ModelEndpoint) error
+}
+
 // Result is the recorded outcome of an agent run.
 //
 // The optional cost/token fields exist so Phase 2 can compare harnesses and
@@ -110,6 +116,11 @@ type Result struct {
 	TokensIn  *int64   `json:"tokens_in,omitempty"`
 	TokensOut *int64   `json:"tokens_out,omitempty"`
 	CostUSD   *float64 `json:"cost_usd,omitempty"`
+
+	// Evidence is transient, bounded harness output. Activities redact and store
+	// these allowlisted relative paths before the sandbox is destroyed. It never
+	// travels through Temporal history or replaces factory verification.
+	Evidence map[string][]byte `json:"-"`
 }
 
 // Succeeded reports whether the agent exited zero and was not killed.

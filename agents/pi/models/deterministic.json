@@ -1,0 +1,11 @@
+{
+  "id": "test-model",
+  "name": "ESF deterministic acceptance provider",
+  "api": "openai-completions",
+  "reasoning": false,
+  "input": ["text"],
+  "contextWindow": 32768,
+  "maxTokens": 1024,
+  "pricingKnown": false,
+  "thinkingLevels": ["off"]
+}

@@ -51,12 +51,20 @@ def main():
         go_modules(),
         npm_packages("internal/controlplane/web/package-lock.json"),
         npm_packages("agents/opencode/package-lock.json"),
+        npm_packages("agents/pi/package-lock.json"),
         python_packages(),
     )
     for source in sources:
         for ecosystem, name, version in source:
             purl = f"pkg:{ecosystem}/{quote(name, safe='/')}@{quote(version, safe='.+-')}"
             components[purl] = {"type": "library", "bom-ref": purl, "name": name, "version": version, "purl": purl}
+    pi = json.loads((ROOT / "agents/pi/inventory.json").read_text())
+    for name, entry in (("esf-pi-runner", pi["runner"]), ("node", pi["runtime"])):
+        ref = "esf:pi:" + name
+        components[ref] = {"type": "application", "bom-ref": ref, "name": name,
+            "version": pi["contract_version"] if name == "esf-pi-runner" else entry["version"],
+            "hashes": [{"alg": "SHA-256", "content": entry["sha256"]}],
+            "licenses": [{"license": {"id": "MIT"}}]}
     ordered = [components[key] for key in sorted(components)]
     component_digest = hashlib.sha256(json.dumps(ordered, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     bom = {
