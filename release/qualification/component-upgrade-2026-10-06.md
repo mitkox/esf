@@ -105,6 +105,23 @@ new Python intake environment enabled; both obtained live intake responses and
 passed verification and cleanup. The integrated checkout, including the
 pre-existing factory lock retry, passed focused race regressions inside Cube.
 
+The activated 0.6.1 binaries subsequently passed release/Pi inventory checks,
+the qualification-boundary regression, focused Go vet/race regressions, and
+both binary version checks inside Cube. A final source secret scan found no
+leaks. After activating route-aware routing, fresh factory acceptance passed:
+
+| Harness | 0.6.1 run after routing |
+| --- | --- |
+| OpenCode | `run-eb463756890b8fb49951f945` |
+| Unreal | `run-2327e4a977fd9b85b5c224fe` |
+| Pi | `run-5524114d8e642753fcdd0dfd` |
+
+Pi first failed safely when the model gateway ended its stream without
+`finish_reason` (`run-b0ad997396bb450638007b4b`). No patch was accepted and
+cleanup passed. A fresh run succeeded; both receipts are retained. This was
+an external stream failure, not an automatic process-recovery qualification.
+Independent Cube API listing and `factory sandboxes` confirmed zero live VMs.
+
 For the local Pi profile, pass the non-secret placeholder expected by the
 unauthenticated local gateway: `ESF_PI_LOCAL_MODEL_KEY=local-no-key
 FACTORY_AGENT=pi bash scripts/factory-run-demo.sh`.
@@ -151,8 +168,9 @@ passed all three scenarios:
 The unused provisional `cube-router` callback rule was removed. Automatic
 approval review rejected persisting the verified `cube-dev` rule because it
 changes the shared host firewall for future sandboxes and required exact user
-authorization. That decision remains pending; a temporary-rule pass does not
-establish persistent callback readiness. The routing/configuration backup and
+authorization. That decision remains pending. The temporary rule was removed after the
+successful probe; no callback permission was persisted. A temporary-rule pass
+does not establish persistent callback readiness. The routing/configuration backup and
 bounded probe logs are retained in the local evidence directory.
 
 ## Remaining qualification boundaries
@@ -167,4 +185,5 @@ Pi remains opt-in. Hosted HTTPS CubeEgress acceptance, model-backed recovery,
 failure and review cases, Kubernetes, production TLS, restore and soak testing
 remain separate gates. Local runs use the existing permissive development
 egress profile and a root template; they do not establish production egress or
-non-root qualification. GitHub Actions jobs have not run on this local change.
+non-root qualification. GitHub Actions validation is reported against the
+exact source head on [PR #35](https://github.com/mitkox/esf/pull/35).
