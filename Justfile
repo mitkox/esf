@@ -5,7 +5,7 @@ frontend:
 
 build: frontend
     mkdir -p bin
-    go build -ldflags="-X main.version=v0.6.0" -o bin/machinist ./cmd/machinist
+    go build -ldflags="-X main.version=v0.6.1" -o bin/machinist ./cmd/machinist
 
 # Start the local control plane.
 control-plane: build

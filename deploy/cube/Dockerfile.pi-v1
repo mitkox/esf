@@ -10,6 +10,6 @@ COPY agents/pi/inventory.json /opt/esf/pi-inventory.json
 COPY agents/pi/dist/THIRD_PARTY_NOTICES.txt /opt/esf/pi-third-party-notices.txt
 RUN chmod 0755 /opt/esf/agents/node && \
     echo '7fde7b8afa198da66257f42ee2001d874c7355631e6d1579a5fb5ef1f246df4c  /opt/esf/agents/node' | sha256sum -c - && \
-    echo '9dab48151c793cf3265af4058ea7aac8671d1778b31873ee25ac3fc24afe0e2c  /opt/esf/agents/pi-runner.mjs' | sha256sum -c -
+    echo '018aec9e0215eff09aede13a2b707f6e6872d1dcf2b44727d5afc3d6e97c42fc  /opt/esf/agents/pi-runner.mjs' | sha256sum -c -
 LABEL org.opencontainers.image.title="ESF Pi template v1 candidate" \
-      io.esf.pi.contract="esf/pi/v1" io.esf.pi.durable.version="1.0.3"
+      io.esf.pi.contract="esf/pi/v1" io.esf.pi.durable.version="1.0.4"

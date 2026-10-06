@@ -13,6 +13,17 @@ const runner = path.resolve('dist/pi-runner.mjs');
 const runnerDigest = sha256(await fs.readFile(runner));
 const runtimeDigest = sha256(await fs.readFile(process.execPath));
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+test('runner version matches the pinned Pi dependency', async () => {
+  const manifest = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  const child = spawn(process.execPath, [runner, '--version']);
+  let stdout = '';
+  child.stdout.on('data', chunk => { stdout += chunk; });
+  const [code] = await once(child, 'exit');
+  assert.equal(code, 0);
+  assert.equal(stdout.trim(), `esf-pi/1 pi-durable/${manifest.dependencies['@earendil-works/pi-durable']} node/${process.versions.node}`);
+});
+
 async function until(predicate, timeout = 10_000) {
   const end = Date.now() + timeout;
   while (Date.now() < end) { if (predicate()) return; await delay(10); }

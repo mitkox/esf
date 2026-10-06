@@ -7,7 +7,7 @@ RUN go mod download
 COPY . .
 ARG TARGETOS
 ARG TARGETARCH
-ARG ESF_VERSION=0.6.0
+ARG ESF_VERSION=0.6.1
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=v${ESF_VERSION}" \
       -o /out/machinist ./cmd/machinist

@@ -1,4 +1,4 @@
-# ESF v0.6.0 Helm chart
+# ESF v0.6.1 Helm chart
 
 This chart runs one factory worker and an optional, loopback-bound Machinist
 console. CubeSandbox 0.7.2, Temporal 1.32.0, and PostgreSQL 16.15 are
@@ -53,4 +53,4 @@ restore drill in an isolated namespace and storage set before production use.
 
 Production qualification needs the matching attested companion manifest,
 including Kubernetes acceptance, restore, performance, and 24-hour soak
-evidence. See [the release procedure](../../../docs/release-v0.6.0.md).
+evidence. See [the release procedure](../../../docs/release-v0.6.1.md).

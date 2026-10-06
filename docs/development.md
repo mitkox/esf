@@ -3,7 +3,7 @@
 ## Requirements
 
 - Go 1.27.1 and Node.js 24.21.0, pinned in `.mise.toml`
-- Python 3.14.7 for the optional intake and brief lab tests
+- Python 3.14.8 for the optional intake and brief lab tests
 - `just` for Machinist commands and `make` for factory commands
 
 Run `mise install` to install the pinned local toolchains. CI checks the same
@@ -76,3 +76,5 @@ docs/                         user and design documentation
 The frontend source lives in `internal/controlplane/web/src`. Its production
 bundle lives in `internal/controlplane/web/dist` because Go embeds those files at
 compile time.
+
+For local Cube callbacks, see the [routing and narrow firewall procedure](cube-local-routing.md).

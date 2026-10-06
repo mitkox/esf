@@ -31,7 +31,7 @@ function engineChannel() {
 export async function main() {
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (major < 22 || (major === 22 && minor < 19)) throw new Error('Pi requires Node >=22.19');
-  if (process.argv[2] === '--version') { console.log(`esf-pi/1 pi-durable/1.0.3 node/${process.versions.node}`); return 0; }
+  if (process.argv[2] === '--version') { console.log(`esf-pi/1 pi-durable/1.0.4 node/${process.versions.node}`); return 0; }
   const request = await readRequest();
   if (process.argv[2] === '--engine') {
     if (!process.send) throw new Error('Pi engine must be owned by its supervisor');

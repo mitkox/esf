@@ -3,9 +3,9 @@
 The opt-in Pi v1 candidate uses `Dockerfile.pi-v1` and a separate candidate
 inventory. See [Pi installation and qualification](../../docs/harness-pi.md).
 
-`Dockerfile` builds the Linux/amd64 ESF v0.6.0 template from a pinned
+`Dockerfile` builds the Linux/amd64 ESF v0.6.1 template from a pinned
 CubeSandbox base. It includes Git, CA certificates, Python, the command-output
-limiter tools, OpenCode 2.0.18, and Unreal 0.2.0. The Docker build verifies
+limiter tools, OpenCode 2.0.24, and Unreal 0.3.1. The Docker build verifies
 both executable digests against the release inventory. Provider credentials
 are absent from the image; CubeEgress injects them at runtime.
 

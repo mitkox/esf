@@ -3,20 +3,24 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "engines": { "node": ">=22.19.0" },
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@earendil-works/pi-durable": "1.0.3",
-    "@earendil-works/pi-ai": "1.0.3",
-    "@earendil-works/chord": "1.0.3"
+    "@earendil-works/pi-durable": "1.0.4",
+    "@earendil-works/pi-ai": "1.0.4",
+    "@earendil-works/chord": "1.0.4"
   },
-  "devDependencies": { "esbuild": "0.25.12" },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  },
   "overrides": {
-    "@earendil-works/pi-durable": "1.0.3",
-    "@earendil-works/pi-ai": "1.0.3",
-    "@earendil-works/chord": "1.0.3"
+    "@earendil-works/pi-durable": "1.0.4",
+    "@earendil-works/pi-ai": "1.0.4",
+    "@earendil-works/chord": "1.0.4"
   }
 }

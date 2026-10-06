@@ -1,10 +1,10 @@
 # Deploying the factory worker
 
-The 0.6.0 candidate requires an attested companion qualification manifest for
+The 0.6.1 candidate requires an attested companion qualification manifest for
 the exact source and built assets before production use. This guide describes
 the deployment configuration; it does not qualify a deployment. Complete the
 live, security, backup, restore, migration, load and soak checks in the
-[release procedure](release-v0.6.0.md). Input versions remain recorded in the
+[release procedure](release-v0.6.1.md). Input versions remain recorded in the
 [release inventory](../release/inventory.json).
 
 The target deployment uses an operator-managed Temporal cluster, CubeSandbox,

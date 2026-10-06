@@ -24,7 +24,7 @@ const PiRuntimePath = "/opt/esf/agents/node"
 const piKeyEnvironment = "ESF_PI_API_KEY"
 const piSummaryLimit = 128 << 10
 
-// piPinnedCatalog is generated only from pi-ai 1.0.3 in the committed lockfile.
+// piPinnedCatalog is generated only from pi-ai 1.0.4 in the committed lockfile.
 //
 //go:embed pi-catalog.json
 var piPinnedCatalog []byte
@@ -347,13 +347,13 @@ func (h *PiHarness) Provision(ctx context.Context, sb sandbox.Sandbox) error {
 	if err != nil {
 		return err
 	}
-	if !exec.Succeeded() || !strings.HasPrefix(strings.TrimSpace(exec.Stdout), "esf-pi/1 pi-durable/1.0.3 node/") {
+	if !exec.Succeeded() || !strings.HasPrefix(strings.TrimSpace(exec.Stdout), "esf-pi/1 pi-durable/1.0.4 node/") {
 		return fmt.Errorf("pi: runner self-check failed")
 	}
 	return nil
 }
 func (h *PiHarness) Version(context.Context, sandbox.Sandbox) string {
-	return "pi-durable:1.0.3;runner-sha256:" + strings.ToLower(h.opts.BinarySHA256) + ";node-sha256:" + strings.ToLower(h.opts.RuntimeSHA256)
+	return "pi-durable:1.0.4;runner-sha256:" + strings.ToLower(h.opts.BinarySHA256) + ";node-sha256:" + strings.ToLower(h.opts.RuntimeSHA256)
 }
 func (h *PiHarness) request(task Task) (piRequest, error) {
 	if task.RunID == "" || strings.TrimSpace(task.Prompt) == "" || !path.IsAbs(task.RepositoryDir) {

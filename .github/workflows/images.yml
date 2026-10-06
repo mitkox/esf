@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: Candidate or RC tag matching inventory, such as v0.6.0-rc.1
+        description: Candidate or RC tag matching inventory, such as v0.6.1-rc.1
         required: true
         type: string
       publish:
@@ -55,20 +55,20 @@ jobs:
           python3 scripts/verify-release-inventory.py
       - name: Log in to GHCR
         if: inputs.publish
-        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Enable buildx
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: arm64
       - name: Create image builder
         run: docker buildx create --use
       - name: Build candidate image
         id: push
-        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: ${{ matrix.file }}
@@ -93,7 +93,7 @@ jobs:
         with:
           subject-path: ${{ matrix.component }}-image.oci.tar
       - name: Generate linux/amd64 image SBOM
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         env:
           SYFT_PLATFORM: linux/amd64
         with:
@@ -118,7 +118,7 @@ jobs:
           sbom-path: image-sbom-linux-amd64.cdx.json
       - name: Generate linux/arm64 image SBOM
         if: matrix.component != 'cube-template'
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         env:
           SYFT_PLATFORM: linux/arm64
         with:

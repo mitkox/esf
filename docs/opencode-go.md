@@ -42,7 +42,7 @@ egress = "opencode-go"
 [harnesses.opencode2]
 type = "opencode"
 binary = "/opt/esf/agents/opencode2"
-binary_sha256 = "10d405161d8b9595f4a2ec31254e961969e6ca3f8239ac9bd55b6ff6431dc24f"
+binary_sha256 = "d73436b88f2c412abb4e72056c2f6d133d9651f121952ade7fc3fe95fc9f5ddc"
 preinstalled = true
 packages = []
 pass_env = []
@@ -71,7 +71,7 @@ separate private configuration and run
 conditions and confirm `factory sandboxes` reports no live sandboxes. Usage
 and monetary budgets remain advisory unless the provider enforces them.
 
-Unreal 0.2.0 still uses a `/responses` endpoint in its
+The earlier Unreal 0.2.0 assessment found a `/responses` endpoint in its
 [OpenRouter client](https://github.com/unreallabsai/unreal-agent/blob/v0.2.0/harness/llm/clients/openrouter/client.go).
 OpenCode Go documents a `/chat/completions` endpoint for this model, so the
 same Go profile is for OpenCode V2; Unreal requires a compatible provider or

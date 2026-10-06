@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Unpublished candidate version matching inventory, such as v0.6.0-rc.1
+        description: Unpublished candidate version matching inventory, such as v0.6.1-rc.1
         required: true
         type: string
 

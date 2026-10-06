@@ -260,6 +260,7 @@ func (p *Provider) Create(ctx context.Context, spec sandbox.Spec) (sandbox.Sandb
 		opts.AllowInternetAccess = spec.Network.AllowInternet
 	}
 	opts.Network.Rules = cubeNetworkRules(spec.Network.Rules)
+	opts = CompatibleCreateOptions(opts, p.cfg.Version)
 
 	started := time.Now()
 	created, err := p.client.Create(ctx, opts)

@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mitkox/esf/internal/sandbox/cube"
 	cubesandbox "github.com/tencentcloud/CubeSandbox/sdk/go"
 )
 
@@ -31,21 +32,32 @@ func main() {
 	apiURL := flag.String("api-url", envOr("CUBE_API_URL", "http://127.0.0.1:4000"), "Cube API URL")
 	templateID := flag.String("template", os.Getenv("CUBE_TEMPLATE_ID"), "Cube template ID")
 	hostIP := flag.String("host-ip", envOr("CUBE_PROBE_HOST_IP", "192.0.2.10"), "host address to reach from the sandbox")
+	version := flag.String("cube-version", os.Getenv("FACTORY_CUBE_VERSION"), "operator-recorded Cube release (enables release compatibility)")
 	flag.Parse()
 
-	if err := run(*bind, *apiURL, *templateID, *hostIP); err != nil {
+	if err := run(*bind, *apiURL, *templateID, *hostIP, *version); err != nil {
 		fmt.Fprintf(os.Stderr, "\nNETPROBE FAILED: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(bind, apiURL, templateID, hostIP string) error {
+func run(bind, apiURL, templateID, hostIP, version string) error {
 	if templateID == "" {
 		return errors.New("CUBE_TEMPLATE_ID is required")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
+	// Resolve on the driver so a blocked sandbox DNS resolver cannot be
+	// mistaken for a successful internet-denial policy. Curl still verifies
+	// example.com's certificate and uses its hostname as TLS SNI.
+	dnsCtx, dnsCancel := context.WithTimeout(ctx, 15*time.Second)
+	publicIPs, err := net.DefaultResolver.LookupIP(dnsCtx, "ip4", "example.com")
+	dnsCancel()
+	if err != nil || len(publicIPs) == 0 {
+		return fmt.Errorf("resolve public probe target: addresses=%d error=%v", len(publicIPs), err)
+	}
+	publicIP := publicIPs[0].String()
 
 	// 1. Start a marker service on the host.
 	port := strings.TrimPrefix(bind, "0.0.0.0:")
@@ -76,9 +88,10 @@ func run(bind, apiURL, templateID, hostIP string) error {
 	}
 
 	type scenario struct {
-		name     string
-		opts     cubesandbox.CreateOptions
-		wantHost bool
+		name         string
+		opts         cubesandbox.CreateOptions
+		wantHost     bool
+		wantInternet *bool
 	}
 
 	scenarios := []scenario{
@@ -104,14 +117,16 @@ func run(bind, apiURL, templateID, hostIP string) error {
 				AllowInternetAccess: boolPtr(false),
 				Network:             cubesandbox.NetworkOptions{AllowOut: []string{hostIP}},
 			},
-			wantHost: true,
+			wantHost:     true,
+			wantInternet: boolPtr(false),
 		},
 	}
 
 	failures := 0
 	for _, sc := range scenarios {
+		sc.opts = cube.CompatibleCreateOptions(sc.opts, version)
 		fmt.Printf("=== scenario: %s ===\n", sc.name)
-		reachable, internet, sandboxID, err := probeScenario(ctx, client, sc.opts, hostIP, port)
+		reachable, internet, sandboxID, err := probeScenario(ctx, client, sc.opts, hostIP, port, publicIP)
 		if err != nil {
 			fmt.Printf("  error: %v\n\n", err)
 			failures++
@@ -122,6 +137,10 @@ func run(bind, apiURL, templateID, hostIP string) error {
 		fmt.Printf("  public internet reachable = %v\n", internet)
 		if reachable != sc.wantHost {
 			fmt.Printf("  UNEXPECTED\n")
+			failures++
+		}
+		if sc.wantInternet != nil && internet != *sc.wantInternet {
+			fmt.Printf("  UNEXPECTED public internet policy (expected %v)\n", *sc.wantInternet)
 			failures++
 		}
 		fmt.Println()
@@ -135,7 +154,7 @@ func run(bind, apiURL, templateID, hostIP string) error {
 }
 
 // probeScenario creates one sandbox, tests reachability, and always destroys it.
-func probeScenario(ctx context.Context, client *cubesandbox.Client, opts cubesandbox.CreateOptions, hostIP, port string) (reachable, internet bool, sandboxID string, err error) {
+func probeScenario(ctx context.Context, client *cubesandbox.Client, opts cubesandbox.CreateOptions, hostIP, port, publicIP string) (reachable, internet bool, sandboxID string, err error) {
 	before, err := client.List(ctx)
 	if err != nil {
 		return false, false, "", fmt.Errorf("list before create: %w", err)
@@ -166,7 +185,7 @@ func probeScenario(ctx context.Context, client *cubesandbox.Client, opts cubesan
 
 	// The host marker service answers a plain HTTP GET.
 	hostCheck := fmt.Sprintf(
-		`code=$(curl -s -m 8 -o /dev/null -w '%%{http_code}' http://%s:%s/ 2>/dev/null); echo "host=$code"`,
+		`code=$(curl --noproxy '*' -s -m 8 -o /dev/null -w '%%{http_code}' http://%s:%s/ 2>/dev/null); echo "host=$code"`,
 		hostIP, port)
 	out, err := sandbox.Commands().Run(ctx, hostCheck, cubesandbox.CommandOptions{})
 	if err != nil {
@@ -174,8 +193,8 @@ func probeScenario(ctx context.Context, client *cubesandbox.Client, opts cubesan
 	}
 	reachable = strings.Contains(out.Stdout, "host=200")
 
-	netOut, err := sandbox.Commands().Run(ctx,
-		`code=$(curl -s -m 10 -o /dev/null -w '%{http_code}' https://example.com 2>/dev/null); echo "net=$code"`,
+	publicCheck := fmt.Sprintf(`code=$(curl --noproxy '*' --resolve example.com:443:%s -s -m 10 -o /dev/null -w '%%{http_code}' https://example.com 2>/dev/null); echo "net=$code"`, publicIP)
+	netOut, err := sandbox.Commands().Run(ctx, publicCheck,
 		cubesandbox.CommandOptions{})
 	if err != nil {
 		return reachable, false, sandboxID, fmt.Errorf("internet probe: %w", err)

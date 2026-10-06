@@ -30,7 +30,7 @@ local value before running `make temporal-up`. Never commit `.env`.
 | `temporal-admin-tools` | `temporalio/admin-tools:1.32.0` | — | one-shot schema setup |
 | `temporal` | `temporalio/server:1.32.0` | `127.0.0.1:7233` | gRPC frontend |
 | `temporal-create-namespace` | `temporalio/admin-tools:1.32.0` | — | one-shot namespace creation |
-| `temporal-ui` | `temporalio/ui:2.54.1` | `127.0.0.1:8233` | web UI |
+| `temporal-ui` | `temporalio/ui:2.55.0` | `127.0.0.1:8233` | web UI |
 
 ### Deliberate deviations from upstream
 

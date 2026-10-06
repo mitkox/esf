@@ -12996,7 +12996,7 @@
       "maxTokens": 131072,
       "pricingKnown": true,
       "cost": {
-        "input": 0.66,
+        "input": 0.7884,
         "output": 13,
         "cacheRead": 0.45,
         "cacheWrite": 0
@@ -14764,13 +14764,13 @@
       "input": [
         "text"
       ],
-      "contextWindow": 163840,
-      "maxTokens": 147456,
+      "contextWindow": 131072,
+      "maxTokens": 65536,
       "pricingKnown": true,
       "cost": {
-        "input": 0.27,
+        "input": 0.3,
         "output": 1,
-        "cacheRead": 0,
+        "cacheRead": 0.135,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -14795,13 +14795,13 @@
       "input": [
         "text"
       ],
-      "contextWindow": 131072,
-      "maxTokens": 65536,
+      "contextWindow": 163840,
+      "maxTokens": 147456,
       "pricingKnown": true,
       "cost": {
-        "input": 0.28,
+        "input": 0.259,
         "output": 0.42,
-        "cacheRead": 0.028,
+        "cacheRead": 0.135,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -15016,12 +15016,12 @@
         "text"
       ],
       "contextWindow": 1048576,
-      "maxTokens": 943718,
+      "maxTokens": 393216,
       "pricingKnown": true,
       "cost": {
-        "input": 0.45,
-        "output": 5,
-        "cacheRead": 0.4,
+        "input": 0.66,
+        "output": 1.98,
+        "cacheRead": 0.022,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -16219,9 +16219,9 @@
       "maxTokens": 235929,
       "pricingKnown": true,
       "cost": {
-        "input": 0.09,
-        "output": 0.3,
-        "cacheRead": 0.05,
+        "input": 0.0765,
+        "output": 0.255,
+        "cacheRead": 0.0425,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -16757,9 +16757,9 @@
       "maxTokens": 16384,
       "pricingKnown": true,
       "cost": {
-        "input": 0.1,
-        "output": 0.32,
-        "cacheRead": 0,
+        "input": 0.22,
+        "output": 0.5,
+        "cacheRead": 0.11,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -18144,9 +18144,9 @@
       "maxTokens": 131072,
       "pricingKnown": true,
       "cost": {
-        "input": 0.67,
+        "input": 1.29,
         "output": 14,
-        "cacheRead": 0.22,
+        "cacheRead": 0.43,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -23318,7 +23318,7 @@
       "pricingKnown": true,
       "cost": {
         "input": 0.32,
-        "output": 2.7,
+        "output": 3.25,
         "cacheRead": 0.03,
         "cacheWrite": 0
       },
@@ -23607,45 +23607,6 @@
         "output": 2.55,
         "cacheRead": 0.085,
         "cacheWrite": 0.53125
-      },
-      "thinkingLevels": [
-        "off",
-        "low",
-        "medium",
-        "xhigh"
-      ],
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": null,
-        "xhigh": "xhigh",
-        "max": null
-      },
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "qwen/qwen3.8-27b:free": {
-      "id": "qwen/qwen3.8-27b:free",
-      "name": "Qwen: Qwen3.8 27B (free)",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 262144,
-      "maxTokens": 235929,
-      "pricingKnown": false,
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
       },
       "thinkingLevels": [
         "off",
@@ -24043,46 +24004,6 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "stealth/space-bunny-alpha": {
-      "id": "stealth/space-bunny-alpha",
-      "name": "Space Bunny Alpha",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 1000000,
-      "maxTokens": 524288,
-      "pricingKnown": false,
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": "max"
-      },
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
     "stepfun/step-3.5-flash": {
       "id": "stepfun/step-3.5-flash",
       "name": "StepFun: Step 3.5 Flash",
@@ -24166,9 +24087,9 @@
       "maxTokens": 128000,
       "pricingKnown": true,
       "cost": {
-        "input": 0.132,
-        "output": 0.528,
-        "cacheRead": 0.033,
+        "input": 0.0825,
+        "output": 0.33,
+        "cacheRead": 0.020625,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -24242,9 +24163,9 @@
       "maxTokens": 64000,
       "pricingKnown": true,
       "cost": {
-        "input": 0.834,
-        "output": 2.501,
-        "cacheRead": 0.042,
+        "input": 0.7506,
+        "output": 2.2509,
+        "cacheRead": 0.0378,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -25376,9 +25297,9 @@
       "maxTokens": 131072,
       "pricingKnown": true,
       "cost": {
-        "input": 0.0224,
-        "output": 16,
-        "cacheRead": 0.0224,
+        "input": 0.032,
+        "output": 12,
+        "cacheRead": 0.032,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -25411,12 +25332,12 @@
         "text"
       ],
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 943718,
       "pricingKnown": true,
       "cost": {
-        "input": 1.4,
-        "output": 4.4,
-        "cacheRead": 0.14,
+        "input": 0.07,
+        "output": 7,
+        "cacheRead": 0.065,
         "cacheWrite": 0
       },
       "thinkingLevels": [

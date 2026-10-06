@@ -1,4 +1,4 @@
-// Export the published, locked 1.0.3 catalog for pre-allocation Go validation.
+// Export the published, locked 1.0.4 catalog for pre-allocation Go validation.
 // No network refresh occurs at configuration or execution time.
 import { MODELS } from './node_modules/@earendil-works/pi-ai/dist/models.generated.js';
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai/models';

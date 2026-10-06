@@ -1,7 +1,7 @@
 # Pi harness v1 candidate
 
 Select Pi explicitly with `factory run --agent pi`. OpenCode remains the
-automatic default. Pi 1.0.3 has an experimental API; this adapter pins its
+automatic default. Pi 1.0.4 has an experimental API; this adapter pins its
 published packages, dependency graph, ESF bundle, and Node 24.21.0 runtime.
 The candidate is opt-in until the model-backed acceptance matrix passes.
 
@@ -56,7 +56,7 @@ template in `[cube]`, and append:
 type = "pi"
 preinstalled = true
 binary = "/opt/esf/agents/pi-runner.mjs"
-binary_sha256 = "9dab48151c793cf3265af4058ea7aac8671d1778b31873ee25ac3fc24afe0e2c"
+binary_sha256 = "018aec9e0215eff09aede13a2b707f6e6872d1dcf2b44727d5afc3d6e97c42fc"
 runtime_binary = "/opt/esf/agents/node"
 runtime_sha256 = "7fde7b8afa198da66257f42ee2001d874c7355631e6d1579a5fb5ef1f246df4c"
 provider = "local"
@@ -70,7 +70,7 @@ timeout = "30m"
 ```
 
 `api` supports `openai-completions` (default for the local gateway) and
-`openai-responses`. A model in the embedded Pi 1.0.3 catalog can omit
+`openai-responses`. A model in the embedded Pi 1.0.4 catalog can omit
 `catalog_cache`; its provider, model ID, and API must match. Custom gateways
 must supply a strict offline JSON model definition with explicit context and
 output limits. Do not guess these limits from a model name.
@@ -168,3 +168,10 @@ harness comparisons remain pending: the configured local gateway was
 unreachable, and no HTTPS provider/model/credential profile was available.
 These results qualify the deterministic integration only; the inventory
 continues to mark Pi as a candidate.
+
+The 2026-10-06 upgrade to Pi Durable 1.0.4 passed 17 runner regressions and
+model-backed factory completion on the local DeepSeek gateway. OpenCode 2.0.24
+and Unreal 0.3.1 passed the same task/model comparison, including independent
+verification and sandbox cleanup. Pi remains an opt-in candidate pending the
+HTTPS CubeEgress, failure, review, and recovery acceptance matrix described
+above. See [the component upgrade evidence](../release/qualification/component-upgrade-2026-10-06.md).

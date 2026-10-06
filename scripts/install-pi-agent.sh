@@ -13,4 +13,4 @@ install -m 0644 agents/pi/dist/THIRD_PARTY_NOTICES.txt "$2/.THIRD_PARTY_NOTICES.
 mv -f "$2/.node.new" "$2/node"
 mv -f "$2/.pi-runner.mjs.new" "$2/pi-runner.mjs"
 mv -f "$2/.THIRD_PARTY_NOTICES.txt.new" "$2/THIRD_PARTY_NOTICES.txt"
-printf 'installed verified Pi 1.0.3 execution chain in %s\n' "$2"
+printf 'installed verified Pi 1.0.4 execution chain in %s\n' "$2"

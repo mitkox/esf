@@ -11,11 +11,20 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   if (typeof require !== "undefined") return require.apply(this, arguments);
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
-var __esm = (fn, res) => function __init() {
-  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+var __esm = (fn, res, err2) => function __init() {
+  if (err2) throw err2[0];
+  try {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  } catch (e) {
+    throw err2 = [e], e;
+  }
 };
 var __commonJS = (cb, mod) => function __require2() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
 };
 var __export = (target, all) => {
   for (var name in all)
@@ -4172,12 +4181,10 @@ function resolveX509Transport(value) {
   }
   return registered;
 }
-var x509TransportBrand;
 var init_x509_transport_registry = __esm({
   "node_modules/openai/internal/auth/x509-transport-registry.mjs"() {
     init_error();
     init_x509_transport_state();
-    x509TransportBrand = Symbol("X.509 transport capability");
   }
 });
 
@@ -8707,8 +8714,8 @@ var init_ChatCompletionStream = __esm({
     stringifyParserSchemaValue = JSON.stringify;
     MAX_SERIALIZED_PARSER_SCHEMA_BYTES = 1024 * 1024;
     MAX_SERIALIZED_PARSER_SCHEMA_DEPTH = 64;
-    OMITTED_SERIALIZED_PARSER_VALUE = Symbol("omitted serialized parser value");
-    UNSAFE_SERIALIZED_PARSER_VALUE = Symbol("unsafe serialized parser value");
+    OMITTED_SERIALIZED_PARSER_VALUE = /* @__PURE__ */ Symbol("omitted serialized parser value");
+    UNSAFE_SERIALIZED_PARSER_VALUE = /* @__PURE__ */ Symbol("unsafe serialized parser value");
     ChatCompletionStream = class _ChatCompletionStream extends AbstractChatCompletionRunner {
       /** Creates an unstarted stream, retaining request parameters for structured-output parsing. */
       constructor(params) {
@@ -20242,7 +20249,7 @@ function configureProvider(provider) {
 var providerDefinitionsKey, providerGlobal, existingProviderDefinitions, providerDefinitions;
 var init_provider = __esm({
   "node_modules/openai/internal/provider.mjs"() {
-    providerDefinitionsKey = Symbol.for("openai.node.providerDefinitions.v1");
+    providerDefinitionsKey = /* @__PURE__ */ Symbol.for("openai.node.providerDefinitions.v1");
     providerGlobal = globalThis;
     existingProviderDefinitions = providerGlobal[providerDefinitionsKey];
     providerDefinitions = existingProviderDefinitions ?? /* @__PURE__ */ new WeakMap();
@@ -20357,7 +20364,7 @@ var init_client = __esm({
     init_log();
     init_values();
     WORKLOAD_IDENTITY_API_KEY_PLACEHOLDER = "workload-identity-auth";
-    inheritedDataResidencySelection = Symbol("inheritedDataResidencySelection");
+    inheritedDataResidencySelection = /* @__PURE__ */ Symbol("inheritedDataResidencySelection");
     OpenAI = class {
       /**
        * API Client for interfacing with the OpenAI API.
@@ -21444,7 +21451,7 @@ var init_bedrock = __esm({
   "node_modules/openai/internal/bedrock.mjs"() {
     init_error2();
     init_utils2();
-    brand_privateBedrockClient = Symbol.for("openai.privateBedrockClient");
+    brand_privateBedrockClient = /* @__PURE__ */ Symbol.for("openai.privateBedrockClient");
   }
 });
 
@@ -24782,7 +24789,7 @@ import path3 from "node:path";
 
 // node_modules/@earendil-works/chord/dist/context/index.js
 var ABORT_SIGNAL_CONTEXT_KEY = Object.freeze({
-  token: Symbol("chord.abortSignal")
+  token: /* @__PURE__ */ Symbol("chord.abortSignal")
 });
 var BaseContext = class {
   get abortSignal() {
@@ -25063,7 +25070,7 @@ function isContainer(value) {
 }
 
 // node_modules/@earendil-works/chord/dist/delta/tracker.js
-var NODE = Symbol("chord.delta.overlay.node");
+var NODE = /* @__PURE__ */ Symbol("chord.delta.overlay.node");
 var PREPARED = /* @__PURE__ */ new WeakMap();
 var RELEASED = {};
 var ARRAY_MUTATORS = /* @__PURE__ */ new Set([
@@ -27791,7 +27798,11 @@ function resolveSettings(settings2) {
     stream: { ...settings2?.stream },
     retry: { ...DEFAULT_RETRY_POLICY, ...settings2?.retry },
     compaction: { ...DEFAULT_COMPACTION_POLICY, ...settings2?.compaction },
-    progress: { ...DEFAULT_PROGRESS_POLICY, ...settings2?.progress },
+    // Field by field, so an explicitly undefined interval keeps its default.
+    progress: {
+      partialIntervalMs: settings2?.progress?.partialIntervalMs ?? DEFAULT_PROGRESS_POLICY.partialIntervalMs,
+      outputIntervalMs: settings2?.progress?.outputIntervalMs ?? DEFAULT_PROGRESS_POLICY.outputIntervalMs
+    },
     toolExecution: settings2?.toolExecution ?? "parallel",
     steeringMode: settings2?.steeringMode ?? "one-at-a-time",
     followUpMode: settings2?.followUpMode ?? "one-at-a-time"
@@ -28020,6 +28031,9 @@ var RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
   "stream ended before message_stop",
   "stream ended before a terminal response event",
   "http2 request did not get a response",
+  // Node ERR_HTTP2_STREAM_CANCEL: the HTTP/2 session died before the request was
+  // sent, e.g. after the Bedrock SDK's 5-minute session timeout (#10379).
+  "pending stream has been canceled",
   // Provider-requested retry delay cap failures should flow through the outer
   // retry policy so callers can surface/abort the backoff (#1123).
   "retry delay",
@@ -37321,7 +37335,7 @@ function FromString8(_context, type) {
 
 // node_modules/typebox/build/value/create/from_symbol.mjs
 function FromSymbol2(_context, _type) {
-  return Symbol();
+  return /* @__PURE__ */ Symbol();
 }
 
 // node_modules/typebox/build/value/create/from_template_literal.mjs
@@ -37890,7 +37904,7 @@ function Compile(...args) {
 
 // node_modules/@earendil-works/pi-ai/dist/utils/validation.js
 var validatorCache = /* @__PURE__ */ new WeakMap();
-var TYPEBOX_KIND = Symbol.for("TypeBox.Kind");
+var TYPEBOX_KIND = /* @__PURE__ */ Symbol.for("TypeBox.Kind");
 function getSchemaTypes(schema) {
   if (typeof schema.type === "string") {
     return [schema.type];
@@ -38288,7 +38302,7 @@ function truncateHeadOf(prefix, totals, options = {}) {
 var NEWLINE = 10;
 var INVALID_OUTPUT = /[\x00-\x08\x0b-\x1f\ufff9-\ufffb]/g;
 var encoder2 = new TextEncoder();
-var decoder = new TextDecoder();
+var decoder = new TextDecoder("utf-8", { ignoreBOM: true });
 function sanitizeOutput(text) {
   return text.replace(INVALID_OUTPUT, "");
 }
@@ -38363,7 +38377,13 @@ function lineCount(bytes) {
 }
 var OutputBuffer = class {
   #limits;
-  #decoder = new TextDecoder();
+  /**
+   * Decoder of byte chunks. A string chunk or a skip ends an incomplete character of earlier bytes (it becomes U+FFFD);
+   * the next byte chunk then starts a new character. As in `StreamDecoder`, only a byte-order mark at the very start of
+   * the output is dropped, never a U+FEFF later in it.
+   */
+  #decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+  #started = false;
   /** Stored chunks: for head the start of the stream, for tail a suffix that still contains the next window. */
   #chunks = [];
   #storedBytes = 0;
@@ -38386,7 +38406,12 @@ var OutputBuffer = class {
    */
   push(chunk, skipped) {
     const pending = typeof chunk === "string" || skipped !== void 0 ? this.#decoder.decode() : "";
-    const text = typeof chunk === "string" ? chunk : this.#decoder.decode(chunk, { stream: true });
+    let text = typeof chunk === "string" ? chunk : this.#decoder.decode(chunk, { stream: true });
+    const first = !this.#started && pending === "" && skipped === void 0;
+    if (pending !== "" || text !== "" || skipped !== void 0)
+      this.#started = true;
+    if (first && typeof chunk !== "string" && text.startsWith("\uFEFF"))
+      text = text.slice(1);
     if (skipped === void 0)
       return this.#accept(pending + text);
     if (this.#limits.retain !== "tail")
@@ -44440,6 +44465,9 @@ var BudgetExceeded = class extends Error {
 function isNodeError(error) {
   return error instanceof Error && "code" in error;
 }
+function isDenied(error) {
+  return isNodeError(error) && (error.code === "EACCES" || error.code === "EPERM");
+}
 function entryOf(stats, hash) {
   const kind = stats.isFile() ? "file" : stats.isDirectory() ? "directory" : stats.isSymbolicLink() ? "symlink" : "other";
   return {
@@ -44525,7 +44553,7 @@ var NodeFileWatcher = class _NodeFileWatcher {
     this.#timer = void 0;
     clearTimeout(this.#settleTimer);
     this.#settleTimer = void 0;
-    for (const watcher of this.#watchers.values())
+    for (const { watcher } of this.#watchers.values())
       watcher.close();
     this.#watchers.clear();
   }
@@ -44580,7 +44608,8 @@ var NodeFileWatcher = class _NodeFileWatcher {
             this.#deliver({ paths: [...changed].sort() });
         } while (this.#dirty && !this.#closed);
       } catch (error) {
-        const fileError = error instanceof FileError ? error : new FileError("invalid", error instanceof Error ? error.message : String(error));
+        const message = error instanceof Error ? error.message : String(error);
+        const fileError = error instanceof FileError ? error : new FileError(isDenied(error) ? "permission_denied" : "invalid", message);
         this.#deliver({ error: fileError });
         this.#stop();
       } finally {
@@ -44593,12 +44622,15 @@ var NodeFileWatcher = class _NodeFileWatcher {
   async #sync(report) {
     const changed = /* @__PURE__ */ new Set();
     for (let round = 0; round < 10 && !this.#closed; round++) {
-      const next = await this.#scan();
+      const scan = await this.#scan();
+      if (this.#closed)
+        break;
+      const next = scan.snapshot;
       if (report)
         for (const path5 of this.#diff(this.#snapshot, next))
           changed.add(path5);
       this.#snapshot = next;
-      if (this.#mode === "polling" || !this.#reconcileWatchers(next))
+      if (this.#mode === "polling" || !this.#reconcileWatchers(scan))
         break;
       if (process.platform === "darwin")
         this.#scheduleSettle();
@@ -44626,9 +44658,13 @@ var NodeFileWatcher = class _NodeFileWatcher {
   }
   async #scan() {
     const snapshot = /* @__PURE__ */ new Map();
-    let directories = 0;
-    const countDirectory = () => {
-      if (++directories > this.#maxDirectories) {
+    const linkedFiles = /* @__PURE__ */ new Set();
+    const counted = /* @__PURE__ */ new Set();
+    const traversed = /* @__PURE__ */ new Set();
+    const listed = /* @__PURE__ */ new Map();
+    const countDirectory = (path5) => {
+      counted.add(path5);
+      if (counted.size > this.#maxDirectories) {
         throw new BudgetExceeded(`Watched paths exceed ${this.#maxDirectories} directories`);
       }
     };
@@ -44639,11 +44675,17 @@ var NodeFileWatcher = class _NodeFileWatcher {
       }
       snapshot.set(path5, entryOf(stats, hash));
     };
-    const scanDirectory = async (target, directory) => {
+    const scanDirectory = async (index3, target, directory) => {
+      const key = `${index3}\0${directory}`;
+      if (traversed.has(key))
+        return;
+      traversed.add(key);
       let names3;
       try {
         names3 = await readdir(directory);
       } catch (error) {
+        if (directory === target.path && isDenied(error))
+          throw error;
         if (isNodeError(error) && ["ENOENT", "EACCES", "EPERM", "ENOTDIR"].includes(error.code ?? ""))
           return;
         throw error;
@@ -44652,19 +44694,23 @@ var NodeFileWatcher = class _NodeFileWatcher {
         if (excluded(target, name))
           continue;
         const path5 = `${directory.endsWith(sep) ? directory : directory + sep}${name}`;
-        if (snapshot.has(path5))
-          continue;
-        const stats = await lstat(path5).catch(() => void 0);
-        if (stats === void 0)
-          continue;
-        await record(path5, stats);
-        if (target.recursive && stats.isDirectory()) {
-          countDirectory();
-          await scanDirectory(target, path5);
+        let kind = listed.get(path5);
+        if (kind === void 0) {
+          const stats = await lstat(path5).catch(() => void 0);
+          if (stats === void 0)
+            continue;
+          kind = entryOf(stats).kind;
+          listed.set(path5, kind);
+          if (!snapshot.has(path5))
+            await record(path5, stats);
+        }
+        if (target.recursive && kind === "directory") {
+          countDirectory(path5);
+          await scanDirectory(index3, target, path5);
         }
       }
     };
-    for (const target of this.#targets) {
+    for (const [index3, target] of this.#targets.entries()) {
       for (const ancestor of ancestorsOf(target.path)) {
         if (snapshot.has(ancestor))
           continue;
@@ -44672,23 +44718,34 @@ var NodeFileWatcher = class _NodeFileWatcher {
         if (stats2 !== void 0)
           snapshot.set(ancestor, { ...entryOf(stats2), size: 0, mtimeMs: 0 });
       }
-      const stats = await stat(target.path).catch(() => void 0);
-      if (stats === void 0)
+      let stats;
+      try {
+        stats = await stat(target.path);
+      } catch (error) {
+        if (isDenied(error))
+          throw error;
         continue;
+      }
       await record(target.path, stats);
+      if (stats.isFile() && (await lstat(target.path).catch(() => void 0))?.isSymbolicLink()) {
+        linkedFiles.add(target.path);
+      }
       if (stats.isDirectory()) {
-        countDirectory();
-        await scanDirectory(target, target.path);
+        countDirectory(target.path);
+        await scanDirectory(index3, target, target.path);
       }
     }
-    return snapshot;
+    return { snapshot, linkedFiles };
   }
   /**
-   * Watch every existing ancestor of each target, each target directory, and on Linux each directory below a recursive
-   * target (elsewhere one recursive watcher per target). Returns whether a watcher was added.
+   * Watch every existing ancestor of each target, each target directory, each target that is a symbolic link to a file
+   * (changes to that file are not events of the link's directory), and on Linux each directory below a recursive target
+   * (elsewhere one recursive watcher per target). Returns whether a watcher was added.
    */
-  #reconcileWatchers(snapshot) {
+  #reconcileWatchers({ snapshot, linkedFiles }) {
     const wanted = /* @__PURE__ */ new Map();
+    for (const path5 of linkedFiles)
+      wanted.set(path5, false);
     const perDirectory = process.platform === "linux" || process.platform === "android";
     for (const target of this.#targets) {
       for (const ancestor of ancestorsOf(target.path)) {
@@ -44707,25 +44764,28 @@ var NodeFileWatcher = class _NodeFileWatcher {
         }
       }
     }
-    for (const [path5, watcher] of this.#watchers) {
-      if (!wanted.has(path5)) {
-        watcher.close();
+    for (const [path5, installed] of this.#watchers) {
+      const entry = snapshot.get(path5);
+      if (!wanted.has(path5) || entry === void 0 || entry.dev !== installed.dev || entry.ino !== installed.ino) {
+        installed.watcher.close();
         this.#watchers.delete(path5);
       }
     }
     let added = false;
     for (const [path5, recursive] of wanted) {
-      if (this.#watchers.has(path5))
+      const entry = snapshot.get(path5);
+      if (this.#watchers.has(path5) || entry === void 0)
         continue;
+      const linked = linkedFiles.has(path5);
       try {
-        const watcher = fsWatch(path5, { recursive, persistent: false }, (_event, filename) => this.#onEvent(path5, filename === null ? void 0 : String(filename)));
+        const watcher = fsWatch(path5, { recursive, persistent: false }, (_event, filename) => linked ? this.#onLinkedFileEvent(path5) : this.#onEvent(path5, filename === null ? void 0 : String(filename)));
         watcher.on("error", () => {
           watcher.close();
-          if (this.#watchers.get(path5) === watcher)
+          if (this.#watchers.get(path5)?.watcher === watcher)
             this.#watchers.delete(path5);
           this.#scheduleFlush();
         });
-        this.#watchers.set(path5, watcher);
+        this.#watchers.set(path5, { watcher, dev: entry.dev, ino: entry.ino });
         added = true;
       } catch (error) {
         if (isNodeError(error) && error.code !== "ENOENT" && error.code !== "EACCES" && error.code !== "EPERM") {
@@ -44740,7 +44800,7 @@ var NodeFileWatcher = class _NodeFileWatcher {
     if (this.#mode === "polling")
       return;
     this.#mode = "polling";
-    for (const watcher of this.#watchers.values())
+    for (const { watcher } of this.#watchers.values())
       watcher.close();
     this.#watchers.clear();
     this.#deliver({ overflow: true });
@@ -44757,6 +44817,13 @@ var NodeFileWatcher = class _NodeFileWatcher {
       this.#events.add(this.#reported(path5));
     if (relevant || filename === void 0)
       this.#scheduleFlush();
+  }
+  /** The file a target links to changed: report the target. */
+  #onLinkedFileEvent(target) {
+    if (this.#closed)
+      return;
+    this.#events.add(target);
+    this.#scheduleFlush();
   }
   #inScope(path5) {
     for (const target of this.#targets) {
@@ -46007,6 +46074,10 @@ var bashSchema = typebox_exports.Object({
   command: typebox_exports.String({ description: "Bash command to execute" }),
   timeout: typebox_exports.Optional(typebox_exports.Number({ description: "Timeout in seconds (optional, no default timeout)" }))
 });
+var powershellSchema = typebox_exports.Object({
+  command: typebox_exports.String({ description: "PowerShell command to execute" }),
+  timeout: typebox_exports.Optional(typebox_exports.Number({ description: "Timeout in seconds (optional, no default timeout)" }))
+});
 function validateTimeout(timeout) {
   if (timeout === void 0)
     return;
@@ -46017,6 +46088,52 @@ function validateTimeout(timeout) {
     throw new Error(`Invalid timeout: maximum is ${MAX_TIMEOUT_SECONDS2} seconds`);
   }
 }
+async function prepareExecution(command, options, api, context) {
+  const execution = {
+    command: options?.commandPrefix ? `${options.commandPrefix}
+${command}` : command,
+    cwd: requireEnv(api).cwd,
+    env: {},
+    inheritEnv: true
+  };
+  await options?.prepare?.(execution, api, context);
+  return execution;
+}
+async function runCommand2(commands, execution, timeout, api, context) {
+  const env = requireEnv(api);
+  let result;
+  for (const command of commands) {
+    result = await env.exec(command, {
+      cwd: execution.cwd,
+      env: execution.env,
+      inheritEnv: execution.inheritEnv,
+      ...timeout === void 0 ? {} : { timeout },
+      onOutput: (text, _context, info) => api.output(text, info.skipped),
+      spill: { afterBytes: DEFAULT_MAX_BYTES, afterLines: DEFAULT_MAX_LINES },
+      // An environment may then omit output outside the retained tail and report the omission.
+      ...api.outputWindow === void 0 ? {} : { window: api.outputWindow }
+    }, context);
+    if (result.ok || result.error.code !== "spawn_error")
+      break;
+  }
+  if (result === void 0)
+    throw new Error("No command to run");
+  const spillPath = result.ok ? result.value.spillPath : result.error.spillPath;
+  if (spillPath !== void 0) {
+    api.diagnostic({ severity: "info", code: "full_output", message: `Full output: ${spillPath}` });
+  }
+  if (!result.ok) {
+    if (result.error.code === "aborted" && context.abortSignal?.aborted)
+      throw result.error;
+    if (result.error.code === "timeout")
+      throw new Error(`Command timed out after ${timeout} seconds`);
+    if (result.error.code === "aborted")
+      throw new Error("Command aborted");
+    throw result.error;
+  }
+  if (result.value.exitCode !== 0)
+    throw new Error(`Command exited with code ${result.value.exitCode}`);
+}
 function createBashTool(options) {
   return defineTool({
     name: "bash",
@@ -46024,42 +46141,9 @@ function createBashTool(options) {
     parameters: bashSchema,
     outputLimits: { retain: "tail" },
     async execute(args, api, context) {
-      const { command, timeout } = args;
-      validateTimeout(timeout);
-      const env = requireEnv(api);
-      const execution = {
-        command: options?.commandPrefix ? `${options.commandPrefix}
-${command}` : command,
-        cwd: env.cwd,
-        env: {},
-        inheritEnv: true
-      };
-      await options?.prepare?.(execution, api, context);
-      const result = await env.exec(execution.command, {
-        cwd: execution.cwd,
-        env: execution.env,
-        inheritEnv: execution.inheritEnv,
-        ...timeout === void 0 ? {} : { timeout },
-        onOutput: (text, _context, info) => api.output(text, info.skipped),
-        spill: { afterBytes: DEFAULT_MAX_BYTES, afterLines: DEFAULT_MAX_LINES },
-        // An environment may then omit output outside the retained tail and report the omission.
-        ...api.outputWindow === void 0 ? {} : { window: api.outputWindow }
-      }, context);
-      const spillPath = result.ok ? result.value.spillPath : result.error.spillPath;
-      if (spillPath !== void 0) {
-        api.diagnostic({ severity: "info", code: "full_output", message: `Full output: ${spillPath}` });
-      }
-      if (!result.ok) {
-        if (result.error.code === "aborted" && context.abortSignal?.aborted)
-          throw result.error;
-        if (result.error.code === "timeout")
-          throw new Error(`Command timed out after ${timeout} seconds`);
-        if (result.error.code === "aborted")
-          throw new Error("Command aborted");
-        throw result.error;
-      }
-      if (result.value.exitCode !== 0)
-        throw new Error(`Command exited with code ${result.value.exitCode}`);
+      validateTimeout(args.timeout);
+      const execution = await prepareExecution(args.command, options, api, context);
+      await runCommand2([execution.command], execution, args.timeout, api, context);
       return {};
     }
   });
@@ -47140,8 +47224,9 @@ function createReadTool() {
           const before = getOrThrow(await reader.info(context));
           const result = await readText(reader, before, path5, offset, limit2, context);
           const after = getOrThrow(await reader.info(context));
-          if (after.size === before.size && after.mtimeMs === before.mtimeMs)
+          if (after.size > before.size || after.size === before.size && after.mtimeMs === before.mtimeMs) {
             return result;
+          }
           if (attempt === 1)
             throw new Error(`${path5} changed while it was read`);
         }
@@ -48389,7 +48474,7 @@ async function main() {
   const [major, minor] = process.versions.node.split(".").map(Number);
   if (major < 22 || major === 22 && minor < 19) throw new Error("Pi requires Node >=22.19");
   if (process.argv[2] === "--version") {
-    console.log(`esf-pi/1 pi-durable/1.0.3 node/${process.versions.node}`);
+    console.log(`esf-pi/1 pi-durable/1.0.4 node/${process.versions.node}`);
     return 0;
   }
   const request = await readRequest();
