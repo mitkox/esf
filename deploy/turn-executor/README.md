@@ -9,6 +9,8 @@ file owned root:esf-turn mode0640 under `/etc/esf`.
 The environment file contains the existing `CUBE_API_URL`, `CUBE_TEMPLATE_ID`, `CUBE_PROXY_NODE_IP`,
 `CUBE_PROXY_PORT_HTTP`, `CUBE_PROXY_SCHEME`, `CUBE_SANDBOX_DOMAIN`,
 Cube authentication variables required by `internal/sandbox/cube/config.go`,
+`FACTORY_CUBE_VERSION=0.7.2` for a Cube0.7.2 deployment (required for its
+explicit internet-denial create compatibility),
 `ESF_TURN_SERVICE_TOKEN` (random minimum32 characters), and `OPENCODE_GO_API_KEY`.
 Use the deployment secret manager or protected credential files; do not place
 values in source, Run Command bodies, shell history, or public storage. The

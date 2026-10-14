@@ -162,3 +162,11 @@ A workflow requiring covered spend must stop until pricing evidence is available
 
 Official CLI flags: https://code.claude.com/docs/en/cli-reference.
 OpenCode Go supported clients/endpoints: https://opencode.ai/v2/docs/console/go/.
+
+### Rebase validation
+
+The original model receipts above are tagged `fbd3267`. After rebasing onto
+`0ef8e23`, both affected Go packages passed inside Cube and the rebuilt lifecycle
+probe passed with `FACTORY_CUBE_VERSION=0.7.2`, including binary roundtrip, metadata
+isolation and verified owned-VM cleanup. No model calls were repeated. Retained
+logs and new binary digests are in `docs/evidence/sf-turn-rebase-20261014.json`.

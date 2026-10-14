@@ -67,7 +67,8 @@
       "verified_template_allocation": {
         "cpu_milli": 2000,
         "memory_mib": 2000
-      }
+      },
+      "binary_sha256": "10fa3d93af491329c42d6fd18198fd67ed7b61027c74fe156d71fc5098215a88"
     },
     "real_permission": {
       "run_id": "581f310a-8772-4068-8b7e-441aff98f6d1",
@@ -112,7 +113,8 @@
         "profile_sha": "84d6c009e93acd9f8ac37a10774078b827705d771f3f5248255fa0e0c17c7802"
       },
       "approvals": 1,
-      "proof": true
+      "proof": true,
+      "binary_sha256": "9fc9bed32a7f1ddbe815ddcb448e1f996d7fe0e9b6785e7ac28e4266cb97cbf9"
     },
     "binary_restore": [
       {
@@ -311,5 +313,7 @@
       "missing receipt"
     ],
     "passed": 4
-  }
+  },
+  "source_revision": "fbd3267",
+  "source_note": "Original pre-rebase implementation. These model receipts were not rerun after rebasing onto master0ef8e23; see separate rebase evidence."
 }
