@@ -1,6 +1,6 @@
 # Local Cube callback routing
 
-The ESF development stack uses CubeSandbox 0.7.2. Route-aware egress lets
+The ESF development stack uses CubeSandbox 0.7.3. Route-aware egress lets
 CubeVS use the host routing table for local destinations. Set
 `cube_router_enable = true` in Cubelet's network plugin configuration after
 preserving a backup and confirming there are no active sandboxes. Restart
@@ -26,7 +26,7 @@ temporary rule; persistence remained pending approval at delivery time.
 
 Load the local `.env` values before running smoke or network probes. The probe
 also needs `CUBE_PROBE_HOST_IP=192.168.0.16` and
-`FACTORY_CUBE_VERSION=0.7.2` (or `-cube-version 0.7.2`) so its create request
+`FACTORY_CUBE_VERSION=0.7.3` (or `-cube-version 0.7.3`) so its create request
 uses the deployed API's denial field. Factory runs read `sandbox.version`
 from `factory.toml` for the same compatibility decision.
 
@@ -37,3 +37,30 @@ resolves on the driver and retains TLS verification; blocked sandbox DNS is
 not accepted as evidence of internet denial. After each run, verify no leaked
 sandboxes. See the [0.6.1 upgrade record](../release/qualification/component-upgrade-2026-10-06.md)
 for exact local artifacts, test results and qualification boundaries.
+
+## CubeEgress marks on a host with Calico or Tailscale
+
+Cube 0.7.3 selects HTTP and HTTPS interception using packet marks. Its default
+marks `0xCE010000` and `0xCE020000`, masked by `0xFFFF0000`, overlap the
+`0x000F0000` bits that Calico clears in its raw PREROUTING chain. Both defaults
+become `0xCE000000`, so the TPROXY rules no longer match. A running proxy and
+healthy admin endpoint alone do not establish working credential injection.
+
+Cube supports an operator-owned `/etc/cubeegress/l7-marks.conf`. On this local
+deployment, reserve the top byte for Cube and leave Calico's `0x000F0000` and
+Tailscale's `0x00FF0000` bits available:
+
+```sh
+CUBE_L7_MARK_HTTP=0xCE000000
+CUBE_L7_MARK_HTTPS=0xCF000000
+CUBE_L7_MARK_MASK=0xFF000000
+```
+
+Confirm the chosen bits are free on the actual host before applying them.
+With no active VMs, stop Cube's egress network unit **before** replacing the
+configuration so its teardown reads the old marks. Preserve the previous
+configuration, restart Cubelet to reload the eBPF programs, and start the
+egress network and proxy units. Check matching `ip rule` selectors, distinct
+HTTP/HTTPS TPROXY counters, an allowed provider request, and denied paths.
+Keep the previous configuration until those checks pass. Change only Cube's
+configuration; retain the existing Calico and Tailscale rules.

@@ -22,6 +22,12 @@ was extracted; the upstream repository is not vendored.
 Copy `.env.example` to `.env` and replace the database password with a random
 local value before running `make temporal-up`. Never commit `.env`.
 
+Set `TEMPORAL_SCHEMA_MODE=create` only for empty databases. After restoring an
+existing Temporal database and visibility store, set it to `upgrade`. The
+upgrade path runs only `update-schema`; it never creates databases or resets
+their schema metadata with `setup-schema -v 0.0`. A missing or invalid mode
+fails before contacting PostgreSQL.
+
 ## What runs
 
 | Service | Image | Host binding | Purpose |
@@ -107,3 +113,18 @@ The updated compose file requires `POSTGRESQL_DATA_VOLUME` explicitly. An old
 its old compose file, `.env`, and volume until backup/restore validation passes.
 Do not mount the old 16.x volume using the new 18.x directory layout. Use
 distinct container names and ports for the isolated migration stack.
+
+Drain Temporal before the final two-database backup. Compare every restored
+table's row count and content digest before applying schema upgrades. Retain
+the original volume, image digests, private environment file and service
+configuration until the new server serves the same workflow identities,
+statuses and complete histories and can execute a new verified workflow.
+Exercise rollback against the retained PostgreSQL 16 store before accepting
+the migration. After new workflows write to PostgreSQL 18, rolling back to
+the old snapshot loses those new writes; take another backup and plan their
+reconciliation before reverting.
+
+Renaming a container does **not** remove its Compose labels. Compose can
+recreate a renamed rollback container belonging to the same project. Use a
+distinct project for the migration drill and retain a reproducible rollback
+definition or stopped containers without the active project's Compose labels.

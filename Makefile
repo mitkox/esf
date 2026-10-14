@@ -42,7 +42,11 @@ build: ## Build the factory and discovery binaries into ./bin
 .PHONY: test
 test: ## Run Go, frontend, and optional Python unit tests
 	$(GO) test ./... -count=1
-	$(MAKE) test-frontend test-python
+	$(MAKE) test-frontend test-python test-temporal-schema
+
+.PHONY: test-temporal-schema
+test-temporal-schema: ## Check schema initialization and restored-database safety
+	sh deployments/dev/temporal/tests/setup-postgres-test.sh
 
 .PHONY: frontend test-frontend test-python
 frontend: ## Install frozen frontend dependencies and build the UI
