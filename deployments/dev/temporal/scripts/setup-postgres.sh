@@ -17,8 +17,8 @@ echo 'Waiting for PostgreSQL port to be available...'
 nc -z -w 10 "${POSTGRES_SEEDS}" "${DB_PORT:-5432}"
 echo 'PostgreSQL port is available'
 
-# Initialize only new databases. Reinitializing restored schema metadata can
-# replay migrations against existing tables and must never precede an upgrade.
+# Keep database creation and initial version-table setup in the explicit fresh
+# install path. Restores require only versioned updates, not bootstrap commands.
 if [ "${TEMPORAL_SCHEMA_MODE}" = create ]; then
 temporal-sql-tool --plugin postgres12 --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT:-5432}" --db temporal create
 temporal-sql-tool --plugin postgres12 --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT:-5432}" --db temporal setup-schema -v 0.0

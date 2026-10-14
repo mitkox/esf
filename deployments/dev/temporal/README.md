@@ -24,8 +24,10 @@ local value before running `make temporal-up`. Never commit `.env`.
 
 Set `TEMPORAL_SCHEMA_MODE=create` only for empty databases. After restoring an
 existing Temporal database and visibility store, set it to `upgrade`. The
-upgrade path runs only `update-schema`; it never creates databases or resets
-their schema metadata with `setup-schema -v 0.0`. A missing or invalid mode
+upgrade path runs only `update-schema`; it never creates databases or invokes
+`setup-schema -v 0.0`. Upstream setup preserves higher existing schema versions;
+the explicit mode records operator intent rather than relying on bootstrap
+idempotence. A missing or invalid mode
 fails before contacting PostgreSQL.
 
 ## What runs
