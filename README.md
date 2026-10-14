@@ -46,7 +46,7 @@ attested companion manifest for its exact source and asset digests. The
 
 ## Quick start
 
-Requirements for v0.6.1 development: Go 1.27.1, Node.js 24.21.0, Git,
+Requirements for v0.6.1 development: Go 1.27.2, Node.js 24.21.0, Git,
 an existing CubeSandbox deployment with a READY template, and Temporal.
 Python tools use the frozen `uv.lock`; they are optional. Docker Compose can
 run the included local Temporal stack.

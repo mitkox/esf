@@ -11,7 +11,7 @@ Report vulnerabilities through [SECURITY.md](SECURITY.md), not a public issue.
 
 Install:
 
-- Go 1.27.1
+- Go 1.27.2
 - Node.js 24.21.0, plus npm
 - Python 3.14.8 and uv 0.12.23 for optional Python checks
 - Git

@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Go 1.27.1 and Node.js 24.21.0, pinned in `.mise.toml`
+- Go 1.27.2 and Node.js 24.21.0, pinned in `.mise.toml`
 - Python 3.14.8 for the optional intake and brief lab tests
 - `just` for Machinist commands and `make` for factory commands
 

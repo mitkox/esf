@@ -52,14 +52,14 @@
     "postgresql": "16.15"
   },
   "toolchains": {
-    "go": "1.27.1",
+    "go": "1.27.2",
     "node": "24.21.0",
     "python_optional": "3.14.8",
     "kubernetes_qualification": "1.36.2",
     "helm_qualification": "4.3.0"
   },
   "build_bases": {
-    "go": "docker.io/library/golang@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195",
+    "go": "docker.io/library/golang@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61",
     "runtime": "gcr.io/distroless/static-debian12@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab",
     "worker": "docker.io/library/debian@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251",
     "python": "docker.io/library/python@sha256:48b13b003dda20b16f9442b8475aa05fe21bf6579a8c881db92ffb4d8fd20f83",
