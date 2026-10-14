@@ -1,0 +1,18 @@
+{
+  "status": "passed",
+  "runs": [
+    {
+      "agent": "conformance",
+      "run_id": "esf-pg18-conformance-20261015",
+      "exit_code": 0,
+      "expected_success": true
+    },
+    {
+      "agent": "noop",
+      "run_id": "esf-pg18-verification-denial-20261015",
+      "exit_code": 1,
+      "expected_success": false
+    }
+  ],
+  "cleanup": "No live sandboxes."
+}

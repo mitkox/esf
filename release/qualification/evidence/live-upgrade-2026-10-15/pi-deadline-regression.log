@@ -1,0 +1,25 @@
+✔ runner version matches the pinned Pi dependency (148.223902ms)
+✔ explicit Responses protocol preserves committed usage (518.962562ms)
+✔ completion, commit audit, cached tokens, estimated cost, and submission deduplication (561.66884ms)
+✔ confirmed engine death during a model request resumes the same submission with partial usage (580.66889ms)
+✔ engine death during shell execution fails without replaying the command (311.27753ms)
+✔ normal provider failure is terminal and does not restart the engine (304.409522ms)
+✔ missing provider usage stays unavailable rather than zero (304.81947ms)
+✔ missing usage in an earlier turn remains unavailable on a duplicate submission (578.315781ms)
+✔ owner lock rejects concurrent invocations without stealing a live session (384.885477ms)
+✔ deadline remains bounded and never restarts on timeout (578.148227ms)
+✔ a deadline expiring during digest verification never launches an engine (75.315306ms)
+✔ session mismatch and missing journal fail without a fresh conversation (437.667913ms)
+✔ committed completion survives death before the supervisor terminal notification (506.380177ms)
+✔ unsafe interrupted file tool is recorded instead of replayed (588.13541ms)
+✔ surviving processes and uncertain process inspection prevent recovery (579.518655ms)
+✔ corrupt journal and exhausted allowance never start a third engine (971.144611ms)
+✔ a restart consumes the original deadline (10025.355391ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18253.20675

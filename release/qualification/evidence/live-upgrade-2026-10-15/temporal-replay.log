@@ -1,0 +1,11 @@
+2026/10/14 22:23:04 INFO  No DataConverter configured for temporal worker. Use default one.
+Replayed 0.json committed decisions through event 70; later timer/cancel awaits workflow task
+2026/10/14 22:23:04 INFO  No DataConverter configured for temporal worker. Use default one.
+Replayed 1.json committed decisions through event 70; later timer/cancel awaits workflow task
+2026/10/14 22:23:04 INFO  No DataConverter configured for temporal worker. Use default one.
+Replayed 2.json full closed history
+2026/10/14 22:23:04 INFO  No DataConverter configured for temporal worker. Use default one.
+Replayed 3.json full closed history
+2026/10/14 22:23:04 INFO  No DataConverter configured for temporal worker. Use default one.
+Replayed 4.json full closed history
+All five migrated histories replayed through their committed workflow decisions

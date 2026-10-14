@@ -12,7 +12,7 @@ VM/Kubernetes production qualification matrix.
 | Temporal UI | 2.55.0 | 2.56.0 |
 | OpenCode template binary | 2.0.24 | 2.0.29 |
 | Pi Durable / Pi AI / Chord | 1.0.4 | 1.2.0 |
-| Node template runtime | 26.10.0 | 26.12.0 |
+| Node template runtime | 24.21.0 | 26.12.0 |
 | Claude Code | 2.1.273 | 2.1.300 |
 | Codex | 0.162.1 | 0.162.1 |
 
@@ -37,7 +37,27 @@ counts, digests, versions and verification results:
 - [Rollback drill](evidence/live-upgrade-2026-10-15/rollback-drill.json)
 - [Schema safety: six scenarios](evidence/live-upgrade-2026-10-15/schema-safety.log)
 - [Previous script fails the regression](evidence/live-upgrade-2026-10-15/schema-safety-negative.log)
+- [Postmigration acceptance](evidence/live-upgrade-2026-10-15/postmigration-acceptance.json)
+- [Verified patch](evidence/live-upgrade-2026-10-15/conformance-postmigration.log)
+- [Rejected no-op patch](evidence/live-upgrade-2026-10-15/noop-postmigration.log)
+- [SDK replay](evidence/live-upgrade-2026-10-15/temporal-replay.log)
 - [Evidence checksums](evidence/live-upgrade-2026-10-15/checksums.json)
+
+SDK replay covers all three closed histories in full. Both running histories
+replay through their committed decisions at event 70. Later timer/cancellation
+events have no completed workflow task yet, so their suffixes are retained but
+are not claimed as fully replayed. A new deterministic conformance workflow
+produced a verified patch on the migrated stack, and a no-op agent was rejected
+by the mandatory unit-test gate. Both runs verified zero live VM leaks. Their
+egress probes were inconclusive, so these runs do not pass the security gate.
+
+The first CI run also exposed a separate Pi test timing failure: a 900 ms
+deadline could expire before the first provider request on a busy runner.
+The revised test uses a 10 s budget, crashes after 6 s, verifies a second engine
+request and rejects completion after 13 s. A reset deadline would exceed that
+bound. Its process inventory is controlled independently of the real surviving
+process tests. All 17 runner scenarios passed inside Cube:
+[Pi deadline regression](evidence/live-upgrade-2026-10-15/pi-deadline-regression.log).
 
 ## Template
 
@@ -65,6 +85,7 @@ HTTP/HTTPS packet marks, and both Cube TPROXY counters remain zero. The
 records connection refusal, not successful inference.
 
 The operator-owned mark correction is described in
-[local routing](../../docs/cube-local-routing.md). Native provider acceptance,
-new workflow execution, historical SDK replay and credential-isolation
-qualification remain pending until that correction is applied and measured.
+[local routing](../../docs/cube-local-routing.md). Native provider acceptance
+and credential-isolation qualification remain pending until that correction
+is applied and measured. This record does not substitute conformance execution
+or protocol documentation for successful native CLI inference.
