@@ -1,8 +1,8 @@
 # Pi harness v1 candidate
 
 Select Pi explicitly with `factory run --agent pi`. OpenCode remains the
-automatic default. Pi 1.0.4 has an experimental API; this adapter pins its
-published packages, dependency graph, ESF bundle, and Node 24.21.0 runtime.
+automatic default. Pi 1.2.0 has an experimental API; this adapter pins its
+published packages, dependency graph, ESF bundle, and Node 26.12.0 runtime.
 The candidate is opt-in until the model-backed acceptance matrix passes.
 
 ## Template and installation
@@ -26,7 +26,7 @@ factory run. For offline template staging,
 installs the verified Node binary and committed bundle.
 
 Rebuild the bundle and catalog in a Cube development microVM, using Node
-24.21.0 and the committed lockfile:
+26.12.0 and the committed lockfile:
 
 ```sh
 cd agents/pi
@@ -56,9 +56,9 @@ template in `[cube]`, and append:
 type = "pi"
 preinstalled = true
 binary = "/opt/esf/agents/pi-runner.mjs"
-binary_sha256 = "018aec9e0215eff09aede13a2b707f6e6872d1dcf2b44727d5afc3d6e97c42fc"
+binary_sha256 = "04bd662ac31ca6e74775a6b0c03403d66030c44855a9840607e95ab2fcf89bf5"
 runtime_binary = "/opt/esf/agents/node"
-runtime_sha256 = "7fde7b8afa198da66257f42ee2001d874c7355631e6d1579a5fb5ef1f246df4c"
+runtime_sha256 = "caa24debe02770c92a70677e2a62ca98890150e7ac1c17bcfe31bcc98cc89943"
 provider = "local"
 base_url = "http://192.168.0.14:8000/v1"
 model = "<operator-approved-model-id>"
@@ -70,7 +70,7 @@ timeout = "30m"
 ```
 
 `api` supports `openai-completions` (default for the local gateway) and
-`openai-responses`. A model in the embedded Pi 1.0.4 catalog can omit
+`openai-responses`. A model in the embedded Pi 1.2.0 catalog can omit
 `catalog_cache`; its provider, model ID, and API must match. Custom gateways
 must supply a strict offline JSON model definition with explicit context and
 output limits. Do not guess these limits from a model name.
@@ -175,3 +175,9 @@ and Unreal 0.3.1 passed the same task/model comparison, including independent
 verification and sandbox cleanup. Pi remains an opt-in candidate pending the
 HTTPS CubeEgress, failure, review, and recovery acceptance matrix described
 above. See [the component upgrade evidence](../release/qualification/component-upgrade-2026-10-06.md).
+
+The 0.6.2 candidate updates Pi Durable, Pi AI, and Chord to 1.2.0 and Node to
+26.12.0. Its rebuilt bundle and exported catalog passed the runner regressions
+in Cube. Earlier model-backed results apply to their recorded versions;
+model-backed and HTTPS credential-injection acceptance must be repeated for
+this execution chain.

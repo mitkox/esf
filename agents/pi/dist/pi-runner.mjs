@@ -127,6 +127,8 @@ var init_event_stream = __esm({
       }
     };
     AssistantMessageEventStream = class extends EventStream {
+      #startedAt = Date.now();
+      #startedAtMonotonic = performance.now();
       constructor() {
         super((event) => event.type === "done" || event.type === "error", (event) => {
           if (event.type === "done") {
@@ -137,12 +139,29 @@ var init_event_stream = __esm({
           throw new Error("Unexpected event type for final result");
         });
       }
+      push(event) {
+        if (event.type === "done")
+          this.#time(event.message);
+        else if (event.type === "error")
+          this.#time(event.error);
+        super.push(event);
+      }
+      end(result) {
+        if (result !== void 0)
+          this.#time(result);
+        super.end(result);
+      }
+      #time(message) {
+        if (this.done || message.durationMs !== void 0 || message.timestamp < this.#startedAt)
+          return;
+        message.durationMs = Math.max(0, Math.round(performance.now() - this.#startedAtMonotonic));
+      }
     };
   }
 });
 
 // node_modules/@earendil-works/pi-ai/dist/api/lazy.js
-function createSetupErrorMessage(model, error) {
+function createSetupErrorMessage(model, error, timestamp) {
   return {
     role: "assistant",
     content: [],
@@ -159,7 +178,7 @@ function createSetupErrorMessage(model, error) {
     },
     stopReason: "error",
     errorMessage: error instanceof Error ? error.message : String(error),
-    timestamp: Date.now()
+    timestamp
   };
 }
 function hasResult(source) {
@@ -172,9 +191,10 @@ async function forwardStream(target, source) {
   target.end(hasResult(source) ? await source.result() : void 0);
 }
 function lazyStream(model, setup) {
+  const startedAt = Date.now();
   const outer = new AssistantMessageEventStream();
   setup().then((inner) => forwardStream(outer, inner)).catch((error) => {
-    const message = createSetupErrorMessage(model, error);
+    const message = createSetupErrorMessage(model, error, startedAt);
     outer.push({ type: "error", reason: "error", error: message });
     outer.end(message);
   });
@@ -544,6 +564,11 @@ function assertImageModel(model) {
 function assertClassifierModel(model) {
   if (!isModelType(model, "classifier")) {
     throw new ModelsError("provider", `Model ${model.provider}/${model.id} is not a classifier model`);
+  }
+}
+function assertClassifierInputSupported(model, context) {
+  if (context.images?.length && !model.input.includes("image")) {
+    throw new ModelsError("provider", `Model ${model.provider}/${model.id} does not accept image input`);
   }
 }
 function imageErrorResult(model, error, aborted = false) {
@@ -1056,7 +1081,8 @@ var init_models = __esm({
           publish: (publication) => this.publishProviderModels(provider.id, generation, signal, publication),
           allowNetwork,
           force: allowNetwork ? force : void 0,
-          signal
+          signal,
+          baseUrl: provider.baseUrl
         });
       }
       async refresh(options = {}) {
@@ -1372,6 +1398,7 @@ var init_models = __esm({
       async classify(model, context, options) {
         try {
           assertClassifierModel(model);
+          assertClassifierInputSupported(model, context);
           const provider = this.requireProvider(model);
           if (!provider.classify) {
             throw new ModelsError("provider", `Provider ${model.provider} does not support classification`);
@@ -1668,7 +1695,7 @@ var init_sleep = __esm({
           }
         }
       };
-      const settle2 = (callback) => {
+      const settle3 = (callback) => {
         if (settled) {
           return;
         }
@@ -1681,14 +1708,14 @@ var init_sleep = __esm({
         callback();
       };
       const abort = () => {
-        settle2(() => reject());
+        settle3(() => reject());
       };
       if (activeSignals.some((signal) => signal.aborted)) {
         abort();
         return;
       }
       timeout = setTimeout(() => {
-        settle2(resolve3);
+        settle3(resolve3);
       }, ms);
       for (const signal of activeSignals) {
         if (settled) {
@@ -1697,7 +1724,7 @@ var init_sleep = __esm({
         try {
           signal.addEventListener("abort", abort, { once: true });
         } catch (error) {
-          settle2(() => reject(error));
+          settle3(() => reject(error));
         }
       }
       if (activeSignals.some((signal) => signal.aborted)) {
@@ -3935,10 +3962,10 @@ var init_workload_identity_auth = __esm({
           redirect: "manual"
         });
         if (!response.ok) {
-          const errorText2 = await response.text();
+          const errorText = await response.text();
           let body2 = void 0;
           try {
-            body2 = JSON.parse(errorText2);
+            body2 = JSON.parse(errorText);
           } catch {
           }
           if (response.status === 400 || response.status === 401 || response.status === 403) {
@@ -22064,6 +22091,8 @@ async function retryProviderRequest(request, options = {}) {
         throw createAbortError();
       if (retriesRemaining <= 0 || !isProviderError(error) || !isRetryableProviderError(error))
         throw error;
+      if (error.status !== void 0 && options.noRetryStatuses?.includes(error.status))
+        throw error;
       const retryIndex = maxRetries - retriesRemaining;
       retriesRemaining--;
       await abortableSleep(getRetryDelayMs(error, retryIndex, options.maxRetryDelayMs), options.signal);
@@ -22447,7 +22476,7 @@ var CHARS_PER_TOKEN, ESTIMATED_IMAGE_CHARS;
 var init_estimate = __esm({
   "node_modules/@earendil-works/pi-ai/dist/utils/estimate.js"() {
     init_text();
-    CHARS_PER_TOKEN = 4;
+    CHARS_PER_TOKEN = 3.5;
     ESTIMATED_IMAGE_CHARS = 4800;
   }
 });
@@ -24756,9 +24785,9 @@ var init_openai_responses = __esm({
             delete block.customInput;
           }
           output.stopReason = options?.signal?.aborted ? "aborted" : "error";
-          const errorMessage = formatProviderError(normalizeProviderError(error), `${model.provider === "openai" ? "OpenAI" : model.provider} API error`);
-          output.errorMessage = errorMessage.includes("subscription_sharing_usage_limit_exceeded") ? `${errorMessage}
-Check your ChatGPT usage: ${CHATGPT_USAGE_URL}` : errorMessage;
+          const errorMessage2 = formatProviderError(normalizeProviderError(error), `${model.provider === "openai" ? "OpenAI" : model.provider} API error`);
+          output.errorMessage = errorMessage2.includes("subscription_sharing_usage_limit_exceeded") ? `${errorMessage2}
+Check your ChatGPT usage: ${CHATGPT_USAGE_URL}` : errorMessage2;
           stream3.push({ type: "error", reason: output.stopReason, error: output });
           stream3.end();
         }
@@ -24877,3661 +24906,6 @@ var openAIResponsesApi = () => lazyApi(() => Promise.resolve().then(() => (init_
 
 // src/engine.mjs
 init_event_stream();
-
-// node_modules/@earendil-works/chord/dist/json.js
-var DATA_DESCRIPTOR = {
-  value: void 0,
-  writable: true,
-  enumerable: true,
-  configurable: true
-};
-function copyJson(value, options) {
-  return copy(value, void 0, options?.omitUndefinedProperties === true);
-}
-function copy(value, ancestors, omitUndefinedProperties) {
-  if (value === null || typeof value === "string" || typeof value === "boolean")
-    return value;
-  if (typeof value === "number") {
-    if (Number.isFinite(value))
-      return value;
-    throw new TypeError("Value contains a non-finite number and is not strict JSON");
-  }
-  if (typeof value !== "object")
-    throw new TypeError(`Value contains a non-JSON ${typeof value}; expected strict JSON`);
-  const active = ancestors ?? /* @__PURE__ */ new Set();
-  if (active.has(value))
-    throw new TypeError("Value contains cycles and is not strict JSON");
-  active.add(value);
-  try {
-    if (Array.isArray(value)) {
-      if (Object.getPrototypeOf(value) !== Array.prototype || Reflect.ownKeys(value).length !== value.length + 1) {
-        throw new TypeError("Value must contain strict JSON dense plain arrays");
-      }
-      const result2 = new Array(value.length);
-      for (let index3 = 0; index3 < value.length; index3++) {
-        const descriptor = Object.getOwnPropertyDescriptor(value, index3);
-        if (descriptor === void 0 || !descriptor.enumerable || !("value" in descriptor)) {
-          throw new TypeError("Value must contain strict JSON enumerable indexed data properties");
-        }
-        defineData(result2, String(index3), copy(descriptor.value, active, omitUndefinedProperties));
-      }
-      return result2;
-    }
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw new TypeError("Value must contain strict JSON plain objects or arrays");
-    }
-    const result = Object.create(prototype);
-    for (const key of Reflect.ownKeys(value)) {
-      if (typeof key === "symbol")
-        throw new TypeError("Value contains a symbol key and is not strict JSON");
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (!descriptor.enumerable || !("value" in descriptor)) {
-        throw new TypeError("Value must contain strict JSON enumerable data properties");
-      }
-      if (descriptor.value === void 0 && omitUndefinedProperties)
-        continue;
-      defineData(result, key, copy(descriptor.value, active, omitUndefinedProperties));
-    }
-    return result;
-  } finally {
-    active.delete(value);
-  }
-}
-function defineData(target, key, value) {
-  DATA_DESCRIPTOR.value = value;
-  Object.defineProperty(target, key, DATA_DESCRIPTOR);
-  DATA_DESCRIPTOR.value = void 0;
-}
-
-// node_modules/@earendil-works/chord/dist/delta/apply-immutable-trusted.js
-var DATA_DESCRIPTOR2 = {
-  value: void 0,
-  writable: true,
-  enumerable: true,
-  configurable: true
-};
-function applyImmutableTrusted(target, operations) {
-  let root = target;
-  const owned = /* @__PURE__ */ new WeakSet();
-  for (const operation of operations) {
-    if (operation[0] === "r") {
-      root = operation[1];
-      continue;
-    }
-    if (operation[0] === "p" || operation[0] === "m") {
-      const copied2 = copyPath(root, operation[1], operation[1].length, owned);
-      root = copied2.root;
-      if (!Array.isArray(copied2.target))
-        throw new TypeError("Trusted array operation target is not an array");
-      if (operation[0] === "p")
-        spliceTrusted(copied2.target, operation[2], operation[3], operation[4]);
-      else
-        permuteTrusted(copied2.target, operation[2]);
-      continue;
-    }
-    const path5 = operation[1];
-    const copied = copyPath(root, path5, path5.length - 1, owned);
-    root = copied.root;
-    const key = path5[path5.length - 1];
-    switch (operation[0]) {
-      case "s":
-        defineData2(copied.target, key, operation[2]);
-        break;
-      case "d":
-        if (Array.isArray(copied.target)) {
-          if (typeof key !== "number")
-            throw new TypeError("Trusted array deletion key is not numeric");
-          spliceTrusted(copied.target, key, 1, []);
-        } else
-          Reflect.deleteProperty(copied.target, key);
-        break;
-      case "a": {
-        const current = read(copied.target, key);
-        if (typeof current !== "string")
-          throw new TypeError("Trusted append target is not a string");
-        defineData2(copied.target, key, `${current}${operation[2]}`);
-        break;
-      }
-      case "t": {
-        const current = read(copied.target, key);
-        if (typeof current !== "string")
-          throw new TypeError("Trusted truncate target is not a string");
-        defineData2(copied.target, key, current.slice(operation[2]));
-        break;
-      }
-    }
-  }
-  return root;
-}
-function copyPath(root, path5, length, owned) {
-  if (!isContainer(root))
-    throw new TypeError("Trusted operation root is not a container");
-  let copiedRoot = root;
-  if (!owned.has(root)) {
-    copiedRoot = shallowCopy(root);
-    owned.add(copiedRoot);
-  }
-  let destination = copiedRoot;
-  for (let index3 = 0; index3 < length; index3++) {
-    const segment = path5[index3];
-    const child = read(destination, segment);
-    if (!isContainer(child))
-      throw new TypeError("Trusted operation path is not a container");
-    if (owned.has(child)) {
-      destination = child;
-      continue;
-    }
-    const copy2 = shallowCopy(child);
-    defineData2(destination, segment, copy2);
-    owned.add(copy2);
-    destination = copy2;
-  }
-  return { root: copiedRoot, target: destination };
-}
-function shallowCopy(value) {
-  if (Array.isArray(value))
-    return Array.from(value);
-  const result = Object.create(Object.getPrototypeOf(value) === null ? null : Object.prototype);
-  for (const key of Object.keys(value))
-    defineData2(result, key, value[key]);
-  return result;
-}
-function read(target, key) {
-  return target[key];
-}
-function defineData2(target, key, value) {
-  DATA_DESCRIPTOR2.value = value;
-  Object.defineProperty(target, key, DATA_DESCRIPTOR2);
-  DATA_DESCRIPTOR2.value = void 0;
-}
-function spliceTrusted(target, start, remove, items) {
-  const oldLength = target.length;
-  const delta = items.length - remove;
-  if (delta > 0) {
-    target.length = oldLength + delta;
-    target.copyWithin(start + items.length, start + remove, oldLength);
-  } else if (delta < 0) {
-    target.copyWithin(start + items.length, start + remove, oldLength);
-    target.length = oldLength + delta;
-  }
-  for (let index3 = 0; index3 < items.length; index3++)
-    defineData2(target, start + index3, items[index3]);
-}
-function permuteTrusted(target, permutation) {
-  if (target.length !== permutation.length)
-    throw new TypeError("Trusted permutation length mismatch");
-  const previous = target.slice();
-  for (let index3 = 0; index3 < permutation.length; index3++)
-    target[index3] = previous[permutation[index3]];
-}
-function isContainer(value) {
-  return value !== null && typeof value === "object";
-}
-
-// node_modules/@earendil-works/chord/dist/delta/tracker.js
-var NODE = /* @__PURE__ */ Symbol("chord.delta.overlay.node");
-var PREPARED = /* @__PURE__ */ new WeakMap();
-var RELEASED = {};
-var ARRAY_MUTATORS = /* @__PURE__ */ new Set([
-  "push",
-  "pop",
-  "shift",
-  "unshift",
-  "splice",
-  "reverse",
-  "sort",
-  "fill",
-  "copyWithin"
-]);
-var MAX_DELTA_OPERATIONS = 4096;
-var MAX_SIMPLE_OBJECT_NODES = 128;
-var DATA_DESCRIPTOR3 = {
-  value: void 0,
-  writable: true,
-  enumerable: true,
-  configurable: true
-};
-var PreparedImpl = class {
-  #context;
-  value;
-  base;
-  ops;
-  constructor(context, value, operations) {
-    this.#context = context;
-    this.value = value;
-    this.base = context.baseValue;
-    this.ops = operations;
-    PREPARED.set(this, context);
-  }
-  get baseRevision() {
-    return this.#context.baseRevision;
-  }
-  abort() {
-    abortContext(this.#context);
-  }
-};
-var ChangeImpl = class {
-  #context;
-  #preparedStatus;
-  #settled = false;
-  constructor(context) {
-    this.#context = context;
-  }
-  get state() {
-    const state3 = this.#context?.root?.proxy;
-    if (state3 === void 0)
-      throw new TypeError("Cannot use a settled overlay");
-    return state3;
-  }
-  prepare() {
-    if (this.#settled)
-      throw new Error("Change has already been settled");
-    const context = this.#context;
-    assertWritable(context);
-    context.status.value = "prepared";
-    try {
-      if (!context.replacement)
-        context.ops = context.dirty.length === 0 ? [] : emitOperations(context);
-      const prepared = materializePrepared(context);
-      this.#preparedStatus = context.status;
-      this.#settled = true;
-      return prepared;
-    } catch (error) {
-      context.status.value = "aborted";
-      clearContext(context);
-      this.#settled = true;
-      throw error;
-    } finally {
-      this.#context = void 0;
-    }
-  }
-  abort() {
-    if (this.#settled) {
-      if (this.#preparedStatus?.value === "prepared")
-        this.#preparedStatus.value = "aborted";
-      this.#preparedStatus = void 0;
-      return;
-    }
-    this.#settled = true;
-    abortContext(this.#context);
-    this.#context = void 0;
-  }
-};
-var TrackerImpl = class {
-  #owner = {};
-  #contexts = /* @__PURE__ */ new Set();
-  #selfRef;
-  #value;
-  #revision = 0;
-  #pruneBudget = 256;
-  constructor(initial) {
-    this.#value = initial;
-    this.#selfRef = new WeakRef(this);
-  }
-  get value() {
-    return this.#value;
-  }
-  get revision() {
-    return this.#revision;
-  }
-  beginChange() {
-    const context = createContext(this.#selfRef, this.#owner, this.#revision, this.#value, false, this.#value);
-    this.#register(context);
-    return new ChangeImpl(context);
-  }
-  prepareReplace(value) {
-    const context = createContext(this.#selfRef, this.#owner, this.#revision, value, true, this.#value);
-    context.status.value = "prepared";
-    this.#register(context);
-    try {
-      return materializePrepared(context);
-    } catch (error) {
-      context.status.value = "aborted";
-      clearContext(context);
-      throw error;
-    }
-  }
-  adopt(prepared) {
-    const context = PREPARED.get(prepared);
-    if (context?.owner !== this.#owner)
-      throw new Error("Prepared change belongs to a different tracker");
-    if (context.status.value === "consumed")
-      throw new Error("Prepared change has already been used");
-    if (context.status.value === "aborted")
-      throw new Error("Prepared change has been aborted");
-    if (context.status.value === "stale")
-      throw new Error("Prepared change is stale");
-    if (context.status.value !== "prepared")
-      throw new Error("Prepared change is not ready");
-    if (context.baseRevision !== this.#revision) {
-      context.status.value = "stale";
-      clearContext(context);
-      throw new Error("Prepared change is stale");
-    }
-    if (this.#value !== prepared.base) {
-      context.status.value = "stale";
-      throw new Error("Prepared change is stale");
-    }
-    this.#value = prepared.value;
-    context.status.value = "consumed";
-    this.#revision += 1;
-    this.#invalidate(context);
-  }
-  releaseContext(context) {
-    if (context.registryRef !== void 0)
-      this.#contexts.delete(context.registryRef);
-    context.registryRef = void 0;
-  }
-  #register(context) {
-    const reference = new WeakRef(context);
-    context.registryRef = reference;
-    this.#contexts.add(reference);
-    this.#pruneBudget -= 1;
-    if (this.#pruneBudget === 0) {
-      this.#prune();
-      this.#pruneBudget = Math.max(256, this.#contexts.size);
-    }
-  }
-  #prune() {
-    for (const reference of this.#contexts) {
-      if (reference.deref() === void 0)
-        this.#contexts.delete(reference);
-    }
-  }
-  #invalidate(winner) {
-    for (const reference of this.#contexts) {
-      const context = reference.deref();
-      if (context === void 0 || context === winner)
-        continue;
-      if (context.status.value === "open" || context.status.value === "prepared")
-        context.status.value = "stale";
-      releaseOverlayReferences(context);
-    }
-    this.#contexts.clear();
-    this.#pruneBudget = 256;
-  }
-  replacementBase(context) {
-    return context.baseRevision === this.#revision ? this.#value : void 0;
-  }
-};
-function track(initial) {
-  return new TrackerImpl(initial);
-}
-function materializePrepared(context) {
-  const operations = ensureOperations(context);
-  const base = context.baseValue;
-  const value = operations.length === 0 ? base : context.simpleObjectMaterialization ? cloneNode(context.root) : materializeOperations(base, operations);
-  const prepared = new PreparedImpl(context, value, operations);
-  if (context.nodes.length > 4096)
-    releaseOverlayReferences(context);
-  else
-    clearContext(context);
-  return prepared;
-}
-function materializeOperations(base, operations) {
-  for (const operation of operations) {
-    if (operation[0] === "p" || operation[0] === "m")
-      return applyImmutable(base, operations);
-  }
-  return applyImmutableTrusted(base, operations);
-}
-function createContext(tracker, owner, baseRevision, root, replacement, base) {
-  const context = {
-    owner,
-    tracker,
-    baseRevision,
-    status: { value: "open" },
-    root: void 0,
-    bases: [],
-    stored: [],
-    dirty: [],
-    nodes: [],
-    rawNodes: /* @__PURE__ */ new WeakMap(),
-    ops: void 0,
-    replacement,
-    replacementNoop: false,
-    baseValue: base,
-    overlayReleased: false,
-    simpleObjectMaterialization: false,
-    registryRef: void 0
-  };
-  context.root = createNode(context, root, void 0);
-  return context;
-}
-var sharedObjectHandler = {
-  deleteProperty(target, property) {
-    return deleteProperty(nodeForTarget(target), property);
-  },
-  defineProperty(target) {
-    assertWritable(nodeForTarget(target).context);
-    throw new TypeError("Defining overlay properties is not supported");
-  },
-  get(target, property) {
-    if (property === "then") {
-      const node2 = target[NODE];
-      if (node2 === void 0 || isSettledContext(node2.context))
-        return void 0;
-    }
-    const node = nodeForTarget(target);
-    if (property === NODE)
-      return node;
-    return getProperty(node, property);
-  },
-  getOwnPropertyDescriptor(target, property) {
-    return getDescriptor(nodeForTarget(target), property);
-  },
-  getPrototypeOf(target) {
-    const node = nodeForTarget(target);
-    assertReadable(node.context);
-    return Object.getPrototypeOf(nodeBase(node));
-  },
-  has(target, property) {
-    return hasProperty(nodeForTarget(target), property);
-  },
-  isExtensible(target) {
-    assertReadable(nodeForTarget(target).context);
-    return true;
-  },
-  ownKeys(target) {
-    return ownKeys(nodeForTarget(target));
-  },
-  preventExtensions(target) {
-    assertWritable(nodeForTarget(target).context);
-    throw new TypeError("Overlays cannot be made non-extensible");
-  },
-  set(target, property, value) {
-    return setProperty(nodeForTarget(target), property, value);
-  },
-  setPrototypeOf(target) {
-    assertWritable(nodeForTarget(target).context);
-    throw new TypeError("Changing an overlay prototype is not supported");
-  }
-};
-var sharedArrayHandler = sharedObjectHandler;
-function createNode(context, base, parent, parentKind = 0, parentKey = "", parentSource = void 0, parentPlacement = false) {
-  const existing = context.rawNodes.get(base);
-  if (existing !== void 0)
-    return existing;
-  const target = Array.isArray(base) ? [] : {};
-  const baseIndex = context.bases.length;
-  const parentIndex = parent?.baseIndex ?? -1;
-  context.bases.push(base);
-  const node = {
-    context,
-    baseIndex,
-    parentIndex,
-    parentKind,
-    parentKey,
-    parentPlacement,
-    target,
-    proxy: target
-  };
-  if (parentSource !== void 0)
-    node.parentSource = parentSource;
-  target[NODE] = node;
-  node.proxy = new Proxy(target, Array.isArray(base) ? sharedArrayHandler : sharedObjectHandler);
-  context.rawNodes.set(base, node);
-  context.nodes.push(node);
-  return node;
-}
-function nodeBase(node) {
-  return node.context.bases[node.baseIndex];
-}
-function nodeParent(node) {
-  return node.parentIndex < 0 ? void 0 : node.context.nodes[node.parentIndex];
-}
-function storeValue(context, value) {
-  if (!isContainer2(value))
-    return value;
-  const index3 = context.stored.length;
-  context.stored.push(value);
-  return { index: index3 };
-}
-function storedValue(context, reference) {
-  return typeof reference === "object" && reference !== null ? context.stored[reference.index] : reference;
-}
-function replaceStoredValue(context, reference, value) {
-  if (isContainer2(value)) {
-    if (typeof reference === "object" && reference !== null) {
-      context.stored[reference.index] = value;
-      return reference;
-    }
-    return storeValue(context, value);
-  }
-  if (typeof reference === "object" && reference !== null)
-    context.stored[reference.index] = RELEASED;
-  return value;
-}
-function releaseStoredValue(context, reference) {
-  if (typeof reference === "object" && reference !== null)
-    context.stored[reference.index] = RELEASED;
-}
-function nodeForTarget(target) {
-  const node = target[NODE];
-  if (node === void 0)
-    throw new TypeError("Cannot use a settled overlay");
-  return node;
-}
-function isSettledContext(context) {
-  return context.overlayReleased || context.status.value === "consumed" || context.status.value === "aborted" || context.status.value === "stale";
-}
-function assertReadable(context) {
-  if (isSettledContext(context))
-    throw new TypeError("Cannot use a settled overlay");
-}
-function assertWritable(context) {
-  assertReadable(context);
-  if (context.status.value !== "open")
-    throw new TypeError("Prepared overlays are read-only");
-}
-function getProperty(node, property) {
-  assertReadable(node.context);
-  if (Array.isArray(nodeBase(node))) {
-    const overlay = arrayOverlay(node);
-    if (property === "length")
-      return arrayLength(overlay);
-    if (ARRAY_MUTATORS.has(property))
-      return arrayMutators[property];
-    const index3 = arrayIndex(property);
-    if (index3 !== void 0)
-      return getArrayIndex(node, index3);
-    return Reflect.get(Array.prototype, property, node.proxy);
-  }
-  if (typeof property === "symbol")
-    return Reflect.get(nodeBase(node), property, node.proxy);
-  const key = String(property);
-  if (!objectHas(node, key)) {
-    if (isObjectDeleted(node, key) || Object.hasOwn(nodeBase(node), key))
-      return void 0;
-    return Reflect.get(nodeBase(node), property, node.proxy);
-  }
-  const value = objectValue(node, key);
-  if (!isContainer2(value))
-    return value;
-  return createNode(node.context, value, node, 0, key, void 0, hasObjectWrite(node, key)).proxy;
-}
-function getArrayIndex(node, index3) {
-  const overlay = arrayOverlay(node);
-  if (index3 >= arrayLength(overlay))
-    return void 0;
-  const piece = locatePiece(overlay, index3);
-  const sourceIndex = piece.start + piece.step * overlay.locatedOffset;
-  const value = entryValueAt(node, piece, sourceIndex);
-  if (!isContainer2(value))
-    return value;
-  return createNode(node.context, value, node, piece.kind === "base" ? 1 : 2, sourceIndex, piece.kind === "insert" ? piece.source : void 0, piece.kind === "insert" || hasEntryOverrideAt(overlay, piece, sourceIndex)).proxy;
-}
-function setProperty(node, property, supplied) {
-  assertWritable(node.context);
-  if (typeof property === "symbol")
-    throw new TypeError("Symbol writes are not supported");
-  if (Array.isArray(nodeBase(node))) {
-    if (property === "length") {
-      setArrayLength(node, toArrayLength(supplied));
-      return true;
-    }
-    const index3 = arrayIndex(property);
-    if (index3 === void 0)
-      throw new TypeError("Only array indices and length can be written");
-    if (index3 > arrayLength(arrayOverlay(node)))
-      throw new TypeError("Overlay arrays cannot contain holes");
-    setArrayIndex(node, index3, clonePlacement(supplied));
-    return true;
-  }
-  const key = String(property);
-  if (supplied === void 0)
-    return deleteProperty(node, key);
-  const stored = clonePlacement(supplied);
-  const current = objectValue(node, key);
-  const wasDeleted = isObjectDeleted(node, key);
-  if (!wasDeleted && !isContainer2(stored) && current === stored)
-    return true;
-  setObjectWrite(node, key, stored);
-  if (wasDeleted && Object.hasOwn(nodeBase(node), key)) {
-    if (node.readded === void 0)
-      node.readded = /* @__PURE__ */ new Set();
-    node.readded.add(key);
-  }
-  deleteObjectDeletion(node, key);
-  markDirty(node);
-  return true;
-}
-function deleteProperty(node, property) {
-  assertWritable(node.context);
-  if (typeof property === "symbol")
-    throw new TypeError("Symbol writes are not supported");
-  if (Array.isArray(nodeBase(node)))
-    throw new TypeError("Overlay arrays cannot contain holes");
-  const key = String(property);
-  if (!objectHas(node, key))
-    return true;
-  deleteObjectWrite(node, key);
-  node.readded?.delete(key);
-  setObjectDeletion(node, key);
-  markDirty(node);
-  return true;
-}
-function hasProperty(node, property) {
-  assertReadable(node.context);
-  if (Array.isArray(nodeBase(node))) {
-    if (property === "length")
-      return true;
-    const index3 = arrayIndex(property);
-    if (index3 !== void 0)
-      return index3 < arrayLength(arrayOverlay(node));
-    return property in Array.prototype;
-  }
-  return typeof property === "symbol" ? property in nodeBase(node) : objectHas(node, String(property));
-}
-function ownKeys(node) {
-  assertReadable(node.context);
-  if (Array.isArray(nodeBase(node))) {
-    const length = arrayLength(arrayOverlay(node));
-    const keys2 = new Array(length + 1);
-    for (let index3 = 0; index3 < length; index3++)
-      keys2[index3] = String(index3);
-    keys2[length] = "length";
-    return keys2;
-  }
-  let existingKeysOnly = node.deleteKey === void 0 && node.deletes === void 0 && node.readded === void 0 && (node.writeKey === void 0 || Object.hasOwn(nodeBase(node), node.writeKey));
-  if (existingKeysOnly && node.writes !== void 0) {
-    for (const key of node.writes.keys()) {
-      if (!Object.hasOwn(nodeBase(node), key)) {
-        existingKeysOnly = false;
-        break;
-      }
-    }
-  }
-  if (existingKeysOnly)
-    return Object.keys(nodeBase(node));
-  const keys = Object.keys(nodeBase(node)).filter((key) => !isObjectDeleted(node, key) && !node.readded?.has(key));
-  const seen = new Set(keys);
-  if (node.writeKey !== void 0 && !seen.has(node.writeKey)) {
-    keys.push(node.writeKey);
-    seen.add(node.writeKey);
-  }
-  if (node.writes !== void 0) {
-    for (const key of node.writes.keys()) {
-      if (seen.has(key))
-        continue;
-      keys.push(key);
-      seen.add(key);
-    }
-  }
-  const indices = [];
-  const strings = [];
-  for (const key of keys) {
-    const index3 = arrayIndex(key);
-    if (index3 === void 0)
-      strings.push(key);
-    else
-      indices.push(index3);
-  }
-  indices.sort((left, right) => left - right);
-  return [...indices.map(String), ...strings];
-}
-function getDescriptor(node, property) {
-  assertReadable(node.context);
-  if (Array.isArray(nodeBase(node))) {
-    if (property === "length") {
-      const length = arrayLength(arrayOverlay(node));
-      node.target.length = length;
-      return Reflect.getOwnPropertyDescriptor(node.target, "length");
-    }
-    const index3 = arrayIndex(property);
-    if (index3 === void 0 || index3 >= arrayLength(arrayOverlay(node)))
-      return void 0;
-  } else {
-    if (typeof property === "symbol" || !objectHas(node, String(property)))
-      return void 0;
-  }
-  return {
-    configurable: true,
-    enumerable: true,
-    writable: node.context.status.value === "open",
-    value: getProperty(node, property)
-  };
-}
-function hasObjectWrite(node, key) {
-  return node.writeKey === key || (node.writes?.has(key) ?? false);
-}
-function setObjectWrite(node, key, value) {
-  if (node.writes !== void 0) {
-    const reference = node.writes.get(key);
-    node.writes.set(key, reference === void 0 ? storeValue(node.context, value) : replaceStoredValue(node.context, reference, value));
-    return;
-  }
-  if (node.writeKey === void 0 || node.writeKey === key) {
-    node.writeKey = key;
-    node.writeValue = node.writeValue === void 0 ? storeValue(node.context, value) : replaceStoredValue(node.context, node.writeValue, value);
-    return;
-  }
-  node.writes = /* @__PURE__ */ new Map();
-  node.writes.set(node.writeKey, node.writeValue);
-  node.writes.set(key, storeValue(node.context, value));
-  node.writeKey = void 0;
-  node.writeValue = void 0;
-}
-function deleteObjectWrite(node, key) {
-  if (node.writeKey === key) {
-    node.writeKey = void 0;
-    releaseStoredValue(node.context, node.writeValue);
-    node.writeValue = void 0;
-  } else {
-    const reference = node.writes?.get(key);
-    if (reference !== void 0)
-      releaseStoredValue(node.context, reference);
-    node.writes?.delete(key);
-  }
-}
-function isObjectDeleted(node, key) {
-  return node.deleteKey === key || (node.deletes?.has(key) ?? false);
-}
-function setObjectDeletion(node, key) {
-  if (node.deletes !== void 0) {
-    node.deletes.add(key);
-    return;
-  }
-  if (node.deleteKey === void 0 || node.deleteKey === key) {
-    node.deleteKey = key;
-    return;
-  }
-  node.deletes = /* @__PURE__ */ new Set();
-  node.deletes.add(node.deleteKey);
-  node.deletes.add(key);
-  node.deleteKey = void 0;
-}
-function deleteObjectDeletion(node, key) {
-  if (node.deleteKey === key)
-    node.deleteKey = void 0;
-  else
-    node.deletes?.delete(key);
-}
-function objectHas(node, key) {
-  if (isObjectDeleted(node, key))
-    return false;
-  return hasObjectWrite(node, key) || Object.hasOwn(nodeBase(node), key);
-}
-function objectValue(node, key) {
-  if (node.writeKey === key)
-    return storedValue(node.context, node.writeValue);
-  const reference = node.writes?.get(key);
-  if (reference !== void 0)
-    return storedValue(node.context, reference);
-  return nodeBase(node)[key];
-}
-function markDirty(node) {
-  if (node.dirty)
-    return;
-  node.dirty = true;
-  node.context.dirty.push(node);
-  for (let parent = nodeParent(node); parent !== void 0; parent = nodeParent(parent))
-    parent.subtreeDirty = true;
-}
-function arrayOverlay(node) {
-  if (node.array !== void 0)
-    return node.array;
-  const base = nodeBase(node);
-  const overlay = {
-    root: void 0,
-    pieces: void 0,
-    baseOverrides: void 0,
-    insertOverrides: void 0,
-    structural: false,
-    generation: 0,
-    plan: void 0,
-    seed: 2654435769,
-    locatedOffset: 0,
-    baseLocations: void 0,
-    insertLocations: void 0
-  };
-  if (base.length > 0)
-    overlay.root = createPieceNode(overlay, { kind: "base", start: 0, length: base.length, step: 1 });
-  node.array = overlay;
-  return overlay;
-}
-function baseOverridesForWrite(overlay) {
-  if (overlay.baseOverrides === void 0)
-    overlay.baseOverrides = /* @__PURE__ */ new Map();
-  return overlay.baseOverrides;
-}
-function insertOverridesForWrite(overlay) {
-  if (overlay.insertOverrides === void 0)
-    overlay.insertOverrides = /* @__PURE__ */ new Map();
-  return overlay.insertOverrides;
-}
-function nextPiecePriority(overlay) {
-  let value = overlay.seed;
-  value ^= value << 13;
-  value ^= value >>> 17;
-  value ^= value << 5;
-  overlay.seed = value >>> 0;
-  return overlay.seed;
-}
-function treeElements(node) {
-  return node?.elements ?? 0;
-}
-function updatePieceNode(node) {
-  node.elements = treeElements(node.left) + node.piece.length + treeElements(node.right);
-}
-function createPieceNode(overlay, piece) {
-  return { piece, left: void 0, right: void 0, priority: nextPiecePriority(overlay), elements: piece.length };
-}
-function mergePieceTrees(left, right) {
-  if (left === void 0)
-    return right;
-  if (right === void 0)
-    return left;
-  if (left.priority >= right.priority) {
-    left.right = mergePieceTrees(left.right, right);
-    updatePieceNode(left);
-    return left;
-  }
-  right.left = mergePieceTrees(left, right.left);
-  updatePieceNode(right);
-  return right;
-}
-function splitPieceTree(overlay, root, index3) {
-  if (root === void 0)
-    return [void 0, void 0];
-  const leftLength = treeElements(root.left);
-  if (index3 < leftLength) {
-    const [left, right] = splitPieceTree(overlay, root.left, index3);
-    root.left = right;
-    updatePieceNode(root);
-    return [left, root];
-  }
-  const pieceEnd = leftLength + root.piece.length;
-  if (index3 > pieceEnd) {
-    const [left, right] = splitPieceTree(overlay, root.right, index3 - pieceEnd);
-    root.right = left;
-    updatePieceNode(root);
-    return [root, right];
-  }
-  if (index3 === leftLength) {
-    const left = root.left;
-    root.left = void 0;
-    updatePieceNode(root);
-    return [left, root];
-  }
-  if (index3 === pieceEnd) {
-    const right = root.right;
-    root.right = void 0;
-    updatePieceNode(root);
-    return [root, right];
-  }
-  const offset = index3 - leftLength;
-  const first = { ...root.piece, length: offset };
-  const second = {
-    ...root.piece,
-    start: root.piece.start + root.piece.step * offset,
-    length: root.piece.length - offset
-  };
-  return [
-    mergePieceTrees(root.left, createPieceNode(overlay, first)),
-    mergePieceTrees(createPieceNode(overlay, second), root.right)
-  ];
-}
-function leftmostPieceNode(node) {
-  while (node.left !== void 0)
-    node = node.left;
-  return node;
-}
-function rightmostPieceNode(node) {
-  while (node.right !== void 0)
-    node = node.right;
-  return node;
-}
-function mergeablePieces(left, right) {
-  if (left.kind !== right.kind)
-    return false;
-  if (left.kind === "insert" && left.source !== right.source)
-    return false;
-  if (left.length === 1 && right.length === 1)
-    return Math.abs(right.start - left.start) === 1;
-  return left.step === right.step && left.start + left.step * left.length === right.start;
-}
-function joinNormalized(overlay, left, right) {
-  if (left === void 0)
-    return right;
-  if (right === void 0)
-    return left;
-  const leftPiece = rightmostPieceNode(left).piece;
-  const rightPiece = leftmostPieceNode(right).piece;
-  if (!mergeablePieces(leftPiece, rightPiece))
-    return mergePieceTrees(left, right);
-  const [leftRest] = splitPieceTree(overlay, left, treeElements(left) - leftPiece.length);
-  const [, rightRest] = splitPieceTree(overlay, right, rightPiece.length);
-  const step = leftPiece.length === 1 ? rightPiece.start - leftPiece.start : leftPiece.step;
-  const combined = leftPiece.kind === "base" ? { kind: "base", start: leftPiece.start, length: leftPiece.length + rightPiece.length, step } : {
-    kind: "insert",
-    source: leftPiece.source,
-    start: leftPiece.start,
-    length: leftPiece.length + rightPiece.length,
-    step
-  };
-  return joinNormalized(overlay, joinNormalized(overlay, leftRest, createPieceNode(overlay, combined)), rightRest);
-}
-function flattenPieceTree(node, output) {
-  if (node === void 0)
-    return;
-  flattenPieceTree(node.left, output);
-  output.push(node.piece);
-  flattenPieceTree(node.right, output);
-}
-function piecesOf(overlay) {
-  if (overlay.pieces === void 0) {
-    overlay.pieces = [];
-    flattenPieceTree(overlay.root, overlay.pieces);
-  }
-  return overlay.pieces;
-}
-function treeFromPieces(overlay, pieces) {
-  mergePieces(pieces);
-  let root;
-  for (const piece of pieces)
-    root = mergePieceTrees(root, createPieceNode(overlay, piece));
-  return root;
-}
-function replaceAllPieces(overlay, pieces) {
-  overlay.root = treeFromPieces(overlay, pieces);
-  overlay.pieces = void 0;
-  overlay.baseLocations = void 0;
-  overlay.insertLocations = void 0;
-}
-function arrayLength(overlay) {
-  return treeElements(overlay.root);
-}
-function locatePiece(overlay, index3) {
-  let node = overlay.root;
-  while (node !== void 0) {
-    const leftLength = treeElements(node.left);
-    if (index3 < leftLength)
-      node = node.left;
-    else if (index3 >= leftLength + node.piece.length) {
-      index3 -= leftLength + node.piece.length;
-      node = node.right;
-    } else {
-      overlay.locatedOffset = index3 - leftLength;
-      return node.piece;
-    }
-  }
-  throw new RangeError("Array overlay index is out of range");
-}
-function arrayIndex(property) {
-  if (typeof property !== "string" || property.length === 0 || property.length > 10)
-    return void 0;
-  if (property === "0")
-    return 0;
-  const first = property.charCodeAt(0);
-  if (first < 49 || first > 57)
-    return void 0;
-  let index3 = first - 48;
-  for (let offset = 1; offset < property.length; offset++) {
-    const digit = property.charCodeAt(offset) - 48;
-    if (digit < 0 || digit > 9)
-      return void 0;
-    index3 = index3 * 10 + digit;
-    if (index3 >= 4294967295)
-      return void 0;
-  }
-  return index3;
-}
-function entryValueAt(node, piece, sourceIndex) {
-  const overlay = arrayOverlay(node);
-  if (piece.kind === "base") {
-    const valueIndex = overlay.baseOverrides?.get(sourceIndex);
-    return valueIndex === void 0 ? nodeBase(node)[sourceIndex] : storedValue(node.context, valueIndex);
-  }
-  const overrides = overlay.insertOverrides?.get(piece.source);
-  const reference = overrides?.has(sourceIndex) ? overrides.get(sourceIndex) : piece.source.refs[sourceIndex];
-  return storedValue(node.context, reference);
-}
-function hasEntryOverrideAt(overlay, piece, sourceIndex) {
-  return piece.kind === "base" ? overlay.baseOverrides?.has(sourceIndex) ?? false : overlay.insertOverrides?.get(piece.source)?.has(sourceIndex) ?? false;
-}
-function extendRightmostPiece(node, amount) {
-  if (node.right !== void 0)
-    extendRightmostPiece(node.right, amount);
-  else
-    node.piece.length += amount;
-  updatePieceNode(node);
-}
-function invalidatePieceCaches(overlay) {
-  overlay.pieces = void 0;
-  overlay.baseLocations = void 0;
-  overlay.insertLocations = void 0;
-  overlay.plan = void 0;
-}
-function replacePieceRange(node, index3, remove, inserted) {
-  if (remove === 0 && inserted.length === 0)
-    return;
-  const overlay = arrayOverlay(node);
-  if (remove === 0 && index3 === arrayLength(overlay) && inserted.length === 1 && overlay.root !== void 0) {
-    const addition = inserted[0];
-    const tail = rightmostPieceNode(overlay.root).piece;
-    if (addition.kind === "insert" && tail.kind === "insert" && tail.step === 1 && tail.start + tail.length === tail.source.refs.length) {
-      for (let offset = 0; offset < addition.length; offset++) {
-        tail.source.refs.push(addition.source.refs[addition.start + offset]);
-      }
-      extendRightmostPiece(overlay.root, addition.length);
-      invalidatePieceCaches(overlay);
-      overlay.structural = true;
-      overlay.generation += 1;
-      markDirty(node);
-      return;
-    }
-  }
-  const [left, rest] = splitPieceTree(overlay, overlay.root, index3);
-  const [, right] = splitPieceTree(overlay, rest, remove);
-  const middle = treeFromPieces(overlay, inserted);
-  overlay.root = joinNormalized(overlay, joinNormalized(overlay, left, middle), right);
-  invalidatePieceCaches(overlay);
-  overlay.structural = true;
-  overlay.generation += 1;
-  markDirty(node);
-}
-function mergePieces(pieces) {
-  for (let index3 = 1; index3 < pieces.length; ) {
-    const left = pieces[index3 - 1];
-    const right = pieces[index3];
-    const sameSource = left.kind === right.kind && (left.kind === "base" || left.source === right.source);
-    if (sameSource && left.length === 1 && right.length === 1 && Math.abs(right.start - left.start) === 1) {
-      left.step = right.start - left.start;
-      left.length = 2;
-      pieces.splice(index3, 1);
-    } else if (sameSource && left.step === right.step && left.start + left.step * left.length === right.start) {
-      left.length += right.length;
-      pieces.splice(index3, 1);
-    } else
-      index3 += 1;
-  }
-}
-function insertPiece(node, items, start = 0) {
-  if (items.length === start)
-    return [];
-  const refs = [];
-  for (let index3 = start; index3 < items.length; index3++)
-    refs.push(storeValue(node.context, items[index3]));
-  return [{ kind: "insert", source: { refs }, start: 0, length: refs.length, step: 1 }];
-}
-function insertPlacementPiece(node, values, start = 0) {
-  if (values.length === start)
-    return [];
-  const storedLength = node.context.stored.length;
-  try {
-    for (let index3 = start; index3 < values.length; index3++)
-      values[index3] = storeValue(node.context, clonePlacement(values[index3]));
-  } catch (error) {
-    node.context.stored.length = storedLength;
-    throw error;
-  }
-  return [
-    {
-      kind: "insert",
-      source: { refs: values },
-      start,
-      length: values.length - start,
-      step: 1
-    }
-  ];
-}
-function setArrayIndex(node, index3, stored) {
-  const overlay = arrayOverlay(node);
-  const length = arrayLength(overlay);
-  if (index3 === length) {
-    replacePieceRange(node, length, 0, insertPiece(node, [stored]));
-    return;
-  }
-  const piece = locatePiece(overlay, index3);
-  const sourceIndex = piece.start + piece.step * overlay.locatedOffset;
-  const current = entryValueAt(node, piece, sourceIndex);
-  if (!isContainer2(stored) && current === stored)
-    return;
-  if (piece.kind === "base") {
-    const existingIndex = overlay.baseOverrides?.get(sourceIndex);
-    if (!isContainer2(stored) && stored === nodeBase(node)[sourceIndex]) {
-      if (existingIndex !== void 0)
-        releaseStoredValue(node.context, existingIndex);
-      overlay.baseOverrides?.delete(sourceIndex);
-    } else if (existingIndex === void 0) {
-      baseOverridesForWrite(overlay).set(sourceIndex, storeValue(node.context, stored));
-    } else
-      overlay.baseOverrides.set(sourceIndex, replaceStoredValue(node.context, existingIndex, stored));
-  } else {
-    let overrides = overlay.insertOverrides?.get(piece.source);
-    const existingIndex = overrides?.get(sourceIndex);
-    if (!isContainer2(stored) && stored === storedValue(node.context, piece.source.refs[sourceIndex])) {
-      if (existingIndex !== void 0)
-        releaseStoredValue(node.context, existingIndex);
-      overrides?.delete(sourceIndex);
-      if (overrides?.size === 0)
-        overlay.insertOverrides?.delete(piece.source);
-    } else {
-      if (overrides === void 0) {
-        overrides = /* @__PURE__ */ new Map();
-        insertOverridesForWrite(overlay).set(piece.source, overrides);
-      }
-      if (existingIndex === void 0)
-        overrides.set(sourceIndex, storeValue(node.context, stored));
-      else
-        overrides.set(sourceIndex, replaceStoredValue(node.context, existingIndex, stored));
-    }
-  }
-  markDirty(node);
-}
-function setArrayLength(node, next) {
-  const current = arrayLength(arrayOverlay(node));
-  if (next === current)
-    return;
-  if (next < current)
-    replacePieceRange(node, next, current - next, []);
-  else
-    replacePieceRange(node, current, 0, insertPiece(node, Array.from({ length: next - current }, () => null)));
-}
-function toArrayLength(value) {
-  const number = Number(value);
-  if (!Number.isInteger(number) || number < 0 || number >= 4294967296)
-    throw new RangeError("Invalid array length");
-  return number;
-}
-function toIntegerOrInfinity(value) {
-  const number = Number(value);
-  if (Number.isNaN(number) || number === 0)
-    return 0;
-  return Number.isFinite(number) ? Math.trunc(number) : number;
-}
-function clampIndex(value, length) {
-  if (value === Number.NEGATIVE_INFINITY)
-    return 0;
-  if (value < 0)
-    return Math.max(length + value, 0);
-  return Math.min(value, length);
-}
-function mutatorNode(receiver) {
-  if (!isContainer2(receiver))
-    return void 0;
-  const node = Reflect.get(receiver, NODE);
-  if (node === void 0)
-    return void 0;
-  if (!Array.isArray(nodeBase(node)))
-    throw new TypeError("Array mutator called on incompatible receiver");
-  assertWritable(node.context);
-  return node;
-}
-var arrayMutators = {
-  push(...items) {
-    const node = mutatorNode(this);
-    if (node === void 0)
-      return Reflect.apply(Array.prototype.push, this, items);
-    const length = arrayLength(arrayOverlay(node));
-    replacePieceRange(node, length, 0, insertPlacementPiece(node, items));
-    return length + items.length;
-  },
-  pop() {
-    const node = mutatorNode(this);
-    if (node === void 0)
-      return Reflect.apply(Array.prototype.pop, this, []);
-    const length = arrayLength(arrayOverlay(node));
-    if (length === 0)
-      return void 0;
-    const value = getArrayIndex(node, length - 1);
-    replacePieceRange(node, length - 1, 1, []);
-    return value;
-  },
-  shift() {
-    const node = mutatorNode(this);
-    if (node === void 0)
-      return Reflect.apply(Array.prototype.shift, this, []);
-    const length = arrayLength(arrayOverlay(node));
-    if (length === 0)
-      return void 0;
-    const value = getArrayIndex(node, 0);
-    replacePieceRange(node, 0, 1, []);
-    return value;
-  },
-  unshift(...items) {
-    const node = mutatorNode(this);
-    if (node === void 0)
-      return Reflect.apply(Array.prototype.unshift, this, items);
-    replacePieceRange(node, 0, 0, insertPlacementPiece(node, items));
-    return arrayLength(arrayOverlay(node));
-  },
-  splice(...args) {
-    const node = mutatorNode(this);
-    if (node === void 0)
-      return Reflect.apply(Array.prototype.splice, this, args);
-    const length = arrayLength(arrayOverlay(node));
-    const start = args.length === 0 ? 0 : clampIndex(toIntegerOrInfinity(args[0]), length);
-    const remove = args.length === 0 ? 0 : args.length === 1 ? length - start : Math.min(Math.max(toIntegerOrInfinity(args[1]), 0), length - start);
-    const removed = Array.from({ length: remove }, (_, offset) => getArrayIndex(node, start + offset));
-    const itemStart = Math.min(2, args.length);
-    const itemCount = Math.max(args.length - 2, 0);
-    replacePieceRange(node, start, remove, insertPlacementPiece(node, args, itemStart));
-    setArrayLength(node, length - remove + itemCount);
-    return removed;
-  },
-  reverse() {
-    const node = mutatorNode(this);
-    if (node === void 0)
-      return Reflect.apply(Array.prototype.reverse, this, []);
-    const overlay = arrayOverlay(node);
-    if (arrayLength(overlay) < 2)
-      return node.proxy;
-    const pieces = [...piecesOf(overlay)].reverse();
-    for (const piece of pieces) {
-      piece.start += piece.step * (piece.length - 1);
-      piece.step = piece.step === 1 ? -1 : 1;
-    }
-    replaceAllPieces(overlay, pieces);
-    overlay.structural = true;
-    overlay.generation += 1;
-    overlay.plan = void 0;
-    markDirty(node);
-    return node.proxy;
-  },
-  sort(comparator) {
-    const node = mutatorNode(this);
-    if (node === void 0)
-      return Reflect.apply(Array.prototype.sort, this, [comparator]);
-    if (comparator !== void 0 && typeof comparator !== "function")
-      throw new TypeError("Comparator must be a function");
-    const overlay = arrayOverlay(node);
-    const insertedSources = [];
-    const insertedIndices = [];
-    const insertedValues = [];
-    const baseValues = new Array(nodeBase(node).length);
-    const order = [];
-    for (const piece of piecesOf(overlay)) {
-      for (let offset = 0; offset < piece.length; offset++) {
-        const sourceIndex = piece.start + piece.step * offset;
-        if (piece.kind === "base") {
-          order.push(sourceIndex);
-          baseValues[sourceIndex] = publicSortValue(node, sourceIndex, insertedSources, insertedIndices);
-        } else {
-          insertedSources.push(piece.source);
-          insertedIndices.push(sourceIndex);
-          const token = -insertedSources.length;
-          order.push(token);
-          insertedValues.push(publicSortValue(node, token, insertedSources, insertedIndices));
-        }
-      }
-    }
-    const baseSnapshot = /* @__PURE__ */ new Map();
-    for (const [index3, valueIndex] of overlay.baseOverrides ?? [])
-      baseSnapshot.set(index3, storedValue(node.context, valueIndex));
-    const insertSnapshots = /* @__PURE__ */ new Map();
-    for (const [source, overrides] of overlay.insertOverrides ?? []) {
-      const snapshot = /* @__PURE__ */ new Map();
-      for (const [index3, valueIndex] of overrides)
-        snapshot.set(index3, storedValue(node.context, valueIndex));
-      insertSnapshots.set(source, snapshot);
-    }
-    const generation = overlay.generation;
-    order.sort((left, right) => {
-      const leftValue = left < 0 ? insertedValues[-left - 1] : baseValues[left];
-      const rightValue = right < 0 ? insertedValues[-right - 1] : baseValues[right];
-      if (typeof comparator === "function")
-        return Number(comparator(leftValue, rightValue));
-      const a = String(leftValue);
-      const b = String(rightValue);
-      return a < b ? -1 : a > b ? 1 : 0;
-    });
-    if (baseSnapshot.size > 0 || insertSnapshots.size > 0 || (overlay.baseOverrides?.size ?? 0) > 0 || (overlay.insertOverrides?.size ?? 0) > 0) {
-      for (const token of order) {
-        restoreSortOverride(node, token, insertedSources, insertedIndices, baseSnapshot, insertSnapshots);
-      }
-    }
-    const comparatorWasStructural = overlay.generation !== generation;
-    const currentLength = arrayLength(overlay);
-    const samePrefix = currentLength >= order.length && order.every((token, index3) => sameSortTokenAt(overlay, index3, token, insertedSources, insertedIndices));
-    if (!samePrefix) {
-      replacePieceRange(node, 0, Math.min(order.length, currentLength), piecesFromSortOrder(order, insertedSources, insertedIndices));
-    }
-    if (comparatorWasStructural)
-      deduplicateArrayEntries(node);
-    return node.proxy;
-  },
-  fill(supplied, startArg, endArg) {
-    const node = mutatorNode(this);
-    if (node === void 0)
-      return Reflect.apply(Array.prototype.fill, this, [supplied, startArg, endArg]);
-    const length = arrayLength(arrayOverlay(node));
-    const start = startArg === void 0 ? 0 : clampIndex(toIntegerOrInfinity(startArg), length);
-    const end = endArg === void 0 ? length : clampIndex(toIntegerOrInfinity(endArg), length);
-    if (end <= start)
-      return node.proxy;
-    const items = Array.from({ length: end - start }, () => clonePlacement(supplied));
-    replacePieceRange(node, start, end - start, insertPiece(node, items));
-    return node.proxy;
-  },
-  copyWithin(targetArg, startArg, endArg) {
-    const node = mutatorNode(this);
-    if (node === void 0)
-      return Reflect.apply(Array.prototype.copyWithin, this, [targetArg, startArg, endArg]);
-    const length = arrayLength(arrayOverlay(node));
-    const target = clampIndex(toIntegerOrInfinity(targetArg), length);
-    const start = clampIndex(toIntegerOrInfinity(startArg), length);
-    const end = endArg === void 0 ? length : clampIndex(toIntegerOrInfinity(endArg), length);
-    const count = Math.min(Math.max(end - start, 0), length - target);
-    const values = Array.from({ length: count }, (_, offset) => clonePlacement(getArrayIndex(node, start + offset)));
-    replacePieceRange(node, target, count, insertPiece(node, values));
-    return node.proxy;
-  }
-};
-function sortTokenSource(token, sources2) {
-  return token < 0 ? sources2[-token - 1] : void 0;
-}
-function sortTokenIndex(token, indices) {
-  return token < 0 ? indices[-token - 1] : token;
-}
-function publicSortValue(node, token, sources2, indices) {
-  const overlay = arrayOverlay(node);
-  const source = sortTokenSource(token, sources2);
-  const sourceIndex = sortTokenIndex(token, indices);
-  const overrideIndex = source === void 0 ? overlay.baseOverrides?.get(sourceIndex) : overlay.insertOverrides?.get(source)?.get(sourceIndex);
-  const value = overrideIndex !== void 0 ? storedValue(node.context, overrideIndex) : source === void 0 ? nodeBase(node)[sourceIndex] : storedValue(node.context, source.refs[sourceIndex]);
-  if (!isContainer2(value))
-    return value;
-  return createNode(node.context, value, node, source === void 0 ? 1 : 2, sourceIndex, source, source !== void 0 || (overlay.baseOverrides?.has(sourceIndex) ?? false)).proxy;
-}
-function restoreSortOverride(node, token, sources2, indices, baseSnapshot, insertSnapshots) {
-  const overlay = arrayOverlay(node);
-  const source = sortTokenSource(token, sources2);
-  const sourceIndex = sortTokenIndex(token, indices);
-  if (source === void 0) {
-    const existingIndex2 = overlay.baseOverrides?.get(sourceIndex);
-    const snapshotValue2 = baseSnapshot.get(sourceIndex);
-    if (snapshotValue2 !== void 0) {
-      if (existingIndex2 === void 0)
-        baseOverridesForWrite(overlay).set(sourceIndex, storeValue(node.context, snapshotValue2));
-      else
-        overlay.baseOverrides.set(sourceIndex, replaceStoredValue(node.context, existingIndex2, snapshotValue2));
-    } else {
-      if (existingIndex2 !== void 0)
-        releaseStoredValue(node.context, existingIndex2);
-      overlay.baseOverrides?.delete(sourceIndex);
-    }
-    return;
-  }
-  let overrides = overlay.insertOverrides?.get(source);
-  const existingIndex = overrides?.get(sourceIndex);
-  const snapshotValue = insertSnapshots.get(source)?.get(sourceIndex);
-  if (snapshotValue !== void 0) {
-    if (overrides === void 0) {
-      overrides = /* @__PURE__ */ new Map();
-      insertOverridesForWrite(overlay).set(source, overrides);
-    }
-    if (existingIndex === void 0)
-      overrides.set(sourceIndex, storeValue(node.context, snapshotValue));
-    else
-      overrides.set(sourceIndex, replaceStoredValue(node.context, existingIndex, snapshotValue));
-  } else {
-    if (existingIndex !== void 0)
-      releaseStoredValue(node.context, existingIndex);
-    overrides?.delete(sourceIndex);
-    if (overrides?.size === 0)
-      overlay.insertOverrides?.delete(source);
-  }
-}
-function sameSortTokenAt(overlay, logicalIndex, token, sources2, indices) {
-  const piece = locatePiece(overlay, logicalIndex);
-  const sourceIndex = piece.start + piece.step * overlay.locatedOffset;
-  const tokenSource = sortTokenSource(token, sources2);
-  return sourceIndex === sortTokenIndex(token, indices) && (piece.kind === "base" && tokenSource === void 0 || piece.kind === "insert" && piece.source === tokenSource);
-}
-function deduplicateArrayEntries(node) {
-  const overlay = arrayOverlay(node);
-  const seenBase = /* @__PURE__ */ new Set();
-  const seenInsert = /* @__PURE__ */ new Map();
-  const next = [];
-  let duplicated = false;
-  for (const piece of piecesOf(overlay)) {
-    for (let offset = 0; offset < piece.length; offset++) {
-      const sourceIndex = piece.start + piece.step * offset;
-      let seen;
-      if (piece.kind === "base") {
-        seen = seenBase.has(sourceIndex);
-        seenBase.add(sourceIndex);
-      } else {
-        let indices = seenInsert.get(piece.source);
-        if (indices === void 0) {
-          indices = /* @__PURE__ */ new Set();
-          seenInsert.set(piece.source, indices);
-        }
-        seen = indices.has(sourceIndex);
-        indices.add(sourceIndex);
-      }
-      if (seen) {
-        duplicated = true;
-        appendMergedPiece(next, insertPiece(node, [clonePlacementStored(entryValueAt(node, piece, sourceIndex), node.context)])[0]);
-      } else
-        appendMergedPiece(next, singletonPiece(piece, sourceIndex));
-    }
-  }
-  if (!duplicated)
-    return;
-  replaceAllPieces(overlay, next);
-  overlay.structural = true;
-  overlay.generation += 1;
-  overlay.plan = void 0;
-  markDirty(node);
-}
-function piecesFromSortOrder(order, sources2, indices) {
-  const pieces = [];
-  for (const token of order) {
-    const source = token < 0 ? sources2[-token - 1] : void 0;
-    const sourceIndex = token < 0 ? indices[-token - 1] : token;
-    const previous = pieces.at(-1);
-    const sameSource = previous !== void 0 && (source === void 0 && previous.kind === "base" || source !== void 0 && previous.kind === "insert" && previous.source === source);
-    if (previous !== void 0 && sameSource) {
-      if (previous.length === 1) {
-        const step = sourceIndex - previous.start;
-        if (step === 1 || step === -1) {
-          previous.step = step;
-          previous.length = 2;
-          continue;
-        }
-      } else if (previous.start + previous.step * previous.length === sourceIndex) {
-        previous.length += 1;
-        continue;
-      }
-    }
-    pieces.push(source === void 0 ? { kind: "base", start: sourceIndex, length: 1, step: 1 } : { kind: "insert", source, start: sourceIndex, length: 1, step: 1 });
-  }
-  return pieces;
-}
-function appendMergedPiece(pieces, piece) {
-  const previous = pieces.at(-1);
-  const sameSource = previous !== void 0 && previous.kind === piece.kind && (previous.kind === "base" || previous.source === piece.source);
-  if (previous !== void 0 && sameSource && previous.length === 1 && piece.length === 1) {
-    const step = piece.start - previous.start;
-    if (step === 1 || step === -1) {
-      previous.step = step;
-      previous.length = 2;
-      return;
-    }
-  }
-  if (previous !== void 0 && sameSource && previous.step === piece.step && previous.start + previous.step * previous.length === piece.start) {
-    previous.length += piece.length;
-  } else
-    pieces.push(piece);
-}
-function singletonPiece(piece, sourceIndex) {
-  return piece.kind === "base" ? { kind: "base", start: sourceIndex, length: 1, step: 1 } : { kind: "insert", source: piece.source, start: sourceIndex, length: 1, step: 1 };
-}
-function clonePlacement(value) {
-  const proxyNode = isContainer2(value) ? Reflect.get(value, NODE) : void 0;
-  return proxyNode === void 0 ? copyJson(value) : clonePlacementNode(proxyNode);
-}
-function cloneNode(node) {
-  assertReadable(node.context);
-  if (Array.isArray(nodeBase(node))) {
-    const overlay = arrayOverlay(node);
-    const result2 = [];
-    for (const piece of piecesOf(overlay)) {
-      for (let offset = 0; offset < piece.length; offset++) {
-        const sourceIndex = piece.start + piece.step * offset;
-        result2.push(cloneStored(entryValueAt(node, piece, sourceIndex), node.context));
-      }
-    }
-    return result2;
-  }
-  const result = Object.create(Object.getPrototypeOf(nodeBase(node)));
-  for (const key of ownKeys(node))
-    defineData3(result, key, cloneStored(objectValue(node, key), node.context));
-  return result;
-}
-function cloneStored(value, context) {
-  if (!isContainer2(value))
-    return value;
-  const node = context.rawNodes.get(value);
-  return node === void 0 || !node.dirty && !node.subtreeDirty ? value : cloneNode(node);
-}
-function clonePlacementNode(node) {
-  assertReadable(node.context);
-  if (Array.isArray(nodeBase(node))) {
-    const overlay = arrayOverlay(node);
-    const result2 = [];
-    for (const piece of piecesOf(overlay)) {
-      for (let offset = 0; offset < piece.length; offset++) {
-        const sourceIndex = piece.start + piece.step * offset;
-        result2.push(clonePlacementStored(entryValueAt(node, piece, sourceIndex), node.context));
-      }
-    }
-    return result2;
-  }
-  const result = Object.create(Object.getPrototypeOf(nodeBase(node)));
-  for (const key of ownKeys(node))
-    defineData3(result, key, clonePlacementStored(objectValue(node, key), node.context));
-  return result;
-}
-function clonePlacementStored(value, context) {
-  if (!isContainer2(value))
-    return copyJson(value);
-  const node = context.rawNodes.get(value);
-  return node === void 0 ? copyJson(value) : clonePlacementNode(node);
-}
-function defineData3(target, key, value) {
-  DATA_DESCRIPTOR3.value = value;
-  Object.defineProperty(target, key, DATA_DESCRIPTOR3);
-  DATA_DESCRIPTOR3.value = void 0;
-}
-function emitOperations(context) {
-  const simple = emitSimpleObjectOperations(context);
-  if (simple !== void 0)
-    return simple;
-  const operations = [];
-  const forcedFolds = /* @__PURE__ */ new Map();
-  const emissionPaths = /* @__PURE__ */ new Map();
-  const denseIndices = /* @__PURE__ */ new Map();
-  for (const node of context.dirty) {
-    recordDenseArrayPosition(node, denseIndices);
-    if (Array.isArray(nodeBase(node))) {
-      const overlay = arrayOverlay(node);
-      if (!overlay.structural && (overlay.baseOverrides?.size ?? 0) > 0) {
-        let candidates = denseIndices.get(node);
-        if (candidates === void 0) {
-          candidates = { indices: [], bits: void 0, length: nodeBase(node).length };
-          denseIndices.set(node, candidates);
-        }
-        for (const index3 of overlay.baseOverrides.keys())
-          addDenseCandidate(candidates, index3);
-      }
-    }
-  }
-  const denseRegions = /* @__PURE__ */ new Map();
-  for (const [array, candidates] of denseIndices) {
-    const path5 = resolvePath(array);
-    if (path5 === void 0 || path5.some((segment) => typeof segment === "string" && RESERVED_SEGMENTS.has(segment))) {
-      continue;
-    }
-    const regions = buildDenseRegions(candidates);
-    if (regions.length > 0)
-      denseRegions.set(array, regions);
-  }
-  for (const node of context.dirty) {
-    const path5 = resolvePath(node);
-    if (path5 === void 0)
-      continue;
-    if (hasCoveringDenseRegion(node, path5, denseRegions))
-      continue;
-    emissionPaths.set(node, path5);
-    if (!Array.isArray(nodeBase(node)) && hasReservedMutation(node))
-      forcedFolds.set(node, path5);
-    const reservedAt = path5.findIndex((segment) => typeof segment === "string" && RESERVED_SEGMENTS.has(segment));
-    if (reservedAt >= 0) {
-      let ancestor = node;
-      for (let depth = path5.length; depth > reservedAt; depth--)
-        ancestor = nodeParent(ancestor);
-      forcedFolds.set(ancestor, path5.slice(0, reservedAt));
-    }
-  }
-  for (const [node, path5] of forcedFolds)
-    emissionPaths.set(node, path5);
-  for (const node of denseRegions.keys()) {
-    const path5 = resolvePath(node);
-    if (path5 !== void 0 && !hasCoveringDenseRegion(node, path5, denseRegions))
-      emissionPaths.set(node, path5);
-  }
-  let maxDepth = 0;
-  for (const path5 of emissionPaths.values())
-    maxDepth = Math.max(maxDepth, path5.length);
-  const buckets = Array.from({ length: maxDepth + 1 }, () => []);
-  for (const [node, path5] of emissionPaths)
-    buckets[path5.length].push(node);
-  const folded = /* @__PURE__ */ new Set();
-  for (const bucket of buckets) {
-    for (const node of bucket) {
-      const path5 = emissionPaths.get(node);
-      if (hasPlacementAncestor(node) || hasFoldedAncestor(node, folded))
-        continue;
-      if (forcedFolds.has(node)) {
-        emitSet(operations, path5, cloneNode(node));
-        folded.add(node);
-        continue;
-      }
-      if (Array.isArray(nodeBase(node)))
-        emitArrayOperations(node, path5, operations, denseRegions.get(node));
-      else
-        emitObjectOperations(node, path5, operations);
-      if (operations.length > MAX_DELTA_OPERATIONS) {
-        locatedDenseArray = void 0;
-        return [["r", cloneNode(context.root)]];
-      }
-    }
-  }
-  locatedDenseArray = void 0;
-  return operations;
-}
-function emitSimpleObjectOperations(context) {
-  const nodes = [];
-  for (const node of context.dirty) {
-    if (Array.isArray(nodeBase(node)) || hasReservedMutation(node) || hasPlacementAncestor(node))
-      return void 0;
-    for (let parent = nodeParent(node); parent !== void 0; parent = nodeParent(parent)) {
-      if (Array.isArray(nodeBase(parent)))
-        return void 0;
-    }
-    const path5 = resolvePath(node);
-    if (path5 === void 0)
-      continue;
-    for (const segment of path5) {
-      if (typeof segment === "string" && RESERVED_SEGMENTS.has(segment))
-        return void 0;
-    }
-    nodes.push(node);
-    if (nodes.length > MAX_SIMPLE_OBJECT_NODES)
-      return void 0;
-  }
-  for (let index3 = 1; index3 < nodes.length; index3++) {
-    const node = nodes[index3];
-    const depth = node.preparedPath.length;
-    let at = index3;
-    while (at > 0 && nodes[at - 1].preparedPath.length > depth) {
-      nodes[at] = nodes[at - 1];
-      at -= 1;
-    }
-    nodes[at] = node;
-  }
-  const operations = [];
-  let canMaterializeDirectly = true;
-  for (const node of nodes) {
-    if (emitObjectOperations(node, node.preparedPath, operations))
-      canMaterializeDirectly = false;
-    if (operations.length > MAX_DELTA_OPERATIONS)
-      return [["r", cloneNode(context.root)]];
-  }
-  context.simpleObjectMaterialization = canMaterializeDirectly;
-  return operations;
-}
-var locatedDenseArray;
-var locatedDenseIndex = 0;
-function locateDenseArrayPosition(node) {
-  let child = node;
-  for (let parent = nodeParent(child); parent !== void 0; parent = nodeParent(child)) {
-    if (Array.isArray(nodeBase(parent))) {
-      const overlay = arrayOverlay(parent);
-      if (child.parentKind !== 1 || overlay.structural)
-        return false;
-      const sourceIndex = child.parentKey;
-      const valueIndex = overlay.baseOverrides?.get(sourceIndex);
-      const current = valueIndex === void 0 ? nodeBase(parent)[sourceIndex] : storedValue(parent.context, valueIndex);
-      if (current !== nodeBase(child))
-        return false;
-      locatedDenseArray = parent;
-      locatedDenseIndex = sourceIndex;
-      return true;
-    }
-    child = parent;
-  }
-  return false;
-}
-function hasCoveringDenseRegion(node, path5, denseRegions) {
-  for (let parent = nodeParent(node); parent !== void 0; parent = nodeParent(parent)) {
-    const regions = denseRegions.get(parent);
-    if (regions === void 0)
-      continue;
-    const parentPath = resolvePath(parent);
-    if (parentPath === void 0 || path5.length <= parentPath.length)
-      continue;
-    let matches = true;
-    for (let index4 = 0; index4 < parentPath.length; index4++) {
-      if (path5[index4] !== parentPath[index4]) {
-        matches = false;
-        break;
-      }
-    }
-    if (!matches)
-      continue;
-    const index3 = path5[parentPath.length];
-    if (typeof index3 === "number" && regionContaining(regions, index3))
-      return true;
-  }
-  return false;
-}
-function addDenseCandidate(candidates, index3) {
-  if (candidates.bits !== void 0) {
-    candidates.bits[index3] = 1;
-    return;
-  }
-  candidates.indices.push(index3);
-  if (candidates.indices.length < 256)
-    return;
-  candidates.bits = new Uint8Array(candidates.length);
-  for (const existing of candidates.indices)
-    candidates.bits[existing] = 1;
-  candidates.indices.length = 0;
-}
-function recordDenseArrayPosition(node, groups) {
-  if (!locateDenseArrayPosition(node))
-    return;
-  let candidates = groups.get(locatedDenseArray);
-  if (candidates === void 0) {
-    candidates = { indices: [], bits: void 0, length: nodeBase(locatedDenseArray).length };
-    groups.set(locatedDenseArray, candidates);
-  }
-  addDenseCandidate(candidates, locatedDenseIndex);
-}
-function buildDenseRegions(candidates) {
-  if (candidates.bits === void 0)
-    return [];
-  const regions = [];
-  const bits = candidates.bits;
-  for (let at = 0; at < bits.length; ) {
-    while (at < bits.length && bits[at] === 0)
-      at += 1;
-    if (at === bits.length)
-      break;
-    const start = at;
-    let end = at;
-    let count = 0;
-    let gap = 0;
-    while (at < bits.length) {
-      if (bits[at] !== 0) {
-        count += 1;
-        end = at;
-        gap = 0;
-      } else if (++gap > 1)
-        break;
-      at += 1;
-    }
-    const length = end - start + 1;
-    if (count >= 256 && count * 2 >= length)
-      regions.push({ start, length });
-  }
-  return regions;
-}
-function regionContaining(regions, index3) {
-  for (const region of regions)
-    if (index3 >= region.start && index3 < region.start + region.length)
-      return true;
-  return false;
-}
-function hasReservedMutation(node) {
-  if (node.writeKey !== void 0 && RESERVED_SEGMENTS.has(node.writeKey))
-    return true;
-  if (node.deleteKey !== void 0 && RESERVED_SEGMENTS.has(node.deleteKey))
-    return true;
-  if (node.writes !== void 0) {
-    for (const key of node.writes.keys())
-      if (RESERVED_SEGMENTS.has(key))
-        return true;
-  }
-  if (node.deletes !== void 0) {
-    for (const key of node.deletes)
-      if (RESERVED_SEGMENTS.has(key))
-        return true;
-  }
-  return false;
-}
-function hasFoldedAncestor(node, folded) {
-  for (let parent = nodeParent(node); parent !== void 0; parent = nodeParent(parent))
-    if (folded.has(parent))
-      return true;
-  return false;
-}
-function hasPlacementAncestor(node) {
-  for (let current = node; current !== void 0; current = nodeParent(current)) {
-    if (nodeParent(current) !== void 0 && current.parentPlacement)
-      return true;
-  }
-  return false;
-}
-function emitObjectWrite(node, path5, operations, key, value) {
-  const nextPath = [...path5, key];
-  const before = node.readded?.has(key) || !Object.hasOwn(nodeBase(node), key) ? void 0 : nodeBase(node)[key];
-  const after = cloneStored(value, node.context);
-  const emitted = emitChangedValue(operations, nextPath, before, after);
-  return isContainer2(before) && isContainer2(after) && !emitted;
-}
-function emitObjectOperations(node, path5, operations) {
-  if (node.readded !== void 0) {
-    for (const key of node.readded) {
-      if (Object.hasOwn(nodeBase(node), key))
-        operations.push(["d", [...path5, key]]);
-    }
-  }
-  let normalizedContainerWrite = false;
-  if (node.writeKey !== void 0)
-    normalizedContainerWrite = emitObjectWrite(node, path5, operations, node.writeKey, objectValue(node, node.writeKey));
-  if (node.writes !== void 0) {
-    for (const [key, valueIndex] of node.writes) {
-      if (operations.length > MAX_DELTA_OPERATIONS)
-        return normalizedContainerWrite;
-      if (emitObjectWrite(node, path5, operations, key, storedValue(node.context, valueIndex)))
-        normalizedContainerWrite = true;
-    }
-  }
-  if (node.deleteKey !== void 0 && Object.hasOwn(nodeBase(node), node.deleteKey)) {
-    operations.push(["d", [...path5, node.deleteKey]]);
-  }
-  if (node.deletes !== void 0) {
-    for (const key of node.deletes) {
-      if (operations.length > MAX_DELTA_OPERATIONS)
-        return normalizedContainerWrite;
-      if (Object.hasOwn(nodeBase(node), key))
-        operations.push(["d", [...path5, key]]);
-    }
-  }
-  return normalizedContainerWrite;
-}
-function buildArrayPlan(node) {
-  const overlay = arrayOverlay(node);
-  if (overlay.plan !== void 0)
-    return overlay.plan;
-  const base = nodeBase(node);
-  const pieces = piecesOf(overlay);
-  const retained = new Uint8Array(base.length);
-  const targetBase = [];
-  for (const piece of pieces) {
-    if (piece.kind !== "base")
-      continue;
-    for (let offset = 0; offset < piece.length; offset++) {
-      const index3 = piece.start + piece.step * offset;
-      retained[index3] = 1;
-      targetBase.push(index3);
-    }
-  }
-  const removeRuns = [];
-  for (let end = base.length; end > 0; ) {
-    if (retained[end - 1] !== 0) {
-      end -= 1;
-      continue;
-    }
-    let start = end - 1;
-    while (start > 0 && retained[start - 1] === 0)
-      start -= 1;
-    removeRuns.push(start, end - start);
-    end = start;
-  }
-  const retainedBase = [];
-  for (let index3 = 0; index3 < retained.length; index3++)
-    if (retained[index3] !== 0)
-      retainedBase.push(index3);
-  let permutation;
-  if (targetBase.some((value, index3) => value !== retainedBase[index3])) {
-    const positions = new Map(retainedBase.map((value, index3) => [value, index3]));
-    permutation = targetBase.map((value) => positions.get(value));
-  }
-  const insertRuns = [];
-  let logicalIndex = 0;
-  for (let pieceIndex = 0; pieceIndex < pieces.length; ) {
-    const piece = pieces[pieceIndex];
-    if (piece.kind === "base") {
-      logicalIndex += piece.length;
-      pieceIndex += 1;
-      continue;
-    }
-    const startPiece = pieceIndex;
-    while (pieceIndex < pieces.length && pieces[pieceIndex].kind === "insert") {
-      logicalIndex += pieces[pieceIndex].length;
-      pieceIndex += 1;
-    }
-    insertRuns.push(logicalIndex - rangeLength(pieces, startPiece, pieceIndex), startPiece, pieceIndex);
-  }
-  overlay.plan = { removeRuns, permutation, insertRuns };
-  return overlay.plan;
-}
-function rangeLength(pieces, start, end) {
-  let length = 0;
-  for (let index3 = start; index3 < end; index3++)
-    length += pieces[index3].length;
-  return length;
-}
-function emitArrayOperations(node, path5, operations, denseRegions) {
-  const overlay = arrayOverlay(node);
-  const base = nodeBase(node);
-  if (denseRegions !== void 0) {
-    for (const region of denseRegions) {
-      if (operations.length > MAX_DELTA_OPERATIONS)
-        return;
-      operations.push(["p", path5, region.start, region.length, cloneArrayRegion(node, region)]);
-    }
-  }
-  if (overlay.structural) {
-    const plan = buildArrayPlan(node);
-    for (let index3 = 0; index3 < plan.removeRuns.length; index3 += 2) {
-      if (operations.length > MAX_DELTA_OPERATIONS)
-        return;
-      operations.push(["p", path5, plan.removeRuns[index3], plan.removeRuns[index3 + 1], []]);
-    }
-    if (plan.permutation !== void 0)
-      operations.push(["m", path5, plan.permutation]);
-    const pieces = piecesOf(overlay);
-    for (let run2 = 0; run2 < plan.insertRuns.length; run2 += 3) {
-      if (operations.length > MAX_DELTA_OPERATIONS)
-        return;
-      const logicalIndex = plan.insertRuns[run2];
-      const items = [];
-      for (let pieceIndex = plan.insertRuns[run2 + 1]; pieceIndex < plan.insertRuns[run2 + 2]; pieceIndex++) {
-        const piece = pieces[pieceIndex];
-        for (let offset = 0; offset < piece.length; offset++) {
-          const sourceIndex = piece.start + piece.step * offset;
-          items.push(cloneStored(entryValueAt(node, piece, sourceIndex), node.context));
-        }
-      }
-      operations.push(["p", path5, logicalIndex, 0, items]);
-    }
-  }
-  for (const [baseIndex, valueIndex] of overlay.baseOverrides ?? []) {
-    if (operations.length > MAX_DELTA_OPERATIONS)
-      return;
-    const index3 = findEntryIndex(overlay, 1, baseIndex, void 0);
-    if (index3 === void 0 || denseRegions !== void 0 && regionContaining(denseRegions, index3))
-      continue;
-    emitChangedValue(operations, [...path5, index3], base[baseIndex], cloneStored(storedValue(node.context, valueIndex), node.context));
-  }
-}
-function cloneArrayRegion(node, region) {
-  const overlay = arrayOverlay(node);
-  const result = [];
-  for (let index3 = region.start; index3 < region.start + region.length; index3++) {
-    const piece = locatePiece(overlay, index3);
-    const sourceIndex = piece.start + piece.step * overlay.locatedOffset;
-    result.push(cloneStored(entryValueAt(node, piece, sourceIndex), node.context));
-  }
-  return result;
-}
-function emitChangedValue(operations, path5, before, after) {
-  if (!isContainer2(after) && before === after)
-    return false;
-  if (isContainer2(before) && isContainer2(after) && equalTrustedJson(before, after))
-    return false;
-  if (typeof before === "string" && typeof after === "string") {
-    if (after.length > before.length && after.slice(0, before.length) === before) {
-      operations.push(["a", path5, after.slice(before.length)]);
-      return true;
-    }
-    const shared = overlap(before, after, 65536);
-    if (shared > 0) {
-      operations.push(["t", path5, before.length - shared]);
-      if (after.length > shared)
-        operations.push(["a", path5, after.slice(shared)]);
-      return true;
-    }
-  }
-  operations.push(["s", path5, after]);
-  return true;
-}
-function emitSet(operations, path5, value) {
-  if (path5.length === 0)
-    operations.push(["r", value]);
-  else
-    operations.push(["s", path5, value]);
-}
-function resolvePath(node) {
-  if (node.preparedPath !== void 0)
-    return node.preparedPath;
-  const parent = nodeParent(node);
-  if (parent === void 0) {
-    node.preparedPath = [];
-    return node.preparedPath;
-  }
-  const parentPath = resolvePath(parent);
-  if (parentPath === void 0)
-    return void 0;
-  if (node.parentKind === 0) {
-    const key = node.parentKey;
-    if (!objectHas(parent, key) || objectValue(parent, key) !== nodeBase(node))
-      return void 0;
-    node.preparedPath = [...parentPath, key];
-    return node.preparedPath;
-  }
-  const overlay = arrayOverlay(parent);
-  const index3 = findEntryIndex(overlay, node.parentKind, node.parentKey, node.parentSource);
-  if (index3 === void 0)
-    return void 0;
-  const piece = locatePiece(overlay, index3);
-  if (entryValueAt(parent, piece, node.parentKey) !== nodeBase(node))
-    return void 0;
-  node.preparedPath = [...parentPath, index3];
-  return node.preparedPath;
-}
-function ensurePieceLocations(overlay) {
-  if (overlay.baseLocations !== void 0)
-    return;
-  overlay.baseLocations = [];
-  overlay.insertLocations = /* @__PURE__ */ new Map();
-  let logicalStart = 0;
-  for (const piece of piecesOf(overlay)) {
-    const last = piece.start + piece.step * (piece.length - 1);
-    const location = {
-      piece,
-      logicalStart,
-      minimum: Math.min(piece.start, last),
-      maximum: Math.max(piece.start, last)
-    };
-    if (piece.kind === "base")
-      overlay.baseLocations.push(location);
-    else {
-      let locations = overlay.insertLocations.get(piece.source);
-      if (locations === void 0) {
-        locations = [];
-        overlay.insertLocations.set(piece.source, locations);
-      }
-      locations.push(location);
-    }
-    logicalStart += piece.length;
-  }
-  const byMinimum = (left, right) => left.minimum - right.minimum;
-  overlay.baseLocations.sort(byMinimum);
-  for (const locations of overlay.insertLocations.values())
-    locations.sort(byMinimum);
-}
-function findEntryIndex(overlay, kind, sourceIndex, source) {
-  if (kind === 1 && !overlay.structural)
-    return sourceIndex;
-  ensurePieceLocations(overlay);
-  const locations = kind === 1 ? overlay.baseLocations : overlay.insertLocations.get(source);
-  if (locations === void 0)
-    return void 0;
-  let low = 0;
-  let high = locations.length;
-  while (low < high) {
-    const middle = low + high >>> 1;
-    if (locations[middle].minimum <= sourceIndex)
-      low = middle + 1;
-    else
-      high = middle;
-  }
-  const location = locations[low - 1];
-  if (location === void 0 || sourceIndex > location.maximum)
-    return void 0;
-  const offset = (sourceIndex - location.piece.start) / location.piece.step;
-  return offset >= 0 && offset < location.piece.length ? location.logicalStart + offset : void 0;
-}
-function ensureOperations(context) {
-  if (context.ops !== void 0)
-    return context.ops;
-  assertReadable(context);
-  if (context.replacement) {
-    const base = context.tracker.deref()?.replacementBase(context);
-    context.replacementNoop = base !== void 0 && equalTrustedJson(base, nodeBase(context.root));
-    context.ops = context.replacementNoop ? [] : [["r", nodeBase(context.root)]];
-  } else
-    context.ops = emitOperations(context);
-  return context.ops;
-}
-function equalTrustedJson(left, right) {
-  if (left === right)
-    return true;
-  if (!isContainer2(left) || !isContainer2(right) || Array.isArray(left) !== Array.isArray(right))
-    return false;
-  if (Array.isArray(left)) {
-    const other2 = right;
-    if (left.length !== other2.length)
-      return false;
-    for (let index3 = 0; index3 < left.length; index3++)
-      if (!equalTrustedJson(left[index3], other2[index3]))
-        return false;
-    return true;
-  }
-  const other = right;
-  const keys = Object.keys(left);
-  if (keys.length !== Object.keys(other).length)
-    return false;
-  for (const key of keys)
-    if (!Object.hasOwn(other, key) || !equalTrustedJson(left[key], other[key]))
-      return false;
-  return true;
-}
-function abortContext(context) {
-  if (context.status.value === "aborted" || context.status.value === "consumed" || context.status.value === "stale")
-    return;
-  context.status.value = "aborted";
-  clearContext(context);
-}
-function releaseOverlayReferences(context) {
-  context.tracker.deref()?.releaseContext(context);
-  if (locatedDenseArray?.context === context)
-    locatedDenseArray = void 0;
-  context.overlayReleased = true;
-  context.dirty.length = 0;
-  context.nodes.length = 0;
-  context.rawNodes = void 0;
-  context.ops = void 0;
-  context.root = void 0;
-  context.bases = void 0;
-  context.stored = void 0;
-  context.baseValue = void 0;
-}
-function clearContext(context) {
-  context.tracker.deref()?.releaseContext(context);
-  if (locatedDenseArray?.context === context)
-    locatedDenseArray = void 0;
-  for (const node of context.nodes) {
-    if (Array.isArray(node.target))
-      node.target.length = 0;
-    Reflect.deleteProperty(node.target, NODE);
-    node.writes?.clear();
-    node.deletes?.clear();
-    node.readded?.clear();
-    if (node.array?.pieces !== void 0)
-      node.array.pieces.length = 0;
-    if (node.array !== void 0) {
-      node.array.root = void 0;
-      node.array.baseLocations = void 0;
-      node.array.insertLocations = void 0;
-    }
-    node.array?.baseOverrides?.clear();
-    node.array?.insertOverrides?.clear();
-    node.parentSource = void 0;
-    node.target = RELEASED;
-    node.proxy = RELEASED;
-    node.writeKey = void 0;
-    node.writeValue = void 0;
-    node.writes = void 0;
-    node.deleteKey = void 0;
-    node.deletes = void 0;
-    node.readded = void 0;
-    node.array = void 0;
-    node.subtreeDirty = void 0;
-    node.preparedPath = void 0;
-  }
-  context.dirty.length = 0;
-  context.nodes.length = 0;
-  context.rawNodes = void 0;
-  context.ops = void 0;
-  context.root = void 0;
-  context.bases = void 0;
-  context.stored = void 0;
-  context.baseValue = void 0;
-  context.overlayReleased = true;
-}
-function isContainer2(value) {
-  return value !== null && typeof value === "object";
-}
-
-// node_modules/@earendil-works/chord/dist/delta/index.js
-var isObj2 = (value) => value !== null && typeof value === "object";
-function overlap(a, b, scan, probe = 64, maxCandidates = 8) {
-  if (a.length === 0 || b.length === 0 || scan === 0)
-    return 0;
-  const tail = a.length > scan ? a.slice(a.length - scan) : a;
-  for (const h of [Math.min(probe, b.length), 1]) {
-    const head = b.slice(0, h);
-    let tried = 0;
-    for (let k = tail.indexOf(head); k !== -1; k = tail.indexOf(head, k + 1)) {
-      if (++tried > maxCandidates)
-        break;
-      const n = tail.length - k;
-      if (n <= b.length && tail.slice(k) === b.slice(0, n))
-        return n;
-    }
-    if (h === 1)
-      break;
-  }
-  return 0;
-}
-var RESERVED_SEGMENTS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
-var UnsafePathError = class extends Error {
-  // Not a parameter property: Node's --experimental-strip-types rejects those,
-  // and these files are meant to run under it directly.
-  segment;
-  constructor(segment) {
-    super(`unsafe path segment: ${String(segment)}`);
-    this.segment = segment;
-    this.name = "UnsafePathError";
-  }
-};
-function assertValidOp(op) {
-  if (!Array.isArray(op) || op.length === 0)
-    throw new TypeError("op is not a tuple");
-  switch (op[0]) {
-    case "r":
-      if (op.length !== 2)
-        throw new TypeError("r arity");
-      return;
-    case "s":
-      if (op.length !== 3)
-        throw new TypeError("s arity");
-      assertPathArg(op[1], true);
-      return;
-    case "d":
-      if (op.length !== 2)
-        throw new TypeError("d arity");
-      assertPathArg(op[1], true);
-      return;
-    case "a":
-      if (op.length !== 3 || typeof op[2] !== "string")
-        throw new TypeError("a shape");
-      assertPathArg(op[1], true);
-      return;
-    case "t":
-      if (op.length !== 3 || !Number.isInteger(op[2]) || op[2] < 0)
-        throw new TypeError("t shape");
-      assertPathArg(op[1], true);
-      return;
-    case "p": {
-      if (op.length !== 5)
-        throw new TypeError("p arity");
-      assertPathArg(op[1]);
-      if (!Number.isInteger(op[2]) || op[2] < 0)
-        throw new TypeError("p index");
-      if (!Number.isInteger(op[3]) || op[3] < 0)
-        throw new TypeError("p remove");
-      if (!Array.isArray(op[4]))
-        throw new TypeError("p items");
-      return;
-    }
-    case "m":
-      if (op.length !== 3)
-        throw new TypeError("m arity");
-      assertPathArg(op[1]);
-      assertPermutation(op[2]);
-      return;
-    // Silently skipping an unknown verb is how a newer producer's op vanishes.
-    default:
-      throw new TypeError(`unknown op verb: ${String(op[0])}`);
-  }
-}
-function assertPathArg(p, nonEmpty = false) {
-  if (!Array.isArray(p))
-    throw new TypeError("path is not an array");
-  if (nonEmpty && p.length === 0)
-    throw new TypeError("path is empty");
-  assertSafePath(p);
-}
-function assertPermutation(value) {
-  if (!Array.isArray(value))
-    throw new TypeError("m permutation is not an array");
-  const seen = new Uint8Array(value.length);
-  for (const index3 of value) {
-    if (!Number.isInteger(index3) || index3 < 0 || index3 >= value.length || seen[index3] !== 0) {
-      throw new TypeError("m permutation is not a bijection");
-    }
-    seen[index3] = 1;
-  }
-}
-function assertSafePath(path5) {
-  for (const seg of path5) {
-    if (typeof seg === "string") {
-      if (RESERVED_SEGMENTS.has(seg))
-        throw new UnsafePathError(seg);
-    } else if (!Number.isInteger(seg) || seg < 0) {
-      throw new UnsafePathError(seg);
-    }
-  }
-}
-function assertIndexInRange(parent, index3) {
-  if (index3 > parent.length)
-    throw new UnsafePathError(index3);
-}
-var PathError = class extends Error {
-  path;
-  constructor(path5) {
-    super(`unresolvable path: ${JSON.stringify(path5)}`);
-    this.path = path5;
-    this.name = "PathError";
-  }
-};
-function applyOps(target, ops) {
-  let root = target;
-  for (const op of ops) {
-    assertValidOp(op);
-    if (op[0] === "r") {
-      root = op[1];
-      continue;
-    }
-    const path5 = op[1];
-    assertSafePath(path5);
-    if (op[0] === "p") {
-      const target_ = path5.length === 0 ? root : resolve(root, path5);
-      if (!Array.isArray(target_))
-        throw new PathError(path5);
-      target_.splice(op[2], op[3]);
-      const chunkSize = 1e4;
-      for (let offset = 0; offset < op[4].length; offset += chunkSize) {
-        target_.splice(op[2] + offset, 0, ...op[4].slice(offset, offset + chunkSize));
-      }
-      continue;
-    }
-    if (op[0] === "m") {
-      const target_ = path5.length === 0 ? root : resolve(root, path5);
-      if (!Array.isArray(target_) || target_.length !== op[2].length)
-        throw new PathError(path5);
-      const previous = target_.slice();
-      for (let index3 = 0; index3 < op[2].length; index3++)
-        target_[index3] = previous[op[2][index3]];
-      continue;
-    }
-    const parent = resolve(root, path5.slice(0, -1));
-    const key = path5[path5.length - 1];
-    if (Array.isArray(parent)) {
-      if (typeof key !== "number")
-        throw new UnsafePathError(key);
-      assertIndexInRange(parent, key);
-    }
-    const write = (value) => {
-      Object.defineProperty(parent, key, { value, writable: true, enumerable: true, configurable: true });
-    };
-    const read2 = () => Object.hasOwn(parent, key) ? parent[key] : void 0;
-    switch (op[0]) {
-      case "s":
-        write(op[2]);
-        break;
-      case "d":
-        if (Array.isArray(parent)) {
-          if (typeof key !== "number" || key >= parent.length)
-            throw new PathError(path5);
-          parent.splice(key, 1);
-        } else
-          delete parent[key];
-        break;
-      case "a": {
-        const current = read2();
-        if (typeof current !== "string")
-          throw new PathError(path5);
-        write(`${current}${op[2]}`);
-        break;
-      }
-      case "t": {
-        const current = read2();
-        if (typeof current !== "string")
-          throw new PathError(path5);
-        write(current.slice(op[2]));
-        break;
-      }
-    }
-  }
-  return root;
-}
-function applyImmutable(target, ops) {
-  return applyImmutableBatches(target, [ops]);
-}
-function applyImmutableBatches(target, batches) {
-  let root = target;
-  const owned = /* @__PURE__ */ new WeakSet();
-  for (const ops of batches) {
-    for (const op of ops) {
-      assertValidOp(op);
-      if (op[0] === "r") {
-        root = op[1];
-        continue;
-      }
-      root = copyContainers(root, op[0] === "p" || op[0] === "m" ? op[1] : op[1].slice(0, -1), owned);
-      root = applyOps(root, [op]);
-    }
-  }
-  return root;
-}
-function copyContainers(root, path5, owned) {
-  const copy2 = (value) => {
-    if (Array.isArray(value))
-      return value.slice();
-    if (!isObj2(value))
-      throw new PathError(path5);
-    const result = Object.create(Object.getPrototypeOf(value) === null ? null : Object.prototype);
-    for (const key of Object.keys(value)) {
-      Object.defineProperty(result, key, {
-        value: value[key],
-        writable: true,
-        enumerable: true,
-        configurable: true
-      });
-    }
-    return result;
-  };
-  if (!isObj2(root))
-    throw new PathError(path5);
-  let copiedRoot;
-  if (owned.has(root))
-    copiedRoot = root;
-  else {
-    copiedRoot = copy2(root);
-    owned.add(copiedRoot);
-  }
-  let destination = copiedRoot;
-  for (const segment of path5) {
-    if (!Object.hasOwn(destination, segment))
-      throw new PathError(path5);
-    if (Array.isArray(destination) && typeof segment !== "number")
-      throw new UnsafePathError(segment);
-    const child = destination[segment];
-    if (!isObj2(child))
-      throw new PathError(path5);
-    if (owned.has(child)) {
-      destination = child;
-      continue;
-    }
-    const copiedChild = copy2(child);
-    Object.defineProperty(destination, segment, {
-      value: copiedChild,
-      writable: true,
-      enumerable: true,
-      configurable: true
-    });
-    owned.add(copiedChild);
-    destination = copiedChild;
-  }
-  return copiedRoot;
-}
-function resolveValue(root, path5) {
-  let node = root;
-  for (const seg of path5) {
-    if (!isObj2(node))
-      throw new PathError(path5);
-    if (Array.isArray(node) && typeof seg !== "number")
-      throw new UnsafePathError(seg);
-    if (!Object.hasOwn(node, seg))
-      throw new PathError(path5);
-    node = node[seg];
-  }
-  return node;
-}
-function resolve(root, path5) {
-  const node = resolveValue(root, path5);
-  if (!isObj2(node))
-    throw new PathError(path5);
-  return node;
-}
-
-// node_modules/@earendil-works/chord/dist/services/state-internals.js
-var sources = /* @__PURE__ */ new WeakMap();
-function registerReplicatedStateInternals(value, internals) {
-  sources.set(value, internals);
-}
-
-// node_modules/@earendil-works/chord/dist/services/state.js
-var StateSubscriber = class {
-  #listener;
-  #reportError;
-  #pending = [];
-  #running = false;
-  #started = false;
-  #closed = false;
-  constructor(listener, reportError) {
-    this.#listener = listener;
-    this.#reportError = reportError;
-  }
-  push(frame) {
-    if (this.#closed)
-      return;
-    if (this.#pending.length === 100) {
-      const hydration = this.#started ? void 0 : this.#pending[0];
-      this.#pending.length = 0;
-      if (hydration !== void 0)
-        this.#pending.push(hydration);
-    }
-    this.#pending.push(frame);
-  }
-  drain() {
-    if (this.#running || this.#closed)
-      return;
-    this.#running = true;
-    for (let frame = this.#pending.shift(); frame !== void 0; frame = this.#pending.shift()) {
-      this.#started = true;
-      try {
-        const result = this.#listener(frame.value, frame.context, frame.delivery);
-        if (isPromiseLike(result)) {
-          void Promise.resolve(result).then(() => this.#resume(), (error) => {
-            this.#report(error);
-            this.#resume();
-          });
-          return;
-        }
-      } catch (error) {
-        this.#report(error);
-      }
-    }
-    this.#running = false;
-  }
-  clear() {
-    this.#pending.length = 0;
-  }
-  close() {
-    this.#closed = true;
-    this.clear();
-  }
-  #resume() {
-    this.#running = false;
-    this.drain();
-  }
-  #report(error) {
-    try {
-      this.#reportError(toError(error));
-    } catch (reportError) {
-      reportErrorAsync(toError(reportError));
-    }
-  }
-};
-var ReplicatedStatePublisher = class {
-  #listeners = /* @__PURE__ */ new Map();
-  #reportError;
-  #sourceListeners = /* @__PURE__ */ new Set();
-  #publications = [];
-  #value;
-  #sequence = 0;
-  #delivering = false;
-  constructor(initial, reportError = reportErrorAsync) {
-    this.#value = initial;
-    this.#reportError = reportError;
-  }
-  get value() {
-    return this.#value;
-  }
-  snapshot() {
-    return { value: this.#value, sequence: this.#sequence };
-  }
-  subscribe(listener) {
-    const { value, sequence: sequence2 } = this.snapshot();
-    const subscriber = new StateSubscriber(listener, this.#reportError);
-    this.#listeners.set(subscriber, sequence2);
-    subscriber.push({ value, context: serviceDeliveryContext(), delivery: { kind: "hydrate", sequence: sequence2 } });
-    subscriber.drain();
-    return () => {
-      subscriber.close();
-      this.#listeners.delete(subscriber);
-    };
-  }
-  subscribeSource(listener) {
-    this.#sourceListeners.add(listener);
-    return () => this.#sourceListeners.delete(listener);
-  }
-  /** Publish an already-prepared immutable revision and return isolated listener failures. */
-  publish(value, ops, context) {
-    this.#value = value;
-    this.#sequence += 1;
-    this.#publications.push({ value, ops, sequence: this.#sequence, context });
-    if (this.#delivering)
-      return [];
-    this.#delivering = true;
-    const errors = [];
-    try {
-      for (let publication = this.#publications.shift(); publication !== void 0; publication = this.#publications.shift()) {
-        for (const listener of [...this.#sourceListeners]) {
-          try {
-            listener(publication.ops, publication.sequence, publication.context);
-          } catch (error) {
-            errors.push(error);
-          }
-        }
-        const delivery = { kind: "update", sequence: publication.sequence };
-        for (const [subscriber, hydratedSequence] of [...this.#listeners]) {
-          if (publication.sequence <= hydratedSequence)
-            continue;
-          subscriber.push({ value: publication.value, context: publication.context, delivery });
-          subscriber.drain();
-        }
-      }
-    } finally {
-      this.#delivering = false;
-    }
-    return errors;
-  }
-};
-var MutableReplicatedStateImpl = class {
-  #tracker;
-  #publisher;
-  #changing = false;
-  constructor(initial) {
-    this.#tracker = track(initial);
-    this.#publisher = new ReplicatedStatePublisher(this.#tracker.value);
-    registerReplicatedStateInternals(this, {
-      snapshot: () => this.#publisher.snapshot(),
-      subscribe: (listener) => this.#publisher.subscribeSource(listener)
-    });
-  }
-  get value() {
-    return this.#tracker.value;
-  }
-  change(context, mutate) {
-    if (this.#changing)
-      throw new Error("Replicated state cannot be changed reentrantly from a change callback");
-    this.#changing = true;
-    let prepared;
-    try {
-      const change = this.#tracker.beginChange();
-      try {
-        const outcome = mutate(change.state);
-        if (isPromiseLike(outcome)) {
-          void Promise.resolve(outcome).catch(() => void 0);
-          throw new TypeError("Replicated state change callbacks must be synchronous");
-        }
-        prepared = change.prepare();
-      } catch (error) {
-        change.abort();
-        throw error;
-      }
-    } finally {
-      this.#changing = false;
-    }
-    this.#tracker.adopt(prepared);
-    if (prepared.ops.length === 0)
-      return;
-    throwCollectedErrors(this.#publisher.publish(prepared.value, prepared.ops, context), "Replicated state listeners failed");
-  }
-  replace(context, value) {
-    if (this.#changing)
-      throw new Error("Replicated state cannot be replaced from a change callback");
-    const prepared = this.#tracker.prepareReplace(value);
-    this.#tracker.adopt(prepared);
-    if (prepared.ops.length === 0)
-      return;
-    throwCollectedErrors(this.#publisher.publish(prepared.value, prepared.ops, context), "Replicated state listeners failed");
-  }
-  subscribe(listener) {
-    return this.#publisher.subscribe(listener);
-  }
-};
-var AttachedReplicatedStateImpl = class {
-  #publisher;
-  #attachment;
-  #reportError;
-  #cursor;
-  #disposed = false;
-  constructor(attachment, options) {
-    const { snapshot } = attachment;
-    assertCursor(snapshot.cursor, "snapshot");
-    this.#attachment = attachment;
-    this.#cursor = snapshot.cursor;
-    this.#reportError = options.onError ?? reportErrorAsync;
-    this.#publisher = new ReplicatedStatePublisher(snapshot.value, (error) => this.#report(error));
-    registerReplicatedStateInternals(this, {
-      snapshot: () => this.#publisher.snapshot(),
-      subscribe: (listener) => this.#publisher.subscribeSource(listener)
-    });
-  }
-  get value() {
-    return this.#publisher.value;
-  }
-  subscribe(listener) {
-    return this.#publisher.subscribe(listener);
-  }
-  activate() {
-    this.#attachment.activate((frame) => this.#receive(frame));
-  }
-  dispose() {
-    if (this.#disposed)
-      return;
-    this.#disposed = true;
-    this.#attachment.dispose();
-  }
-  #receive(frame) {
-    if (this.#disposed)
-      return;
-    try {
-      assertCursor(frame.cursor, "frame");
-      const expected = this.#cursor + 1;
-      if (frame.cursor !== expected) {
-        throw new Error(`Replicated state source cursor has a gap: expected ${expected}, received ${frame.cursor}`);
-      }
-      this.#cursor = frame.cursor;
-      const errors = this.#publisher.publish(frame.value, frame.ops, frame.context);
-      if (errors.length === 1)
-        this.#report(errors[0]);
-      else if (errors.length > 1)
-        this.#report(new AggregateError(errors, "Replicated state listeners failed"));
-    } catch (error) {
-      this.#fail(toError(error));
-    }
-  }
-  #fail(error) {
-    if (this.#disposed)
-      return;
-    this.#disposed = true;
-    try {
-      this.#attachment.dispose();
-    } catch (disposeError) {
-      this.#report(new AggregateError([error, disposeError], "Replicated state source contract failed"));
-      return;
-    }
-    this.#report(error);
-  }
-  #report(error) {
-    try {
-      this.#reportError(toError(error));
-    } catch (reportError) {
-      reportErrorAsync(toError(reportError));
-    }
-  }
-};
-function attachReplicatedStateSource(source, options = {}) {
-  const attachment = source.attach();
-  try {
-    const state3 = new AttachedReplicatedStateImpl(attachment, options);
-    state3.activate();
-    return state3;
-  } catch (error) {
-    try {
-      attachment.dispose();
-    } catch (disposeError) {
-      throw new AggregateError([error, disposeError], "Failed to attach replicated state source");
-    }
-    throw error;
-  }
-}
-function serviceDeliveryContext() {
-  return BACKGROUND_CONTEXT;
-}
-function assertCursor(cursor, kind) {
-  if (!Number.isSafeInteger(cursor))
-    throw new TypeError(`Replicated state source ${kind} cursor must be a safe integer`);
-}
-function isPromiseLike(value) {
-  return (typeof value === "object" && value !== null || typeof value === "function") && typeof value.then === "function";
-}
-function throwCollectedErrors(errors, message) {
-  if (errors.length === 1)
-    throw errors[0];
-  if (errors.length > 1)
-    throw new AggregateError(errors, message);
-}
-function reportErrorAsync(error) {
-  queueMicrotask(() => {
-    throw error;
-  });
-}
-function toError(error) {
-  return error instanceof Error ? error : new Error(String(error));
-}
-
-// node_modules/@earendil-works/chord/dist/api.js
-function replicatedState(initialOrSource, options) {
-  if (isReplicatedStateSource(initialOrSource))
-    return attachReplicatedStateSource(initialOrSource, options);
-  return new MutableReplicatedStateImpl(initialOrSource);
-}
-function isReplicatedStateSource(value) {
-  return typeof value.attach === "function";
-}
-
-// node_modules/@earendil-works/pi-durable/dist/ids.js
-function idFromNumber(value) {
-  return value;
-}
-function seqFromNumber(value) {
-  return value;
-}
-
-// node_modules/@earendil-works/pi-durable/dist/documents.js
-function defineDoc(definition) {
-  validateDefinition(definition);
-  return { definition };
-}
-function validateDefinition(definition) {
-  if (!Number.isSafeInteger(definition.version) || definition.version < 1) {
-    throw new TypeError(`Document ${definition.kind} version must be a positive integer`);
-  }
-}
-function resolveAddress(definition, args) {
-  let index3 = 0;
-  let scope;
-  switch (definition.scope) {
-    case "session":
-      scope = { kind: "session" };
-      break;
-    case "conversation":
-      scope = { kind: "conversation", conversationId: ownerId(args[index3++], definition) };
-      break;
-    case "task":
-      scope = { kind: "task", taskId: ownerId(args[index3++], definition) };
-      break;
-  }
-  const key = definition.family === true ? args[index3++] : void 0;
-  const address = key === void 0 ? { kind: definition.kind, scope } : { kind: definition.kind, scope, key };
-  return { address, id: addressId(address), nextArgument: index3 };
-}
-function ownerId(value, definition) {
-  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
-    throw new TypeError(`Document ${definition.kind} requires a ${definition.scope} ID`);
-  }
-  return idFromNumber(value);
-}
-function addressId(address) {
-  const owner = address.scope.kind === "session" ? null : address.scope.kind === "conversation" ? address.scope.conversationId : address.scope.taskId;
-  return JSON.stringify([address.kind, address.scope.kind, owner, address.key ?? null]);
-}
-function documentCreate(definition, address, id) {
-  const key = address.key === void 0 ? {} : { key: address.key };
-  switch (address.scope.kind) {
-    case "session":
-      return { id, kind: address.kind, ...key, scope: address.scope };
-    case "task":
-      return { id, kind: address.kind, ...key, scope: address.scope };
-    case "conversation":
-      return {
-        id,
-        kind: address.kind,
-        ...key,
-        scope: address.scope,
-        history: definition.history,
-        fork: definition.fork
-      };
-  }
-}
-function checkRecordScope(definition, record) {
-  if (record.scope.kind !== definition.scope || record.scope.kind === "conversation" && (record.history !== definition.history || record.fork !== definition.fork)) {
-    throw new TypeError(`Document ${record.id} (${record.kind}) does not match the supplied definition semantics`);
-  }
-}
-function checkRecordVersion(definition, record, version) {
-  if (version > definition.version) {
-    throw new Error(`Document ${record.id} (${record.kind}) has newer version ${version} than ${definition.version}`);
-  }
-  if (version < definition.version && definition.migrate === void 0) {
-    throw new Error(`Document ${record.id} (${record.kind}) requires migration from version ${version}`);
-  }
-}
-function materializeDocument(definition, stored) {
-  return materializeDocumentValue(definition, stored.record, stored.version, stored.value);
-}
-function materializeDocumentValue(definition, record, version, value) {
-  checkRecordScope(definition, record);
-  checkRecordVersion(definition, record, version);
-  if (version === definition.version)
-    return value;
-  return copyJson(definition.migrate(value, version));
-}
-
-// node_modules/@earendil-works/pi-durable/dist/entries.js
-function defineEntry(kind) {
-  if (typeof kind !== "string" || kind.length === 0)
-    throw new TypeError("Entry kind must be a non-empty string");
-  return {
-    kind,
-    is: (entry) => entry !== void 0 && entry.kind === kind
-  };
-}
-var UserEntry = defineEntry("pi.user");
-var AssistantEntry = defineEntry("pi.assistant");
-var SystemEntry = defineEntry("pi.system");
-var ToolResultEntry = defineEntry("pi.tool-result");
-var ResetEntry = defineEntry("pi.reset");
-var CompactionEntry = defineEntry("pi.compaction");
-
-// node_modules/@earendil-works/pi-durable/dist/errors.js
-var ReadAfterWrite = class extends Error {
-  constructor(method) {
-    super(`Tx.${method}() cannot read tables after the first table write`);
-    this.name = "ReadAfterWrite";
-  }
-};
-var StorageRejected = class extends Error {
-  constructor(message, options) {
-    super(message, options);
-    this.name = "StorageRejected";
-  }
-};
-var ConversationBusy = class extends Error {
-  conversationId;
-  constructor(conversationId) {
-    super(`Conversation ${conversationId} is busy`);
-    this.name = "ConversationBusy";
-    this.conversationId = conversationId;
-  }
-};
-
-// node_modules/@earendil-works/pi-durable/dist/harness/agent.js
-var DEFAULT_RETRY_POLICY = {
-  enabled: true,
-  maxRetries: 3,
-  baseDelayMs: 2e3,
-  maxAgentDelayMs: 6e4
-};
-var DEFAULT_COMPACTION_POLICY = {
-  enabled: true,
-  reserveTokens: 16384,
-  keepRecentTokens: 2e4,
-  backgroundTokens: 32768
-};
-var DEFAULT_PROGRESS_POLICY = {
-  partialIntervalMs: 100,
-  outputIntervalMs: 100
-};
-var INSTRUCTIONS_KEY = "instructions";
-var AgentDoc = defineDoc({
-  kind: "pi.agent",
-  version: 1,
-  scope: "conversation",
-  history: "rewindable",
-  fork: "asOf",
-  initial: () => ({}),
-  checkpointWhen: () => true
-});
-function resolveSettings(settings2) {
-  const extensions = settings2?.extensions;
-  return {
-    ...extensions === void 0 ? {} : { extensions },
-    stream: { ...settings2?.stream },
-    retry: { ...DEFAULT_RETRY_POLICY, ...settings2?.retry },
-    compaction: { ...DEFAULT_COMPACTION_POLICY, ...settings2?.compaction },
-    // Field by field, so an explicitly undefined interval keeps its default.
-    progress: {
-      partialIntervalMs: settings2?.progress?.partialIntervalMs ?? DEFAULT_PROGRESS_POLICY.partialIntervalMs,
-      outputIntervalMs: settings2?.progress?.outputIntervalMs ?? DEFAULT_PROGRESS_POLICY.outputIntervalMs
-    },
-    toolExecution: settings2?.toolExecution ?? "parallel",
-    steeringMode: settings2?.steeringMode ?? "one-at-a-time",
-    followUpMode: settings2?.followUpMode ?? "one-at-a-time"
-  };
-}
-async function configure(tx, conversationId, change) {
-  const state3 = await tx.doc(AgentDoc, conversationId);
-  applyChange(state3, change);
-}
-async function addTools(tx, conversationId, added) {
-  const state3 = await tx.doc(AgentDoc, conversationId);
-  const tools = state3.tools;
-  if (tools === void 0)
-    return;
-  if (Array.isArray(tools)) {
-    for (const name of added)
-      if (!tools.includes(name))
-        tools.push(name);
-  } else {
-    const remove = tools.remove;
-    if (remove.some((name) => added.includes(name))) {
-      state3.tools = { remove: remove.filter((name) => !added.includes(name)) };
-    }
-  }
-}
-function applyChange(state3, change) {
-  const set = (key, value) => {
-    if (value === void 0)
-      return;
-    if (value === null)
-      delete state3[key];
-    else
-      state3[key] = value;
-  };
-  set("model", change.model === void 0 || change.model === null ? change.model : { ...change.model });
-  set("thinkingLevel", change.thinkingLevel);
-  const extensions = change.extensions;
-  set("extensions", extensions === void 0 || extensions === null ? extensions : isList(extensions) ? names(extensions) : {
-    ...extensions.add === void 0 ? {} : { add: names(extensions.add) },
-    ...extensions.remove === void 0 ? {} : { remove: names(extensions.remove) }
-  });
-  const tools = change.tools;
-  set("tools", tools === void 0 || tools === null ? tools : isList(tools) ? names(tools) : { remove: names(tools.remove) });
-  set("instructions", change.instructions);
-  set("cwd", change.cwd);
-}
-function isList(value) {
-  return Array.isArray(value);
-}
-function names(items) {
-  return items.map((item) => item.name);
-}
-async function createAgent(tx, conversation) {
-  if (conversation.parent !== void 0)
-    return;
-  const agent = await tx.doc(AgentDoc, conversation.id);
-  if (conversation.owner === void 0)
-    return;
-  const owner = await tx.doc(AgentDoc, conversation.owner.conversationId);
-  Object.assign(agent, copyJson(owner));
-}
-function agentHooks(agent, taskName) {
-  const handlers = [];
-  for (const extension of agent.extensions) {
-    for (const hook2 of extension.hooks ?? [])
-      if (hook2.task === taskName)
-        handlers.push(hook2.handlers);
-  }
-  return handlers;
-}
-function resolveAgent(state3, snapshot, settings2, report) {
-  const extensions = selectExtensions(state3?.extensions, snapshot, settings2);
-  const composed = /* @__PURE__ */ new Map();
-  for (const extension of extensions)
-    for (const tool of extension.tools ?? [])
-      composed.set(tool.name, tool);
-  const sections = /* @__PURE__ */ new Map();
-  for (const extension of extensions) {
-    for (const section2 of extension.sections ?? [])
-      sections.set(section2.key, section2);
-  }
-  for (const extension of extensions) {
-    for (const wrap of extension.wraps ?? []) {
-      if ("tool" in wrap)
-        applyWrap(composed, wrap.tool, (tool) => wrap.wrap(tool), (tool) => tool.name, report);
-      else
-        applyWrap(sections, wrap.section, (section2) => wrap.wrap(section2), (section2) => section2.key, report);
-    }
-  }
-  const filter = state3?.tools;
-  let tools;
-  if (filter === void 0)
-    tools = [...composed.values()];
-  else if (Array.isArray(filter)) {
-    tools = [];
-    for (const name of new Set(filter)) {
-      const tool = composed.get(name);
-      if (tool !== void 0)
-        tools.push(tool);
-    }
-  } else {
-    const removed = new Set(filter.remove);
-    tools = [...composed.values()].filter((tool) => !removed.has(tool.name));
-  }
-  const instructions2 = state3?.instructions;
-  const agentSections = [...sections.values()];
-  if (instructions2 !== void 0)
-    agentSections.push({ key: INSTRUCTIONS_KEY, render: () => instructions2 });
-  const agent = {
-    ...state3?.model === void 0 ? {} : { model: state3.model },
-    thinkingLevel: state3?.thinkingLevel ?? "off",
-    extensions,
-    tools,
-    sections: agentSections,
-    ...instructions2 === void 0 ? {} : { instructions: instructions2 },
-    ...state3?.cwd === void 0 ? {} : { cwd: state3.cwd }
-  };
-  return agent;
-}
-function selectExtensions(stored, snapshot, settings2) {
-  let selected;
-  if (Array.isArray(stored))
-    selected = stored;
-  else {
-    const base = settings2.extensions?.map((extension) => extension.name) ?? snapshot.installed().map((e) => e.name);
-    const edit = stored;
-    const removed = new Set(edit?.remove ?? []);
-    selected = [...base, ...edit?.add ?? []].filter((name) => !removed.has(name));
-  }
-  const extensions = [];
-  for (const name of new Set(selected)) {
-    const extension = snapshot.extension(name);
-    if (extension !== void 0)
-      extensions.push(extension);
-  }
-  return extensions;
-}
-function applyWrap(items, target, wrap, nameOf, report) {
-  const item = items.get(target);
-  if (item === void 0)
-    return;
-  try {
-    const wrapped = wrap(item);
-    if (nameOf(wrapped) !== target)
-      throw new Error(`Wrapper renamed ${target} to ${nameOf(wrapped)}`);
-    items.set(target, wrapped);
-  } catch (error) {
-    items.delete(target);
-    report(error);
-  }
-}
-
-// node_modules/@earendil-works/pi-durable/dist/harness/compaction.js
-init_estimate();
-
-// node_modules/@earendil-works/pi-ai/dist/utils/retry.js
-function buildProviderErrorPattern(patterns) {
-  return new RegExp(patterns.join("|"), "i");
-}
-var NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN = buildProviderErrorPattern([
-  // OpenCode Go/free-tier limits returned as 429 JSON error types by OpenCode's
-  // Zen API. These are subscription/account limits, not transient throttles.
-  "GoUsageLimitError",
-  "FreeUsageLimitError",
-  // OpenCode Go subscription-limit text asks users to enable available-balance
-  // usage after rolling/weekly/monthly limits are reached.
-  "Monthly usage limit reached",
-  "available balance",
-  // Generic quota/budget/billing exhaustion. `insufficient_quota` is OpenAI's
-  // quota/billing error code; the other strings cover common gateway wording.
-  "insufficient_quota",
-  "out of budget",
-  "quota exceeded",
-  "billing",
-  // Sign in with ChatGPT: the subscription's shared usage limit, which resets
-  // after hours rather than seconds.
-  "subscription_sharing_usage_limit_exceeded"
-]);
-var RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
-  // Generic provider load, HTTP status, and server-side transient failures.
-  "overloaded",
-  "currently experiencing high demand",
-  "model is at capacity",
-  "rate.?limit",
-  "too many requests",
-  "429",
-  "500",
-  "502",
-  "503",
-  "504",
-  "520",
-  "524",
-  "service.?unavailable",
-  "server.?error",
-  "internal.?error",
-  // Wrapper/provider text for transient upstream failures, including OpenRouter
-  // "Provider returned error" responses (#2264).
-  "provider.?returned.?error",
-  "exceeded request buffer limit while retrying upstream",
-  // Network, proxy, and fetch transport failures. This includes OpenAI Codex
-  // raw-fetch failures such as "upstream connect", "connection refused", and
-  // "reset before headers" (#733), plus OpenRouter connection drops (#3317).
-  "network.?error",
-  "connection.?error",
-  "connection.?refused",
-  "connection.?lost",
-  "other side closed",
-  "fetch failed",
-  "getaddrinfo",
-  "ENOTFOUND",
-  "EAI_AGAIN",
-  "upstream.?connect",
-  "reset before headers",
-  "socket hang up",
-  "socket connection was closed",
-  "timed? out",
-  "timeout",
-  "terminated",
-  // WebSocket transports can report close/error text instead of HTTP/fetch text.
-  "websocket.?closed",
-  "websocket.?error",
-  // Premature stream endings from SDKs and transports. Anthropic can throw
-  // "stream ended without ..." and "Anthropic stream ended before message_stop"
-  // (#4433); Bedrock/Smithy can throw an HTTP/2 no-response error (#3594).
-  "ended without",
-  "stream ended before message_stop",
-  "stream ended before a terminal response event",
-  "http2 request did not get a response",
-  // Node ERR_HTTP2_STREAM_CANCEL: the HTTP/2 session died before the request was
-  // sent, e.g. after the Bedrock SDK's 5-minute session timeout (#10379).
-  "pending stream has been canceled",
-  // Provider-requested retry delay cap failures should flow through the outer
-  // retry policy so callers can surface/abort the backoff (#1123).
-  "retry delay",
-  // Explicit retry guidance emitted mid-stream by OpenAI Responses and Bedrock
-  // stream exceptions (#6019).
-  "you can retry your request",
-  "try your request again",
-  "please retry your request",
-  // gRPC based providers (e.g. NVIDIA NIM)
-  "ResourceExhausted",
-  // Sign in with ChatGPT: usage or user data temporarily unavailable. Usage
-  // failures can arrive mid-stream without an HTTP 503 in the message.
-  "subscription_sharing_usage_unavailable",
-  "subscription_sharing_user_unavailable"
-]);
-var DEFAULT_MAX_AGENT_RETRY_DELAY_MS = 6e4;
-function retryDelayMs(policy, attempt) {
-  const delay2 = policy.baseDelayMs * 2 ** Math.max(0, attempt - 1);
-  const safeDelay = Number.isSafeInteger(delay2) ? delay2 : Number.MAX_SAFE_INTEGER;
-  return Math.min(safeDelay, policy.maxAgentDelayMs ?? DEFAULT_MAX_AGENT_RETRY_DELAY_MS);
-}
-function isRetryableAssistantError(message) {
-  if (message.stopReason !== "error" || !message.errorMessage)
-    return false;
-  const errorMessage = message.errorMessage;
-  if (NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN.test(errorMessage))
-    return false;
-  return RETRYABLE_PROVIDER_ERROR_PATTERN.test(errorMessage);
-}
-
-// node_modules/@earendil-works/pi-durable/dist/tasks.js
-function defineTask(definition) {
-  return { definition };
-}
-
-// node_modules/@earendil-works/pi-durable/dist/harness/context.js
-var SCAN_PAGE_SIZE = 256;
-var EXCLUDED_STOP_REASONS = /* @__PURE__ */ new Set(["aborted", "error", "deferred"]);
-var MISSING_RESULT_TEXT = "Tool result unavailable: history ends before this call completed.";
-async function captureContextBounds(storage, conversationId, context, at) {
-  let tail;
-  if (at === void 0) {
-    tail = (await storage.scanEntries({ conversationId }, 1, void 0, context)).items[0]?.id;
-    if (tail === void 0)
-      return void 0;
-  } else {
-    if (await storage.entry(conversationId, at, context) === void 0) {
-      throw new Error(`Entry ${at} is not visible from conversation ${conversationId}`);
-    }
-    tail = at;
-  }
-  return { head: await storage.findLatestHeadMarker(conversationId, tail, context), tail };
-}
-async function readContext(session, storage, conversationId, context, at) {
-  const bounds = await session.readOnLine(() => captureContextBounds(storage, conversationId, context, at));
-  return deriveContext(storage, conversationId, bounds, context);
-}
-async function deriveContext(storage, conversationId, bounds, context) {
-  if (bounds === void 0)
-    return { head: void 0, entries: [], contributions: [], messages: [] };
-  const head = bounds.head;
-  const range = await scanRange(storage, conversationId, bounds, context);
-  const edits = /* @__PURE__ */ new Map();
-  for (const entry of range)
-    for (const edit of entry.edits ?? [])
-      edits.set(edit.target, edit);
-  const entries = selectActive(head, range);
-  const contributions = entries.map((entry) => {
-    const edit = edits.get(entry.id);
-    if (edit?.action === "omit")
-      return [];
-    const contributed = edit?.action === "replace" ? edit.messages : entry.model ?? [];
-    return contributed.filter((message) => message.role !== "assistant" || !EXCLUDED_STOP_REASONS.has(message.stopReason));
-  });
-  return { head, entries, contributions, messages: orderToolResults(contributions.flat()) };
-}
-async function activeEntries(storage, conversationId, bounds, context) {
-  if (bounds === void 0)
-    return [];
-  return selectActive(bounds.head, await scanRange(storage, conversationId, bounds, context));
-}
-async function scanRange(storage, conversationId, bounds, context) {
-  const head = bounds.head;
-  const range = [];
-  let cursor;
-  do {
-    const page2 = await storage.scanEntries(head === void 0 ? { conversationId, maxEntryId: bounds.tail } : { conversationId, minEntryId: head.head, maxEntryId: bounds.tail }, SCAN_PAGE_SIZE, cursor, context);
-    range.push(...page2.items);
-    cursor = page2.next;
-  } while (cursor !== void 0);
-  return range.reverse();
-}
-function selectActive(head, range) {
-  return head === void 0 ? range : [head, ...range.filter((entry) => entry.head === void 0)];
-}
-function orderToolResults(messages) {
-  const ordered = [];
-  for (let index3 = 0; index3 < messages.length; index3++) {
-    const message = messages[index3];
-    if (message.role === "toolResult")
-      continue;
-    ordered.push(message);
-    if (message.role !== "assistant")
-      continue;
-    const calls = message.content.filter((content) => content.type === "toolCall");
-    if (calls.length === 0)
-      continue;
-    const results = /* @__PURE__ */ new Map();
-    for (let next = index3 + 1; next < messages.length && messages[next].role !== "assistant"; next++) {
-      const candidate = messages[next];
-      if (candidate.role === "toolResult" && !results.has(candidate.toolCallId)) {
-        results.set(candidate.toolCallId, next);
-      }
-    }
-    for (const call of calls) {
-      const resultIndex = results.get(call.id);
-      ordered.push(resultIndex === void 0 ? missingResult(call, message.timestamp) : messages[resultIndex]);
-    }
-  }
-  return ordered;
-}
-function missingResult(call, timestamp) {
-  return {
-    role: "toolResult",
-    toolCallId: call.id,
-    toolName: call.name,
-    content: [{ type: "text", text: MISSING_RESULT_TEXT }],
-    isError: true,
-    details: { reason: "missing_result" },
-    timestamp
-  };
-}
-
-// node_modules/@earendil-works/pi-ai/dist/utils/overflow.js
-var OVERFLOW_PATTERNS = [
-  /prompt (?:is )?too long/i,
-  // Anthropic and z.ai token overflow
-  /prompt exceeds max length/i,
-  // z.ai CN endpoint token overflow
-  /request_too_large/i,
-  // Anthropic request byte-size overflow (HTTP 413)
-  /input is too long for requested model/i,
-  // Amazon Bedrock
-  /exceeds the context window/i,
-  // OpenAI (Completions & Responses API)
-  /exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\))/i,
-  // OpenAI-compatible proxies (LiteLLM)
-  /input token count.*exceeds the maximum/i,
-  // Google (Gemini)
-  /maximum prompt length is \d+/i,
-  // xAI (Grok)
-  /reduce the length of the messages/i,
-  // Groq
-  /maximum context length is \d+ tokens/i,
-  // OpenRouter (most backends)
-  /exceeds (?:the )?maximum allowed input length of [\d,]+ tokens?/i,
-  // OpenRouter/Poolside
-  /input \(\d+ tokens\) is longer than the model'?s context length \(\d+ tokens\)/i,
-  // Together AI
-  /exceeds the limit of \d+/i,
-  // GitHub Copilot
-  /exceeds the available context size/i,
-  // llama.cpp server
-  /greater than the context length/i,
-  // LM Studio
-  /context window exceeds limit/i,
-  // MiniMax
-  /exceeded model token limit/i,
-  // Kimi For Coding
-  /too large for model with \d+ maximum context length/i,
-  // Mistral
-  /prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?/i,
-  // DS4 server
-  /model_context_window_exceeded/i,
-  // z.ai non-standard finish_reason surfaced as error text
-  /prompt too long; exceeded (?:max )?context length/i,
-  // Ollama explicit overflow error
-  /range of input length should be/i,
-  // DashScope / Qwen Token Plan
-  /context[_ ]length[_ ]exceeded/i,
-  // Generic fallback
-  /too many tokens/i,
-  // Generic fallback
-  /token limit exceeded/i
-  // Generic fallback
-];
-var CEREBRAS_BODYLESS_OVERFLOW_PATTERN = /^4(?:00|13)\s*(?:status code)?\s*\(no body\)/i;
-var NON_OVERFLOW_PATTERNS = [
-  /^(Throttling error|Service unavailable):/i,
-  // AWS Bedrock non-overflow errors (human-readable prefixes from formatBedrockError)
-  /rate limit/i,
-  // Generic rate limiting
-  /too many requests/i
-  // Generic HTTP 429 style
-];
-function isContextOverflow(message, contextWindow) {
-  if (message.stopReason === "error" && message.errorMessage) {
-    const isNonOverflow = NON_OVERFLOW_PATTERNS.some((p) => p.test(message.errorMessage));
-    if (!isNonOverflow) {
-      if (OVERFLOW_PATTERNS.some((p) => p.test(message.errorMessage))) {
-        return true;
-      }
-      if (message.provider === "cerebras" && CEREBRAS_BODYLESS_OVERFLOW_PATTERN.test(message.errorMessage)) {
-        return true;
-      }
-    }
-  }
-  if (contextWindow && message.stopReason === "stop") {
-    const inputTokens = message.usage.input + message.usage.cacheRead;
-    if (inputTokens > contextWindow) {
-      return true;
-    }
-  }
-  if (contextWindow && message.stopReason === "length" && message.usage.output === 0) {
-    const inputTokens = message.usage.input + message.usage.cacheRead;
-    if (inputTokens >= contextWindow * 0.99) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// node_modules/@earendil-works/pi-durable/dist/harness/generation.js
-init_transcript();
-
-// node_modules/@earendil-works/pi-durable/dist/harness/inbox.js
-var InboxDoc = defineDoc({
-  kind: "pi.inbox",
-  version: 1,
-  scope: "conversation",
-  history: "latest",
-  fork: "initial",
-  initial: () => ({ items: [] }),
-  checkpointWhen: (value) => value.items.length === 0
-});
-async function prepareBoundary(tx, conversationId, modes) {
-  const head = (await tx.latestHeadMarker(conversationId))?.head;
-  const inbox = await tx.doc(InboxDoc, conversationId);
-  return {
-    conversationId,
-    inbox,
-    steeringMode: modes.steeringMode,
-    followUpMode: modes.followUpMode,
-    head
-  };
-}
-async function applyBoundary(tx, boundary, at, now) {
-  const { conversationId, inbox } = boundary;
-  const items = inbox.items;
-  const reset = items.some((item) => item.mode === "write" && item.entry.head === "self");
-  const final = at === "final" || reset;
-  const pick = (mode, queueMode) => {
-    const indexes = items.flatMap((item, index3) => item.mode === mode ? [index3] : []);
-    return queueMode === "all" ? indexes : indexes.slice(0, 1);
-  };
-  const writes = items.flatMap((item, index3) => item.mode === "write" ? [index3] : []);
-  const users = [...pick("steer", boundary.steeringMode), ...final ? pick("followUp", boundary.followUpMode) : []];
-  users.sort((a, b) => a - b);
-  for (const index3 of writes) {
-    const item = items[index3];
-    const draft = item.entry;
-    if (isStale(boundary, draft)) {
-      tx.settleSubmission(item.id, { status: "unanswered", reason: "stale" });
-      continue;
-    }
-    const entry = await tx.appendEntry(conversationId, draft);
-    if (draft.head !== void 0)
-      boundary.head = draft.head === "self" ? entry.id : draft.head;
-    tx.placeSubmission(item.id, entry.id);
-  }
-  const placed = [];
-  for (const index3 of users) {
-    const item = items[index3];
-    const message = { role: "user", content: item.content, timestamp: now };
-    const entry = await tx.appendEntry(UserEntry, conversationId, { model: [message] });
-    tx.placeSubmission(item.id, entry.id);
-    placed.push(item.id);
-  }
-  const removed = [...writes, ...users].sort((a, b) => b - a);
-  for (const index3 of removed)
-    items.splice(index3, 1);
-  return { users: placed, reset };
-}
-function isStale(boundary, entry) {
-  return typeof entry.head === "number" && boundary.head !== void 0 && entry.head < boundary.head;
-}
-async function removeInboxItem(tx, conversationId, id) {
-  const items = (await tx.doc(InboxDoc, conversationId)).items;
-  const index3 = items.findIndex((item) => item.id === id);
-  if (index3 >= 0)
-    items.splice(index3, 1);
-}
-async function withdrawQueuedInputs(tx, conversationId) {
-  const items = (await tx.doc(InboxDoc, conversationId)).items;
-  for (let index3 = items.length - 1; index3 >= 0; index3--) {
-    const item = items[index3];
-    if (item.mode === "write")
-      continue;
-    tx.settleSubmission(item.id, { status: "unanswered", reason: "aborted" });
-    items.splice(index3, 1);
-  }
-}
-
-// node_modules/@earendil-works/pi-durable/dist/harness/json.js
-function assignJson(target, key, value) {
-  const slots = target;
-  const current = slots[key];
-  if (isRecord(current) && isRecord(value)) {
-    for (const name of Object.keys(current))
-      if (!Object.hasOwn(value, name))
-        delete current[name];
-    for (const [name, child] of Object.entries(value))
-      assignJson(current, name, child);
-    return;
-  }
-  if (Array.isArray(current) && Array.isArray(value) && current.length <= value.length) {
-    const items = current;
-    for (let index3 = 0; index3 < value.length; index3++) {
-      if (index3 < items.length)
-        assignJson(items, index3, value[index3]);
-      else
-        items.push(value[index3]);
-    }
-    return;
-  }
-  if (current !== value)
-    slots[key] = value;
-}
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// node_modules/@earendil-works/pi-durable/dist/harness/prompt.js
-init_transcript();
-function replaySections(messages) {
-  const shown = /* @__PURE__ */ new Map();
-  for (const message of messages) {
-    if (message.role !== "system" || message.sections === void 0)
-      continue;
-    for (const [key, value] of Object.entries(message.sections)) {
-      if (value === null)
-        shown.delete(key);
-      else
-        shown.set(key, value);
-    }
-  }
-  return shown;
-}
-async function renderSections(sections, input, shown, report, context) {
-  const desired = /* @__PURE__ */ new Map();
-  for (const section2 of sections) {
-    let text;
-    try {
-      text = await section2.render(input, context);
-    } catch (error) {
-      if (context.abortSignal?.aborted)
-        throw error;
-      report(error);
-      const kept = shown.get(section2.key);
-      if (kept !== void 0)
-        desired.set(section2.key, kept);
-      continue;
-    }
-    if (text === void 0)
-      continue;
-    desired.set(section2.key, section2.tag === false ? text : `<${section2.key}>
-${text}
-</${section2.key}>`);
-  }
-  return desired;
-}
-function planSystemEntries(view, desired, tools, timestamp) {
-  const head = view.head;
-  if (head !== void 0 && !view.entries.some((entry) => SystemEntry.is(entry) && entry.id > head.id)) {
-    const edits = view.entries.filter((entry) => SystemEntry.is(entry)).map((entry) => ({ target: entry.id, action: "omit" }));
-    const baseline = systemEntry(Object.fromEntries(desired), { toolsRemoved: [], toolsAdded: tools.map(toToolDeclaration) }, timestamp);
-    return [edits.length === 0 ? baseline : { ...baseline, edits }];
-  }
-  const sections = planSections(replaySections(view.messages), desired);
-  const changes = planTools(getCurrentTools(view.messages), tools);
-  if (changes.toolsRemoved.length === 0 && changes.toolsAdded.length === 0) {
-    return sections.map((patch) => systemEntry(patch, void 0, timestamp));
-  }
-  if (sections.length === 0)
-    return [systemEntry(void 0, changes, timestamp)];
-  return sections.map((patch, index3) => systemEntry(patch, index3 === sections.length - 1 ? changes : void 0, timestamp));
-}
-function planTools(offered, desired) {
-  const wanted = new Map(desired.map((tool) => [tool.name, tool]));
-  const kept = offered.filter((tool) => {
-    const next = wanted.get(tool.name);
-    return next !== void 0 && declarationsEqual(tool, next);
-  });
-  const keptNames = new Set(kept.map((tool) => tool.name));
-  const added = desired.filter((tool) => !keptNames.has(tool.name));
-  const replayed = [...kept, ...added];
-  if (replayed.some((tool, index3) => tool.name !== desired[index3].name)) {
-    return {
-      toolsRemoved: offered.map((tool) => ({ name: tool.name })),
-      toolsAdded: desired.map(toToolDeclaration)
-    };
-  }
-  return {
-    toolsRemoved: offered.filter((tool) => !keptNames.has(tool.name)).map((tool) => ({ name: tool.name })),
-    toolsAdded: added.map(toToolDeclaration)
-  };
-}
-function planSections(shown, desired) {
-  const patchedOrder = [
-    ...[...shown.keys()].filter((key) => desired.has(key)),
-    ...[...desired.keys()].filter((key) => !shown.has(key))
-  ];
-  const desiredOrder = [...desired.keys()];
-  if (patchedOrder.some((key, index3) => key !== desiredOrder[index3])) {
-    return [Object.fromEntries([...shown.keys()].map((key) => [key, null])), Object.fromEntries(desired)];
-  }
-  const patch = {};
-  for (const [key, value] of shown) {
-    const next = desired.get(key);
-    if (next !== value)
-      patch[key] = next ?? null;
-  }
-  for (const [key, value] of desired)
-    if (!shown.has(key))
-      patch[key] = value;
-  return Object.keys(patch).length === 0 ? [] : [patch];
-}
-function systemEntry(sections, tools, timestamp) {
-  const message = {
-    role: "system",
-    content: "",
-    ...sections === void 0 ? {} : { sections },
-    ...tools === void 0 || tools.toolsRemoved.length === 0 ? {} : { toolsRemoved: tools.toolsRemoved },
-    ...tools === void 0 || tools.toolsAdded.length === 0 ? {} : { toolsAdded: tools.toolsAdded },
-    timestamp
-  };
-  return { model: [message] };
-}
-
-// node_modules/@earendil-works/pi-ai/dist/utils/uuid.js
-var MAX_UUID_V7_TIMESTAMP = 281474976710655;
-var MAX_SEQUENCE = (1n << 41n) - 1n;
-var lastOrdinaryTimestamp = -1;
-var sequence;
-function uuidv7(timestampMs) {
-  const requestedTimestamp = timestampMs ?? Date.now();
-  if (!Number.isInteger(requestedTimestamp) || requestedTimestamp < 0 || requestedTimestamp > MAX_UUID_V7_TIMESTAMP) {
-    throw new RangeError(`UUIDv7 timestamp must be an integer between 0 and ${MAX_UUID_V7_TIMESTAMP}`);
-  }
-  const effectiveTimestamp = timestampMs === void 0 ? Math.max(requestedTimestamp, lastOrdinaryTimestamp) : timestampMs;
-  if (timestampMs === void 0)
-    lastOrdinaryTimestamp = effectiveTimestamp;
-  const bytes = new Uint8Array(16);
-  globalThis.crypto.getRandomValues(bytes);
-  if (sequence === void 0) {
-    sequence = BigInt(bytes[1]) << 32n | BigInt(bytes[2]) << 24n | BigInt(bytes[3]) << 16n | BigInt(bytes[4]) << 8n | BigInt(bytes[5]);
-  } else {
-    if (sequence === MAX_SEQUENCE)
-      throw new RangeError("UUIDv7 generator sequence exhausted");
-    sequence++;
-  }
-  const timestamp = BigInt(effectiveTimestamp);
-  for (let index3 = 5; index3 >= 0; index3--) {
-    bytes[index3] = Number(timestamp >> BigInt((5 - index3) * 8)) & 255;
-  }
-  bytes[6] = 112 | Number(sequence >> 37n & 0x0fn);
-  bytes[7] = Number(sequence >> 29n & 0xffn);
-  bytes[8] = 128 | Number(sequence >> 23n & 0x3fn);
-  bytes[9] = Number(sequence >> 15n & 0xffn);
-  bytes[10] = Number(sequence >> 7n & 0xffn);
-  bytes[11] = Number((sequence & 0x7fn) << 1n) | bytes[11] & 1;
-  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
-  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
-}
-
-// node_modules/@earendil-works/pi-durable/dist/harness/provider.js
-var ProviderDoc = defineDoc({
-  kind: "pi.provider",
-  version: 1,
-  scope: "conversation",
-  history: "latest",
-  fork: "initial",
-  initial: () => ({ sessionId: uuidv7() }),
-  checkpointWhen: () => true
-});
-async function ensureProviderSessionId(runtime, context) {
-  const existing = await runtime.snapshot(ProviderDoc, runtime.conversationId, context);
-  if (existing !== void 0)
-    return existing.sessionId;
-  let created;
-  await runtime.commit(async (tx) => {
-    created = (await tx.doc(ProviderDoc, runtime.conversationId)).sessionId;
-    return void 0;
-  }, context);
-  if (created === void 0)
-    throw new Error(`Conversation ${runtime.conversationId} has no provider session ID`);
-  return created;
-}
 
 // node_modules/typebox/build/system/arguments/arguments.mjs
 var arguments_exports = {};
@@ -31655,15 +28029,15 @@ function ErrorSchema(stack, context, schemaPath, instancePath, schema, value) {
 
 // node_modules/typebox/build/schema/engine/_functions.mjs
 var index2 = [0];
-var names2 = /* @__PURE__ */ new Map();
+var names = /* @__PURE__ */ new Map();
 var funcs = /* @__PURE__ */ new Map();
 function NextName() {
   return `${index2[0]++}`;
 }
 function CreateName(schema, href) {
-  if (!names2.has(schema))
-    names2.set(schema, /* @__PURE__ */ new Map());
-  const hrefs = names2.get(schema);
+  if (!names.has(schema))
+    names.set(schema, /* @__PURE__ */ new Map());
+  const hrefs = names.get(schema);
   if (hrefs.has(href))
     return hrefs.get(href);
   const name = NextName();
@@ -31679,7 +28053,7 @@ function CreateFunctionExpression(stack, context, schema, name) {
 }
 function ResetFunctions() {
   index2[0] = 0;
-  names2.clear();
+  names.clear();
   funcs.clear();
 }
 function GetFunctions() {
@@ -37807,6 +34181,5707 @@ __export(value_exports, {
   Repair: () => Repair
 });
 
+// node_modules/@earendil-works/chord/dist/json.js
+var DATA_DESCRIPTOR = {
+  value: void 0,
+  writable: true,
+  enumerable: true,
+  configurable: true
+};
+function copyJson(value, options) {
+  return copy(value, void 0, options?.omitUndefinedProperties === true);
+}
+function copy(value, ancestors, omitUndefinedProperties) {
+  if (value === null || typeof value === "string" || typeof value === "boolean")
+    return value;
+  if (typeof value === "number") {
+    if (Number.isFinite(value))
+      return value;
+    throw new TypeError("Value contains a non-finite number and is not strict JSON");
+  }
+  if (typeof value !== "object")
+    throw new TypeError(`Value contains a non-JSON ${typeof value}; expected strict JSON`);
+  const active = ancestors ?? /* @__PURE__ */ new Set();
+  if (active.has(value))
+    throw new TypeError("Value contains cycles and is not strict JSON");
+  active.add(value);
+  try {
+    if (Array.isArray(value)) {
+      if (Object.getPrototypeOf(value) !== Array.prototype || Reflect.ownKeys(value).length !== value.length + 1) {
+        throw new TypeError("Value must contain strict JSON dense plain arrays");
+      }
+      const result2 = new Array(value.length);
+      for (let index3 = 0; index3 < value.length; index3++) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, index3);
+        if (descriptor === void 0 || !descriptor.enumerable || !("value" in descriptor)) {
+          throw new TypeError("Value must contain strict JSON enumerable indexed data properties");
+        }
+        defineData(result2, String(index3), copy(descriptor.value, active, omitUndefinedProperties));
+      }
+      return result2;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError("Value must contain strict JSON plain objects or arrays");
+    }
+    const result = Object.create(prototype);
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key === "symbol")
+        throw new TypeError("Value contains a symbol key and is not strict JSON");
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor.enumerable || !("value" in descriptor)) {
+        throw new TypeError("Value must contain strict JSON enumerable data properties");
+      }
+      if (descriptor.value === void 0 && omitUndefinedProperties)
+        continue;
+      defineData(result, key, copy(descriptor.value, active, omitUndefinedProperties));
+    }
+    return result;
+  } finally {
+    active.delete(value);
+  }
+}
+function defineData(target, key, value) {
+  DATA_DESCRIPTOR.value = value;
+  Object.defineProperty(target, key, DATA_DESCRIPTOR);
+  DATA_DESCRIPTOR.value = void 0;
+}
+
+// node_modules/@earendil-works/chord/dist/delta/apply-immutable-trusted.js
+var DATA_DESCRIPTOR2 = {
+  value: void 0,
+  writable: true,
+  enumerable: true,
+  configurable: true
+};
+function applyImmutableTrusted(target, operations) {
+  let root = target;
+  const owned = /* @__PURE__ */ new WeakSet();
+  for (const operation of operations) {
+    if (operation[0] === "r") {
+      root = operation[1];
+      continue;
+    }
+    if (operation[0] === "p" || operation[0] === "m") {
+      const copied2 = copyPath(root, operation[1], operation[1].length, owned);
+      root = copied2.root;
+      if (!Array.isArray(copied2.target))
+        throw new TypeError("Trusted array operation target is not an array");
+      if (operation[0] === "p")
+        spliceTrusted(copied2.target, operation[2], operation[3], operation[4]);
+      else
+        permuteTrusted(copied2.target, operation[2]);
+      continue;
+    }
+    const path5 = operation[1];
+    const copied = copyPath(root, path5, path5.length - 1, owned);
+    root = copied.root;
+    const key = path5[path5.length - 1];
+    switch (operation[0]) {
+      case "s":
+        defineData2(copied.target, key, operation[2]);
+        break;
+      case "d":
+        if (Array.isArray(copied.target)) {
+          if (typeof key !== "number")
+            throw new TypeError("Trusted array deletion key is not numeric");
+          spliceTrusted(copied.target, key, 1, []);
+        } else
+          Reflect.deleteProperty(copied.target, key);
+        break;
+      case "a": {
+        const current = read(copied.target, key);
+        if (typeof current !== "string")
+          throw new TypeError("Trusted append target is not a string");
+        defineData2(copied.target, key, `${current}${operation[2]}`);
+        break;
+      }
+      case "t": {
+        const current = read(copied.target, key);
+        if (typeof current !== "string")
+          throw new TypeError("Trusted truncate target is not a string");
+        defineData2(copied.target, key, current.slice(operation[2]));
+        break;
+      }
+    }
+  }
+  return root;
+}
+function copyPath(root, path5, length, owned) {
+  if (!isContainer(root))
+    throw new TypeError("Trusted operation root is not a container");
+  let copiedRoot = root;
+  if (!owned.has(root)) {
+    copiedRoot = shallowCopy(root);
+    owned.add(copiedRoot);
+  }
+  let destination = copiedRoot;
+  for (let index3 = 0; index3 < length; index3++) {
+    const segment = path5[index3];
+    const child = read(destination, segment);
+    if (!isContainer(child))
+      throw new TypeError("Trusted operation path is not a container");
+    if (owned.has(child)) {
+      destination = child;
+      continue;
+    }
+    const copy2 = shallowCopy(child);
+    defineData2(destination, segment, copy2);
+    owned.add(copy2);
+    destination = copy2;
+  }
+  return { root: copiedRoot, target: destination };
+}
+function shallowCopy(value) {
+  if (Array.isArray(value))
+    return Array.from(value);
+  const result = Object.create(Object.getPrototypeOf(value) === null ? null : Object.prototype);
+  for (const key of Object.keys(value))
+    defineData2(result, key, value[key]);
+  return result;
+}
+function read(target, key) {
+  return target[key];
+}
+function defineData2(target, key, value) {
+  DATA_DESCRIPTOR2.value = value;
+  Object.defineProperty(target, key, DATA_DESCRIPTOR2);
+  DATA_DESCRIPTOR2.value = void 0;
+}
+function spliceTrusted(target, start, remove, items) {
+  const oldLength = target.length;
+  const delta = items.length - remove;
+  if (delta > 0) {
+    target.length = oldLength + delta;
+    target.copyWithin(start + items.length, start + remove, oldLength);
+  } else if (delta < 0) {
+    target.copyWithin(start + items.length, start + remove, oldLength);
+    target.length = oldLength + delta;
+  }
+  for (let index3 = 0; index3 < items.length; index3++)
+    defineData2(target, start + index3, items[index3]);
+}
+function permuteTrusted(target, permutation) {
+  if (target.length !== permutation.length)
+    throw new TypeError("Trusted permutation length mismatch");
+  const previous = target.slice();
+  for (let index3 = 0; index3 < permutation.length; index3++)
+    target[index3] = previous[permutation[index3]];
+}
+function isContainer(value) {
+  return value !== null && typeof value === "object";
+}
+
+// node_modules/@earendil-works/chord/dist/delta/tracker.js
+var NODE = /* @__PURE__ */ Symbol("chord.delta.overlay.node");
+var PREPARED = /* @__PURE__ */ new WeakMap();
+var RELEASED = {};
+var ARRAY_MUTATORS = /* @__PURE__ */ new Set([
+  "push",
+  "pop",
+  "shift",
+  "unshift",
+  "splice",
+  "reverse",
+  "sort",
+  "fill",
+  "copyWithin"
+]);
+var MAX_DELTA_OPERATIONS = 4096;
+var MAX_SIMPLE_OBJECT_NODES = 128;
+var DATA_DESCRIPTOR3 = {
+  value: void 0,
+  writable: true,
+  enumerable: true,
+  configurable: true
+};
+var PreparedImpl = class {
+  #context;
+  value;
+  base;
+  ops;
+  constructor(context, value, operations) {
+    this.#context = context;
+    this.value = value;
+    this.base = context.baseValue;
+    this.ops = operations;
+    PREPARED.set(this, context);
+  }
+  get baseRevision() {
+    return this.#context.baseRevision;
+  }
+  abort() {
+    abortContext(this.#context);
+  }
+};
+var ChangeImpl = class {
+  #context;
+  #preparedStatus;
+  #settled = false;
+  constructor(context) {
+    this.#context = context;
+  }
+  get state() {
+    const state3 = this.#context?.root?.proxy;
+    if (state3 === void 0)
+      throw new TypeError("Cannot use a settled overlay");
+    return state3;
+  }
+  prepare() {
+    if (this.#settled)
+      throw new Error("Change has already been settled");
+    const context = this.#context;
+    assertWritable(context);
+    context.status.value = "prepared";
+    try {
+      if (!context.replacement)
+        context.ops = context.dirty.length === 0 ? [] : emitOperations(context);
+      const prepared = materializePrepared(context);
+      this.#preparedStatus = context.status;
+      this.#settled = true;
+      return prepared;
+    } catch (error) {
+      context.status.value = "aborted";
+      clearContext(context);
+      this.#settled = true;
+      throw error;
+    } finally {
+      this.#context = void 0;
+    }
+  }
+  abort() {
+    if (this.#settled) {
+      if (this.#preparedStatus?.value === "prepared")
+        this.#preparedStatus.value = "aborted";
+      this.#preparedStatus = void 0;
+      return;
+    }
+    this.#settled = true;
+    abortContext(this.#context);
+    this.#context = void 0;
+  }
+};
+var TrackerImpl = class {
+  #owner = {};
+  #contexts = /* @__PURE__ */ new Set();
+  #selfRef;
+  #value;
+  #revision = 0;
+  #pruneBudget = 256;
+  constructor(initial) {
+    this.#value = initial;
+    this.#selfRef = new WeakRef(this);
+  }
+  get value() {
+    return this.#value;
+  }
+  get revision() {
+    return this.#revision;
+  }
+  beginChange() {
+    const context = createContext(this.#selfRef, this.#owner, this.#revision, this.#value, false, this.#value);
+    this.#register(context);
+    return new ChangeImpl(context);
+  }
+  prepareReplace(value) {
+    const context = createContext(this.#selfRef, this.#owner, this.#revision, value, true, this.#value);
+    context.status.value = "prepared";
+    this.#register(context);
+    try {
+      return materializePrepared(context);
+    } catch (error) {
+      context.status.value = "aborted";
+      clearContext(context);
+      throw error;
+    }
+  }
+  adopt(prepared) {
+    const context = PREPARED.get(prepared);
+    if (context?.owner !== this.#owner)
+      throw new Error("Prepared change belongs to a different tracker");
+    if (context.status.value === "consumed")
+      throw new Error("Prepared change has already been used");
+    if (context.status.value === "aborted")
+      throw new Error("Prepared change has been aborted");
+    if (context.status.value === "stale")
+      throw new Error("Prepared change is stale");
+    if (context.status.value !== "prepared")
+      throw new Error("Prepared change is not ready");
+    if (context.baseRevision !== this.#revision) {
+      context.status.value = "stale";
+      clearContext(context);
+      throw new Error("Prepared change is stale");
+    }
+    if (this.#value !== prepared.base) {
+      context.status.value = "stale";
+      throw new Error("Prepared change is stale");
+    }
+    this.#value = prepared.value;
+    context.status.value = "consumed";
+    this.#revision += 1;
+    this.#invalidate(context);
+  }
+  releaseContext(context) {
+    if (context.registryRef !== void 0)
+      this.#contexts.delete(context.registryRef);
+    context.registryRef = void 0;
+  }
+  #register(context) {
+    const reference = new WeakRef(context);
+    context.registryRef = reference;
+    this.#contexts.add(reference);
+    this.#pruneBudget -= 1;
+    if (this.#pruneBudget === 0) {
+      this.#prune();
+      this.#pruneBudget = Math.max(256, this.#contexts.size);
+    }
+  }
+  #prune() {
+    for (const reference of this.#contexts) {
+      if (reference.deref() === void 0)
+        this.#contexts.delete(reference);
+    }
+  }
+  #invalidate(winner) {
+    for (const reference of this.#contexts) {
+      const context = reference.deref();
+      if (context === void 0 || context === winner)
+        continue;
+      if (context.status.value === "open" || context.status.value === "prepared")
+        context.status.value = "stale";
+      releaseOverlayReferences(context);
+    }
+    this.#contexts.clear();
+    this.#pruneBudget = 256;
+  }
+  replacementBase(context) {
+    return context.baseRevision === this.#revision ? this.#value : void 0;
+  }
+};
+function track(initial) {
+  return new TrackerImpl(initial);
+}
+function materializePrepared(context) {
+  const operations = ensureOperations(context);
+  const base = context.baseValue;
+  const value = operations.length === 0 ? base : context.simpleObjectMaterialization ? cloneNode(context.root) : materializeOperations(base, operations);
+  const prepared = new PreparedImpl(context, value, operations);
+  if (context.nodes.length > 4096)
+    releaseOverlayReferences(context);
+  else
+    clearContext(context);
+  return prepared;
+}
+function materializeOperations(base, operations) {
+  for (const operation of operations) {
+    if (operation[0] === "p" || operation[0] === "m")
+      return applyImmutable(base, operations);
+  }
+  return applyImmutableTrusted(base, operations);
+}
+function createContext(tracker, owner, baseRevision, root, replacement, base) {
+  const context = {
+    owner,
+    tracker,
+    baseRevision,
+    status: { value: "open" },
+    root: void 0,
+    bases: [],
+    stored: [],
+    dirty: [],
+    nodes: [],
+    rawNodes: /* @__PURE__ */ new WeakMap(),
+    ops: void 0,
+    replacement,
+    replacementNoop: false,
+    baseValue: base,
+    overlayReleased: false,
+    simpleObjectMaterialization: false,
+    registryRef: void 0
+  };
+  context.root = createNode(context, root, void 0);
+  return context;
+}
+var sharedObjectHandler = {
+  deleteProperty(target, property) {
+    return deleteProperty(nodeForTarget(target), property);
+  },
+  defineProperty(target) {
+    assertWritable(nodeForTarget(target).context);
+    throw new TypeError("Defining overlay properties is not supported");
+  },
+  get(target, property) {
+    if (property === "then") {
+      const node2 = target[NODE];
+      if (node2 === void 0 || isSettledContext(node2.context))
+        return void 0;
+    }
+    const node = nodeForTarget(target);
+    if (property === NODE)
+      return node;
+    return getProperty(node, property);
+  },
+  getOwnPropertyDescriptor(target, property) {
+    return getDescriptor(nodeForTarget(target), property);
+  },
+  getPrototypeOf(target) {
+    const node = nodeForTarget(target);
+    assertReadable(node.context);
+    return Object.getPrototypeOf(nodeBase(node));
+  },
+  has(target, property) {
+    return hasProperty(nodeForTarget(target), property);
+  },
+  isExtensible(target) {
+    assertReadable(nodeForTarget(target).context);
+    return true;
+  },
+  ownKeys(target) {
+    return ownKeys(nodeForTarget(target));
+  },
+  preventExtensions(target) {
+    assertWritable(nodeForTarget(target).context);
+    throw new TypeError("Overlays cannot be made non-extensible");
+  },
+  set(target, property, value) {
+    return setProperty(nodeForTarget(target), property, value);
+  },
+  setPrototypeOf(target) {
+    assertWritable(nodeForTarget(target).context);
+    throw new TypeError("Changing an overlay prototype is not supported");
+  }
+};
+var sharedArrayHandler = sharedObjectHandler;
+function createNode(context, base, parent, parentKind = 0, parentKey = "", parentSource = void 0, parentPlacement = false) {
+  const existing = context.rawNodes.get(base);
+  if (existing !== void 0)
+    return existing;
+  const target = Array.isArray(base) ? [] : {};
+  const baseIndex = context.bases.length;
+  const parentIndex = parent?.baseIndex ?? -1;
+  context.bases.push(base);
+  const node = {
+    context,
+    baseIndex,
+    parentIndex,
+    parentKind,
+    parentKey,
+    parentPlacement,
+    target,
+    proxy: target
+  };
+  if (parentSource !== void 0)
+    node.parentSource = parentSource;
+  target[NODE] = node;
+  node.proxy = new Proxy(target, Array.isArray(base) ? sharedArrayHandler : sharedObjectHandler);
+  context.rawNodes.set(base, node);
+  context.nodes.push(node);
+  return node;
+}
+function nodeBase(node) {
+  return node.context.bases[node.baseIndex];
+}
+function nodeParent(node) {
+  return node.parentIndex < 0 ? void 0 : node.context.nodes[node.parentIndex];
+}
+function storeValue(context, value) {
+  if (!isContainer2(value))
+    return value;
+  const index3 = context.stored.length;
+  context.stored.push(value);
+  return { index: index3 };
+}
+function storedValue(context, reference) {
+  return typeof reference === "object" && reference !== null ? context.stored[reference.index] : reference;
+}
+function replaceStoredValue(context, reference, value) {
+  if (isContainer2(value)) {
+    if (typeof reference === "object" && reference !== null) {
+      context.stored[reference.index] = value;
+      return reference;
+    }
+    return storeValue(context, value);
+  }
+  if (typeof reference === "object" && reference !== null)
+    context.stored[reference.index] = RELEASED;
+  return value;
+}
+function releaseStoredValue(context, reference) {
+  if (typeof reference === "object" && reference !== null)
+    context.stored[reference.index] = RELEASED;
+}
+function nodeForTarget(target) {
+  const node = target[NODE];
+  if (node === void 0)
+    throw new TypeError("Cannot use a settled overlay");
+  return node;
+}
+function isSettledContext(context) {
+  return context.overlayReleased || context.status.value === "consumed" || context.status.value === "aborted" || context.status.value === "stale";
+}
+function assertReadable(context) {
+  if (isSettledContext(context))
+    throw new TypeError("Cannot use a settled overlay");
+}
+function assertWritable(context) {
+  assertReadable(context);
+  if (context.status.value !== "open")
+    throw new TypeError("Prepared overlays are read-only");
+}
+function getProperty(node, property) {
+  assertReadable(node.context);
+  if (Array.isArray(nodeBase(node))) {
+    const overlay = arrayOverlay(node);
+    if (property === "length")
+      return arrayLength(overlay);
+    if (ARRAY_MUTATORS.has(property))
+      return arrayMutators[property];
+    const index3 = arrayIndex(property);
+    if (index3 !== void 0)
+      return getArrayIndex(node, index3);
+    return Reflect.get(Array.prototype, property, node.proxy);
+  }
+  if (typeof property === "symbol")
+    return Reflect.get(nodeBase(node), property, node.proxy);
+  const key = String(property);
+  if (!objectHas(node, key)) {
+    if (isObjectDeleted(node, key) || Object.hasOwn(nodeBase(node), key))
+      return void 0;
+    return Reflect.get(nodeBase(node), property, node.proxy);
+  }
+  const value = objectValue(node, key);
+  if (!isContainer2(value))
+    return value;
+  return createNode(node.context, value, node, 0, key, void 0, hasObjectWrite(node, key)).proxy;
+}
+function getArrayIndex(node, index3) {
+  const overlay = arrayOverlay(node);
+  if (index3 >= arrayLength(overlay))
+    return void 0;
+  const piece = locatePiece(overlay, index3);
+  const sourceIndex = piece.start + piece.step * overlay.locatedOffset;
+  const value = entryValueAt(node, piece, sourceIndex);
+  if (!isContainer2(value))
+    return value;
+  return createNode(node.context, value, node, piece.kind === "base" ? 1 : 2, sourceIndex, piece.kind === "insert" ? piece.source : void 0, piece.kind === "insert" || hasEntryOverrideAt(overlay, piece, sourceIndex)).proxy;
+}
+function setProperty(node, property, supplied) {
+  assertWritable(node.context);
+  if (typeof property === "symbol")
+    throw new TypeError("Symbol writes are not supported");
+  if (Array.isArray(nodeBase(node))) {
+    if (property === "length") {
+      setArrayLength(node, toArrayLength(supplied));
+      return true;
+    }
+    const index3 = arrayIndex(property);
+    if (index3 === void 0)
+      throw new TypeError("Only array indices and length can be written");
+    if (index3 > arrayLength(arrayOverlay(node)))
+      throw new TypeError("Overlay arrays cannot contain holes");
+    setArrayIndex(node, index3, clonePlacement(supplied));
+    return true;
+  }
+  const key = String(property);
+  if (supplied === void 0)
+    return deleteProperty(node, key);
+  const stored = clonePlacement(supplied);
+  const current = objectValue(node, key);
+  const wasDeleted = isObjectDeleted(node, key);
+  if (!wasDeleted && !isContainer2(stored) && current === stored)
+    return true;
+  setObjectWrite(node, key, stored);
+  if (wasDeleted && Object.hasOwn(nodeBase(node), key)) {
+    if (node.readded === void 0)
+      node.readded = /* @__PURE__ */ new Set();
+    node.readded.add(key);
+  }
+  deleteObjectDeletion(node, key);
+  markDirty(node);
+  return true;
+}
+function deleteProperty(node, property) {
+  assertWritable(node.context);
+  if (typeof property === "symbol")
+    throw new TypeError("Symbol writes are not supported");
+  if (Array.isArray(nodeBase(node)))
+    throw new TypeError("Overlay arrays cannot contain holes");
+  const key = String(property);
+  if (!objectHas(node, key))
+    return true;
+  deleteObjectWrite(node, key);
+  node.readded?.delete(key);
+  setObjectDeletion(node, key);
+  markDirty(node);
+  return true;
+}
+function hasProperty(node, property) {
+  assertReadable(node.context);
+  if (Array.isArray(nodeBase(node))) {
+    if (property === "length")
+      return true;
+    const index3 = arrayIndex(property);
+    if (index3 !== void 0)
+      return index3 < arrayLength(arrayOverlay(node));
+    return property in Array.prototype;
+  }
+  return typeof property === "symbol" ? property in nodeBase(node) : objectHas(node, String(property));
+}
+function ownKeys(node) {
+  assertReadable(node.context);
+  if (Array.isArray(nodeBase(node))) {
+    const length = arrayLength(arrayOverlay(node));
+    const keys2 = new Array(length + 1);
+    for (let index3 = 0; index3 < length; index3++)
+      keys2[index3] = String(index3);
+    keys2[length] = "length";
+    return keys2;
+  }
+  let existingKeysOnly = node.deleteKey === void 0 && node.deletes === void 0 && node.readded === void 0 && (node.writeKey === void 0 || Object.hasOwn(nodeBase(node), node.writeKey));
+  if (existingKeysOnly && node.writes !== void 0) {
+    for (const key of node.writes.keys()) {
+      if (!Object.hasOwn(nodeBase(node), key)) {
+        existingKeysOnly = false;
+        break;
+      }
+    }
+  }
+  if (existingKeysOnly)
+    return Object.keys(nodeBase(node));
+  const keys = Object.keys(nodeBase(node)).filter((key) => !isObjectDeleted(node, key) && !node.readded?.has(key));
+  const seen = new Set(keys);
+  if (node.writeKey !== void 0 && !seen.has(node.writeKey)) {
+    keys.push(node.writeKey);
+    seen.add(node.writeKey);
+  }
+  if (node.writes !== void 0) {
+    for (const key of node.writes.keys()) {
+      if (seen.has(key))
+        continue;
+      keys.push(key);
+      seen.add(key);
+    }
+  }
+  const indices = [];
+  const strings = [];
+  for (const key of keys) {
+    const index3 = arrayIndex(key);
+    if (index3 === void 0)
+      strings.push(key);
+    else
+      indices.push(index3);
+  }
+  indices.sort((left, right) => left - right);
+  return [...indices.map(String), ...strings];
+}
+function getDescriptor(node, property) {
+  assertReadable(node.context);
+  if (Array.isArray(nodeBase(node))) {
+    if (property === "length") {
+      const length = arrayLength(arrayOverlay(node));
+      node.target.length = length;
+      return Reflect.getOwnPropertyDescriptor(node.target, "length");
+    }
+    const index3 = arrayIndex(property);
+    if (index3 === void 0 || index3 >= arrayLength(arrayOverlay(node)))
+      return void 0;
+  } else {
+    if (typeof property === "symbol" || !objectHas(node, String(property)))
+      return void 0;
+  }
+  return {
+    configurable: true,
+    enumerable: true,
+    writable: node.context.status.value === "open",
+    value: getProperty(node, property)
+  };
+}
+function hasObjectWrite(node, key) {
+  return node.writeKey === key || (node.writes?.has(key) ?? false);
+}
+function setObjectWrite(node, key, value) {
+  if (node.writes !== void 0) {
+    const reference = node.writes.get(key);
+    node.writes.set(key, reference === void 0 ? storeValue(node.context, value) : replaceStoredValue(node.context, reference, value));
+    return;
+  }
+  if (node.writeKey === void 0 || node.writeKey === key) {
+    node.writeKey = key;
+    node.writeValue = node.writeValue === void 0 ? storeValue(node.context, value) : replaceStoredValue(node.context, node.writeValue, value);
+    return;
+  }
+  node.writes = /* @__PURE__ */ new Map();
+  node.writes.set(node.writeKey, node.writeValue);
+  node.writes.set(key, storeValue(node.context, value));
+  node.writeKey = void 0;
+  node.writeValue = void 0;
+}
+function deleteObjectWrite(node, key) {
+  if (node.writeKey === key) {
+    node.writeKey = void 0;
+    releaseStoredValue(node.context, node.writeValue);
+    node.writeValue = void 0;
+  } else {
+    const reference = node.writes?.get(key);
+    if (reference !== void 0)
+      releaseStoredValue(node.context, reference);
+    node.writes?.delete(key);
+  }
+}
+function isObjectDeleted(node, key) {
+  return node.deleteKey === key || (node.deletes?.has(key) ?? false);
+}
+function setObjectDeletion(node, key) {
+  if (node.deletes !== void 0) {
+    node.deletes.add(key);
+    return;
+  }
+  if (node.deleteKey === void 0 || node.deleteKey === key) {
+    node.deleteKey = key;
+    return;
+  }
+  node.deletes = /* @__PURE__ */ new Set();
+  node.deletes.add(node.deleteKey);
+  node.deletes.add(key);
+  node.deleteKey = void 0;
+}
+function deleteObjectDeletion(node, key) {
+  if (node.deleteKey === key)
+    node.deleteKey = void 0;
+  else
+    node.deletes?.delete(key);
+}
+function objectHas(node, key) {
+  if (isObjectDeleted(node, key))
+    return false;
+  return hasObjectWrite(node, key) || Object.hasOwn(nodeBase(node), key);
+}
+function objectValue(node, key) {
+  if (node.writeKey === key)
+    return storedValue(node.context, node.writeValue);
+  const reference = node.writes?.get(key);
+  if (reference !== void 0)
+    return storedValue(node.context, reference);
+  return nodeBase(node)[key];
+}
+function markDirty(node) {
+  if (node.dirty)
+    return;
+  node.dirty = true;
+  node.context.dirty.push(node);
+  for (let parent = nodeParent(node); parent !== void 0; parent = nodeParent(parent))
+    parent.subtreeDirty = true;
+}
+function arrayOverlay(node) {
+  if (node.array !== void 0)
+    return node.array;
+  const base = nodeBase(node);
+  const overlay = {
+    root: void 0,
+    pieces: void 0,
+    baseOverrides: void 0,
+    insertOverrides: void 0,
+    structural: false,
+    generation: 0,
+    plan: void 0,
+    seed: 2654435769,
+    locatedOffset: 0,
+    baseLocations: void 0,
+    insertLocations: void 0
+  };
+  if (base.length > 0)
+    overlay.root = createPieceNode(overlay, { kind: "base", start: 0, length: base.length, step: 1 });
+  node.array = overlay;
+  return overlay;
+}
+function baseOverridesForWrite(overlay) {
+  if (overlay.baseOverrides === void 0)
+    overlay.baseOverrides = /* @__PURE__ */ new Map();
+  return overlay.baseOverrides;
+}
+function insertOverridesForWrite(overlay) {
+  if (overlay.insertOverrides === void 0)
+    overlay.insertOverrides = /* @__PURE__ */ new Map();
+  return overlay.insertOverrides;
+}
+function nextPiecePriority(overlay) {
+  let value = overlay.seed;
+  value ^= value << 13;
+  value ^= value >>> 17;
+  value ^= value << 5;
+  overlay.seed = value >>> 0;
+  return overlay.seed;
+}
+function treeElements(node) {
+  return node?.elements ?? 0;
+}
+function updatePieceNode(node) {
+  node.elements = treeElements(node.left) + node.piece.length + treeElements(node.right);
+}
+function createPieceNode(overlay, piece) {
+  return { piece, left: void 0, right: void 0, priority: nextPiecePriority(overlay), elements: piece.length };
+}
+function mergePieceTrees(left, right) {
+  if (left === void 0)
+    return right;
+  if (right === void 0)
+    return left;
+  if (left.priority >= right.priority) {
+    left.right = mergePieceTrees(left.right, right);
+    updatePieceNode(left);
+    return left;
+  }
+  right.left = mergePieceTrees(left, right.left);
+  updatePieceNode(right);
+  return right;
+}
+function splitPieceTree(overlay, root, index3) {
+  if (root === void 0)
+    return [void 0, void 0];
+  const leftLength = treeElements(root.left);
+  if (index3 < leftLength) {
+    const [left, right] = splitPieceTree(overlay, root.left, index3);
+    root.left = right;
+    updatePieceNode(root);
+    return [left, root];
+  }
+  const pieceEnd = leftLength + root.piece.length;
+  if (index3 > pieceEnd) {
+    const [left, right] = splitPieceTree(overlay, root.right, index3 - pieceEnd);
+    root.right = left;
+    updatePieceNode(root);
+    return [root, right];
+  }
+  if (index3 === leftLength) {
+    const left = root.left;
+    root.left = void 0;
+    updatePieceNode(root);
+    return [left, root];
+  }
+  if (index3 === pieceEnd) {
+    const right = root.right;
+    root.right = void 0;
+    updatePieceNode(root);
+    return [root, right];
+  }
+  const offset = index3 - leftLength;
+  const first = { ...root.piece, length: offset };
+  const second = {
+    ...root.piece,
+    start: root.piece.start + root.piece.step * offset,
+    length: root.piece.length - offset
+  };
+  return [
+    mergePieceTrees(root.left, createPieceNode(overlay, first)),
+    mergePieceTrees(createPieceNode(overlay, second), root.right)
+  ];
+}
+function leftmostPieceNode(node) {
+  while (node.left !== void 0)
+    node = node.left;
+  return node;
+}
+function rightmostPieceNode(node) {
+  while (node.right !== void 0)
+    node = node.right;
+  return node;
+}
+function mergeablePieces(left, right) {
+  if (left.kind !== right.kind)
+    return false;
+  if (left.kind === "insert" && left.source !== right.source)
+    return false;
+  if (left.length === 1 && right.length === 1)
+    return Math.abs(right.start - left.start) === 1;
+  return left.step === right.step && left.start + left.step * left.length === right.start;
+}
+function joinNormalized(overlay, left, right) {
+  if (left === void 0)
+    return right;
+  if (right === void 0)
+    return left;
+  const leftPiece = rightmostPieceNode(left).piece;
+  const rightPiece = leftmostPieceNode(right).piece;
+  if (!mergeablePieces(leftPiece, rightPiece))
+    return mergePieceTrees(left, right);
+  const [leftRest] = splitPieceTree(overlay, left, treeElements(left) - leftPiece.length);
+  const [, rightRest] = splitPieceTree(overlay, right, rightPiece.length);
+  const step = leftPiece.length === 1 ? rightPiece.start - leftPiece.start : leftPiece.step;
+  const combined = leftPiece.kind === "base" ? { kind: "base", start: leftPiece.start, length: leftPiece.length + rightPiece.length, step } : {
+    kind: "insert",
+    source: leftPiece.source,
+    start: leftPiece.start,
+    length: leftPiece.length + rightPiece.length,
+    step
+  };
+  return joinNormalized(overlay, joinNormalized(overlay, leftRest, createPieceNode(overlay, combined)), rightRest);
+}
+function flattenPieceTree(node, output) {
+  if (node === void 0)
+    return;
+  flattenPieceTree(node.left, output);
+  output.push(node.piece);
+  flattenPieceTree(node.right, output);
+}
+function piecesOf(overlay) {
+  if (overlay.pieces === void 0) {
+    overlay.pieces = [];
+    flattenPieceTree(overlay.root, overlay.pieces);
+  }
+  return overlay.pieces;
+}
+function treeFromPieces(overlay, pieces) {
+  mergePieces(pieces);
+  let root;
+  for (const piece of pieces)
+    root = mergePieceTrees(root, createPieceNode(overlay, piece));
+  return root;
+}
+function replaceAllPieces(overlay, pieces) {
+  overlay.root = treeFromPieces(overlay, pieces);
+  overlay.pieces = void 0;
+  overlay.baseLocations = void 0;
+  overlay.insertLocations = void 0;
+}
+function arrayLength(overlay) {
+  return treeElements(overlay.root);
+}
+function locatePiece(overlay, index3) {
+  let node = overlay.root;
+  while (node !== void 0) {
+    const leftLength = treeElements(node.left);
+    if (index3 < leftLength)
+      node = node.left;
+    else if (index3 >= leftLength + node.piece.length) {
+      index3 -= leftLength + node.piece.length;
+      node = node.right;
+    } else {
+      overlay.locatedOffset = index3 - leftLength;
+      return node.piece;
+    }
+  }
+  throw new RangeError("Array overlay index is out of range");
+}
+function arrayIndex(property) {
+  if (typeof property !== "string" || property.length === 0 || property.length > 10)
+    return void 0;
+  if (property === "0")
+    return 0;
+  const first = property.charCodeAt(0);
+  if (first < 49 || first > 57)
+    return void 0;
+  let index3 = first - 48;
+  for (let offset = 1; offset < property.length; offset++) {
+    const digit = property.charCodeAt(offset) - 48;
+    if (digit < 0 || digit > 9)
+      return void 0;
+    index3 = index3 * 10 + digit;
+    if (index3 >= 4294967295)
+      return void 0;
+  }
+  return index3;
+}
+function entryValueAt(node, piece, sourceIndex) {
+  const overlay = arrayOverlay(node);
+  if (piece.kind === "base") {
+    const valueIndex = overlay.baseOverrides?.get(sourceIndex);
+    return valueIndex === void 0 ? nodeBase(node)[sourceIndex] : storedValue(node.context, valueIndex);
+  }
+  const overrides = overlay.insertOverrides?.get(piece.source);
+  const reference = overrides?.has(sourceIndex) ? overrides.get(sourceIndex) : piece.source.refs[sourceIndex];
+  return storedValue(node.context, reference);
+}
+function hasEntryOverrideAt(overlay, piece, sourceIndex) {
+  return piece.kind === "base" ? overlay.baseOverrides?.has(sourceIndex) ?? false : overlay.insertOverrides?.get(piece.source)?.has(sourceIndex) ?? false;
+}
+function extendRightmostPiece(node, amount) {
+  if (node.right !== void 0)
+    extendRightmostPiece(node.right, amount);
+  else
+    node.piece.length += amount;
+  updatePieceNode(node);
+}
+function invalidatePieceCaches(overlay) {
+  overlay.pieces = void 0;
+  overlay.baseLocations = void 0;
+  overlay.insertLocations = void 0;
+  overlay.plan = void 0;
+}
+function replacePieceRange(node, index3, remove, inserted) {
+  if (remove === 0 && inserted.length === 0)
+    return;
+  const overlay = arrayOverlay(node);
+  if (remove === 0 && index3 === arrayLength(overlay) && inserted.length === 1 && overlay.root !== void 0) {
+    const addition = inserted[0];
+    const tail = rightmostPieceNode(overlay.root).piece;
+    if (addition.kind === "insert" && tail.kind === "insert" && tail.step === 1 && tail.start + tail.length === tail.source.refs.length) {
+      for (let offset = 0; offset < addition.length; offset++) {
+        tail.source.refs.push(addition.source.refs[addition.start + offset]);
+      }
+      extendRightmostPiece(overlay.root, addition.length);
+      invalidatePieceCaches(overlay);
+      overlay.structural = true;
+      overlay.generation += 1;
+      markDirty(node);
+      return;
+    }
+  }
+  const [left, rest] = splitPieceTree(overlay, overlay.root, index3);
+  const [, right] = splitPieceTree(overlay, rest, remove);
+  const middle = treeFromPieces(overlay, inserted);
+  overlay.root = joinNormalized(overlay, joinNormalized(overlay, left, middle), right);
+  invalidatePieceCaches(overlay);
+  overlay.structural = true;
+  overlay.generation += 1;
+  markDirty(node);
+}
+function mergePieces(pieces) {
+  for (let index3 = 1; index3 < pieces.length; ) {
+    const left = pieces[index3 - 1];
+    const right = pieces[index3];
+    const sameSource = left.kind === right.kind && (left.kind === "base" || left.source === right.source);
+    if (sameSource && left.length === 1 && right.length === 1 && Math.abs(right.start - left.start) === 1) {
+      left.step = right.start - left.start;
+      left.length = 2;
+      pieces.splice(index3, 1);
+    } else if (sameSource && left.step === right.step && left.start + left.step * left.length === right.start) {
+      left.length += right.length;
+      pieces.splice(index3, 1);
+    } else
+      index3 += 1;
+  }
+}
+function insertPiece(node, items, start = 0) {
+  if (items.length === start)
+    return [];
+  const refs = [];
+  for (let index3 = start; index3 < items.length; index3++)
+    refs.push(storeValue(node.context, items[index3]));
+  return [{ kind: "insert", source: { refs }, start: 0, length: refs.length, step: 1 }];
+}
+function insertPlacementPiece(node, values, start = 0) {
+  if (values.length === start)
+    return [];
+  const storedLength = node.context.stored.length;
+  try {
+    for (let index3 = start; index3 < values.length; index3++)
+      values[index3] = storeValue(node.context, clonePlacement(values[index3]));
+  } catch (error) {
+    node.context.stored.length = storedLength;
+    throw error;
+  }
+  return [
+    {
+      kind: "insert",
+      source: { refs: values },
+      start,
+      length: values.length - start,
+      step: 1
+    }
+  ];
+}
+function setArrayIndex(node, index3, stored) {
+  const overlay = arrayOverlay(node);
+  const length = arrayLength(overlay);
+  if (index3 === length) {
+    replacePieceRange(node, length, 0, insertPiece(node, [stored]));
+    return;
+  }
+  const piece = locatePiece(overlay, index3);
+  const sourceIndex = piece.start + piece.step * overlay.locatedOffset;
+  const current = entryValueAt(node, piece, sourceIndex);
+  if (!isContainer2(stored) && current === stored)
+    return;
+  if (piece.kind === "base") {
+    const existingIndex = overlay.baseOverrides?.get(sourceIndex);
+    if (!isContainer2(stored) && stored === nodeBase(node)[sourceIndex]) {
+      if (existingIndex !== void 0)
+        releaseStoredValue(node.context, existingIndex);
+      overlay.baseOverrides?.delete(sourceIndex);
+    } else if (existingIndex === void 0) {
+      baseOverridesForWrite(overlay).set(sourceIndex, storeValue(node.context, stored));
+    } else
+      overlay.baseOverrides.set(sourceIndex, replaceStoredValue(node.context, existingIndex, stored));
+  } else {
+    let overrides = overlay.insertOverrides?.get(piece.source);
+    const existingIndex = overrides?.get(sourceIndex);
+    if (!isContainer2(stored) && stored === storedValue(node.context, piece.source.refs[sourceIndex])) {
+      if (existingIndex !== void 0)
+        releaseStoredValue(node.context, existingIndex);
+      overrides?.delete(sourceIndex);
+      if (overrides?.size === 0)
+        overlay.insertOverrides?.delete(piece.source);
+    } else {
+      if (overrides === void 0) {
+        overrides = /* @__PURE__ */ new Map();
+        insertOverridesForWrite(overlay).set(piece.source, overrides);
+      }
+      if (existingIndex === void 0)
+        overrides.set(sourceIndex, storeValue(node.context, stored));
+      else
+        overrides.set(sourceIndex, replaceStoredValue(node.context, existingIndex, stored));
+    }
+  }
+  markDirty(node);
+}
+function setArrayLength(node, next) {
+  const current = arrayLength(arrayOverlay(node));
+  if (next === current)
+    return;
+  if (next < current)
+    replacePieceRange(node, next, current - next, []);
+  else
+    replacePieceRange(node, current, 0, insertPiece(node, Array.from({ length: next - current }, () => null)));
+}
+function toArrayLength(value) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 0 || number >= 4294967296)
+    throw new RangeError("Invalid array length");
+  return number;
+}
+function toIntegerOrInfinity(value) {
+  const number = Number(value);
+  if (Number.isNaN(number) || number === 0)
+    return 0;
+  return Number.isFinite(number) ? Math.trunc(number) : number;
+}
+function clampIndex(value, length) {
+  if (value === Number.NEGATIVE_INFINITY)
+    return 0;
+  if (value < 0)
+    return Math.max(length + value, 0);
+  return Math.min(value, length);
+}
+function mutatorNode(receiver) {
+  if (!isContainer2(receiver))
+    return void 0;
+  const node = Reflect.get(receiver, NODE);
+  if (node === void 0)
+    return void 0;
+  if (!Array.isArray(nodeBase(node)))
+    throw new TypeError("Array mutator called on incompatible receiver");
+  assertWritable(node.context);
+  return node;
+}
+var arrayMutators = {
+  push(...items) {
+    const node = mutatorNode(this);
+    if (node === void 0)
+      return Reflect.apply(Array.prototype.push, this, items);
+    const length = arrayLength(arrayOverlay(node));
+    replacePieceRange(node, length, 0, insertPlacementPiece(node, items));
+    return length + items.length;
+  },
+  pop() {
+    const node = mutatorNode(this);
+    if (node === void 0)
+      return Reflect.apply(Array.prototype.pop, this, []);
+    const length = arrayLength(arrayOverlay(node));
+    if (length === 0)
+      return void 0;
+    const value = getArrayIndex(node, length - 1);
+    replacePieceRange(node, length - 1, 1, []);
+    return value;
+  },
+  shift() {
+    const node = mutatorNode(this);
+    if (node === void 0)
+      return Reflect.apply(Array.prototype.shift, this, []);
+    const length = arrayLength(arrayOverlay(node));
+    if (length === 0)
+      return void 0;
+    const value = getArrayIndex(node, 0);
+    replacePieceRange(node, 0, 1, []);
+    return value;
+  },
+  unshift(...items) {
+    const node = mutatorNode(this);
+    if (node === void 0)
+      return Reflect.apply(Array.prototype.unshift, this, items);
+    replacePieceRange(node, 0, 0, insertPlacementPiece(node, items));
+    return arrayLength(arrayOverlay(node));
+  },
+  splice(...args) {
+    const node = mutatorNode(this);
+    if (node === void 0)
+      return Reflect.apply(Array.prototype.splice, this, args);
+    const length = arrayLength(arrayOverlay(node));
+    const start = args.length === 0 ? 0 : clampIndex(toIntegerOrInfinity(args[0]), length);
+    const remove = args.length === 0 ? 0 : args.length === 1 ? length - start : Math.min(Math.max(toIntegerOrInfinity(args[1]), 0), length - start);
+    const removed = Array.from({ length: remove }, (_, offset) => getArrayIndex(node, start + offset));
+    const itemStart = Math.min(2, args.length);
+    const itemCount = Math.max(args.length - 2, 0);
+    replacePieceRange(node, start, remove, insertPlacementPiece(node, args, itemStart));
+    setArrayLength(node, length - remove + itemCount);
+    return removed;
+  },
+  reverse() {
+    const node = mutatorNode(this);
+    if (node === void 0)
+      return Reflect.apply(Array.prototype.reverse, this, []);
+    const overlay = arrayOverlay(node);
+    if (arrayLength(overlay) < 2)
+      return node.proxy;
+    const pieces = [...piecesOf(overlay)].reverse();
+    for (const piece of pieces) {
+      piece.start += piece.step * (piece.length - 1);
+      piece.step = piece.step === 1 ? -1 : 1;
+    }
+    replaceAllPieces(overlay, pieces);
+    overlay.structural = true;
+    overlay.generation += 1;
+    overlay.plan = void 0;
+    markDirty(node);
+    return node.proxy;
+  },
+  sort(comparator) {
+    const node = mutatorNode(this);
+    if (node === void 0)
+      return Reflect.apply(Array.prototype.sort, this, [comparator]);
+    if (comparator !== void 0 && typeof comparator !== "function")
+      throw new TypeError("Comparator must be a function");
+    const overlay = arrayOverlay(node);
+    const insertedSources = [];
+    const insertedIndices = [];
+    const insertedValues = [];
+    const baseValues = new Array(nodeBase(node).length);
+    const order = [];
+    for (const piece of piecesOf(overlay)) {
+      for (let offset = 0; offset < piece.length; offset++) {
+        const sourceIndex = piece.start + piece.step * offset;
+        if (piece.kind === "base") {
+          order.push(sourceIndex);
+          baseValues[sourceIndex] = publicSortValue(node, sourceIndex, insertedSources, insertedIndices);
+        } else {
+          insertedSources.push(piece.source);
+          insertedIndices.push(sourceIndex);
+          const token = -insertedSources.length;
+          order.push(token);
+          insertedValues.push(publicSortValue(node, token, insertedSources, insertedIndices));
+        }
+      }
+    }
+    const baseSnapshot = /* @__PURE__ */ new Map();
+    for (const [index3, valueIndex] of overlay.baseOverrides ?? [])
+      baseSnapshot.set(index3, storedValue(node.context, valueIndex));
+    const insertSnapshots = /* @__PURE__ */ new Map();
+    for (const [source, overrides] of overlay.insertOverrides ?? []) {
+      const snapshot = /* @__PURE__ */ new Map();
+      for (const [index3, valueIndex] of overrides)
+        snapshot.set(index3, storedValue(node.context, valueIndex));
+      insertSnapshots.set(source, snapshot);
+    }
+    const generation = overlay.generation;
+    order.sort((left, right) => {
+      const leftValue = left < 0 ? insertedValues[-left - 1] : baseValues[left];
+      const rightValue = right < 0 ? insertedValues[-right - 1] : baseValues[right];
+      if (typeof comparator === "function")
+        return Number(comparator(leftValue, rightValue));
+      const a = String(leftValue);
+      const b = String(rightValue);
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+    if (baseSnapshot.size > 0 || insertSnapshots.size > 0 || (overlay.baseOverrides?.size ?? 0) > 0 || (overlay.insertOverrides?.size ?? 0) > 0) {
+      for (const token of order) {
+        restoreSortOverride(node, token, insertedSources, insertedIndices, baseSnapshot, insertSnapshots);
+      }
+    }
+    const comparatorWasStructural = overlay.generation !== generation;
+    const currentLength = arrayLength(overlay);
+    const samePrefix = currentLength >= order.length && order.every((token, index3) => sameSortTokenAt(overlay, index3, token, insertedSources, insertedIndices));
+    if (!samePrefix) {
+      replacePieceRange(node, 0, Math.min(order.length, currentLength), piecesFromSortOrder(order, insertedSources, insertedIndices));
+    }
+    if (comparatorWasStructural)
+      deduplicateArrayEntries(node);
+    return node.proxy;
+  },
+  fill(supplied, startArg, endArg) {
+    const node = mutatorNode(this);
+    if (node === void 0)
+      return Reflect.apply(Array.prototype.fill, this, [supplied, startArg, endArg]);
+    const length = arrayLength(arrayOverlay(node));
+    const start = startArg === void 0 ? 0 : clampIndex(toIntegerOrInfinity(startArg), length);
+    const end = endArg === void 0 ? length : clampIndex(toIntegerOrInfinity(endArg), length);
+    if (end <= start)
+      return node.proxy;
+    const items = Array.from({ length: end - start }, () => clonePlacement(supplied));
+    replacePieceRange(node, start, end - start, insertPiece(node, items));
+    return node.proxy;
+  },
+  copyWithin(targetArg, startArg, endArg) {
+    const node = mutatorNode(this);
+    if (node === void 0)
+      return Reflect.apply(Array.prototype.copyWithin, this, [targetArg, startArg, endArg]);
+    const length = arrayLength(arrayOverlay(node));
+    const target = clampIndex(toIntegerOrInfinity(targetArg), length);
+    const start = clampIndex(toIntegerOrInfinity(startArg), length);
+    const end = endArg === void 0 ? length : clampIndex(toIntegerOrInfinity(endArg), length);
+    const count = Math.min(Math.max(end - start, 0), length - target);
+    const values = Array.from({ length: count }, (_, offset) => clonePlacement(getArrayIndex(node, start + offset)));
+    replacePieceRange(node, target, count, insertPiece(node, values));
+    return node.proxy;
+  }
+};
+function sortTokenSource(token, sources) {
+  return token < 0 ? sources[-token - 1] : void 0;
+}
+function sortTokenIndex(token, indices) {
+  return token < 0 ? indices[-token - 1] : token;
+}
+function publicSortValue(node, token, sources, indices) {
+  const overlay = arrayOverlay(node);
+  const source = sortTokenSource(token, sources);
+  const sourceIndex = sortTokenIndex(token, indices);
+  const overrideIndex = source === void 0 ? overlay.baseOverrides?.get(sourceIndex) : overlay.insertOverrides?.get(source)?.get(sourceIndex);
+  const value = overrideIndex !== void 0 ? storedValue(node.context, overrideIndex) : source === void 0 ? nodeBase(node)[sourceIndex] : storedValue(node.context, source.refs[sourceIndex]);
+  if (!isContainer2(value))
+    return value;
+  return createNode(node.context, value, node, source === void 0 ? 1 : 2, sourceIndex, source, source !== void 0 || (overlay.baseOverrides?.has(sourceIndex) ?? false)).proxy;
+}
+function restoreSortOverride(node, token, sources, indices, baseSnapshot, insertSnapshots) {
+  const overlay = arrayOverlay(node);
+  const source = sortTokenSource(token, sources);
+  const sourceIndex = sortTokenIndex(token, indices);
+  if (source === void 0) {
+    const existingIndex2 = overlay.baseOverrides?.get(sourceIndex);
+    const snapshotValue2 = baseSnapshot.get(sourceIndex);
+    if (snapshotValue2 !== void 0) {
+      if (existingIndex2 === void 0)
+        baseOverridesForWrite(overlay).set(sourceIndex, storeValue(node.context, snapshotValue2));
+      else
+        overlay.baseOverrides.set(sourceIndex, replaceStoredValue(node.context, existingIndex2, snapshotValue2));
+    } else {
+      if (existingIndex2 !== void 0)
+        releaseStoredValue(node.context, existingIndex2);
+      overlay.baseOverrides?.delete(sourceIndex);
+    }
+    return;
+  }
+  let overrides = overlay.insertOverrides?.get(source);
+  const existingIndex = overrides?.get(sourceIndex);
+  const snapshotValue = insertSnapshots.get(source)?.get(sourceIndex);
+  if (snapshotValue !== void 0) {
+    if (overrides === void 0) {
+      overrides = /* @__PURE__ */ new Map();
+      insertOverridesForWrite(overlay).set(source, overrides);
+    }
+    if (existingIndex === void 0)
+      overrides.set(sourceIndex, storeValue(node.context, snapshotValue));
+    else
+      overrides.set(sourceIndex, replaceStoredValue(node.context, existingIndex, snapshotValue));
+  } else {
+    if (existingIndex !== void 0)
+      releaseStoredValue(node.context, existingIndex);
+    overrides?.delete(sourceIndex);
+    if (overrides?.size === 0)
+      overlay.insertOverrides?.delete(source);
+  }
+}
+function sameSortTokenAt(overlay, logicalIndex, token, sources, indices) {
+  const piece = locatePiece(overlay, logicalIndex);
+  const sourceIndex = piece.start + piece.step * overlay.locatedOffset;
+  const tokenSource = sortTokenSource(token, sources);
+  return sourceIndex === sortTokenIndex(token, indices) && (piece.kind === "base" && tokenSource === void 0 || piece.kind === "insert" && piece.source === tokenSource);
+}
+function deduplicateArrayEntries(node) {
+  const overlay = arrayOverlay(node);
+  const seenBase = /* @__PURE__ */ new Set();
+  const seenInsert = /* @__PURE__ */ new Map();
+  const next = [];
+  let duplicated = false;
+  for (const piece of piecesOf(overlay)) {
+    for (let offset = 0; offset < piece.length; offset++) {
+      const sourceIndex = piece.start + piece.step * offset;
+      let seen;
+      if (piece.kind === "base") {
+        seen = seenBase.has(sourceIndex);
+        seenBase.add(sourceIndex);
+      } else {
+        let indices = seenInsert.get(piece.source);
+        if (indices === void 0) {
+          indices = /* @__PURE__ */ new Set();
+          seenInsert.set(piece.source, indices);
+        }
+        seen = indices.has(sourceIndex);
+        indices.add(sourceIndex);
+      }
+      if (seen) {
+        duplicated = true;
+        appendMergedPiece(next, insertPiece(node, [clonePlacementStored(entryValueAt(node, piece, sourceIndex), node.context)])[0]);
+      } else
+        appendMergedPiece(next, singletonPiece(piece, sourceIndex));
+    }
+  }
+  if (!duplicated)
+    return;
+  replaceAllPieces(overlay, next);
+  overlay.structural = true;
+  overlay.generation += 1;
+  overlay.plan = void 0;
+  markDirty(node);
+}
+function piecesFromSortOrder(order, sources, indices) {
+  const pieces = [];
+  for (const token of order) {
+    const source = token < 0 ? sources[-token - 1] : void 0;
+    const sourceIndex = token < 0 ? indices[-token - 1] : token;
+    const previous = pieces.at(-1);
+    const sameSource = previous !== void 0 && (source === void 0 && previous.kind === "base" || source !== void 0 && previous.kind === "insert" && previous.source === source);
+    if (previous !== void 0 && sameSource) {
+      if (previous.length === 1) {
+        const step = sourceIndex - previous.start;
+        if (step === 1 || step === -1) {
+          previous.step = step;
+          previous.length = 2;
+          continue;
+        }
+      } else if (previous.start + previous.step * previous.length === sourceIndex) {
+        previous.length += 1;
+        continue;
+      }
+    }
+    pieces.push(source === void 0 ? { kind: "base", start: sourceIndex, length: 1, step: 1 } : { kind: "insert", source, start: sourceIndex, length: 1, step: 1 });
+  }
+  return pieces;
+}
+function appendMergedPiece(pieces, piece) {
+  const previous = pieces.at(-1);
+  const sameSource = previous !== void 0 && previous.kind === piece.kind && (previous.kind === "base" || previous.source === piece.source);
+  if (previous !== void 0 && sameSource && previous.length === 1 && piece.length === 1) {
+    const step = piece.start - previous.start;
+    if (step === 1 || step === -1) {
+      previous.step = step;
+      previous.length = 2;
+      return;
+    }
+  }
+  if (previous !== void 0 && sameSource && previous.step === piece.step && previous.start + previous.step * previous.length === piece.start) {
+    previous.length += piece.length;
+  } else
+    pieces.push(piece);
+}
+function singletonPiece(piece, sourceIndex) {
+  return piece.kind === "base" ? { kind: "base", start: sourceIndex, length: 1, step: 1 } : { kind: "insert", source: piece.source, start: sourceIndex, length: 1, step: 1 };
+}
+function clonePlacement(value) {
+  const proxyNode = isContainer2(value) ? Reflect.get(value, NODE) : void 0;
+  return proxyNode === void 0 ? copyJson(value) : clonePlacementNode(proxyNode);
+}
+function cloneNode(node) {
+  assertReadable(node.context);
+  if (Array.isArray(nodeBase(node))) {
+    const overlay = arrayOverlay(node);
+    const result2 = [];
+    for (const piece of piecesOf(overlay)) {
+      for (let offset = 0; offset < piece.length; offset++) {
+        const sourceIndex = piece.start + piece.step * offset;
+        result2.push(cloneStored(entryValueAt(node, piece, sourceIndex), node.context));
+      }
+    }
+    return result2;
+  }
+  const result = Object.create(Object.getPrototypeOf(nodeBase(node)));
+  for (const key of ownKeys(node))
+    defineData3(result, key, cloneStored(objectValue(node, key), node.context));
+  return result;
+}
+function cloneStored(value, context) {
+  if (!isContainer2(value))
+    return value;
+  const node = context.rawNodes.get(value);
+  return node === void 0 || !node.dirty && !node.subtreeDirty ? value : cloneNode(node);
+}
+function clonePlacementNode(node) {
+  assertReadable(node.context);
+  if (Array.isArray(nodeBase(node))) {
+    const overlay = arrayOverlay(node);
+    const result2 = [];
+    for (const piece of piecesOf(overlay)) {
+      for (let offset = 0; offset < piece.length; offset++) {
+        const sourceIndex = piece.start + piece.step * offset;
+        result2.push(clonePlacementStored(entryValueAt(node, piece, sourceIndex), node.context));
+      }
+    }
+    return result2;
+  }
+  const result = Object.create(Object.getPrototypeOf(nodeBase(node)));
+  for (const key of ownKeys(node))
+    defineData3(result, key, clonePlacementStored(objectValue(node, key), node.context));
+  return result;
+}
+function clonePlacementStored(value, context) {
+  if (!isContainer2(value))
+    return copyJson(value);
+  const node = context.rawNodes.get(value);
+  return node === void 0 ? copyJson(value) : clonePlacementNode(node);
+}
+function defineData3(target, key, value) {
+  DATA_DESCRIPTOR3.value = value;
+  Object.defineProperty(target, key, DATA_DESCRIPTOR3);
+  DATA_DESCRIPTOR3.value = void 0;
+}
+function emitOperations(context) {
+  const simple = emitSimpleObjectOperations(context);
+  if (simple !== void 0)
+    return simple;
+  const operations = [];
+  const forcedFolds = /* @__PURE__ */ new Map();
+  const emissionPaths = /* @__PURE__ */ new Map();
+  const denseIndices = /* @__PURE__ */ new Map();
+  for (const node of context.dirty) {
+    recordDenseArrayPosition(node, denseIndices);
+    if (Array.isArray(nodeBase(node))) {
+      const overlay = arrayOverlay(node);
+      if (!overlay.structural && (overlay.baseOverrides?.size ?? 0) > 0) {
+        let candidates = denseIndices.get(node);
+        if (candidates === void 0) {
+          candidates = { indices: [], bits: void 0, length: nodeBase(node).length };
+          denseIndices.set(node, candidates);
+        }
+        for (const index3 of overlay.baseOverrides.keys())
+          addDenseCandidate(candidates, index3);
+      }
+    }
+  }
+  const denseRegions = /* @__PURE__ */ new Map();
+  for (const [array, candidates] of denseIndices) {
+    const path5 = resolvePath(array);
+    if (path5 === void 0 || path5.some((segment) => typeof segment === "string" && RESERVED_SEGMENTS.has(segment))) {
+      continue;
+    }
+    const regions = buildDenseRegions(candidates);
+    if (regions.length > 0)
+      denseRegions.set(array, regions);
+  }
+  for (const node of context.dirty) {
+    const path5 = resolvePath(node);
+    if (path5 === void 0)
+      continue;
+    if (hasCoveringDenseRegion(node, path5, denseRegions))
+      continue;
+    emissionPaths.set(node, path5);
+    if (!Array.isArray(nodeBase(node)) && hasReservedMutation(node))
+      forcedFolds.set(node, path5);
+    const reservedAt = path5.findIndex((segment) => typeof segment === "string" && RESERVED_SEGMENTS.has(segment));
+    if (reservedAt >= 0) {
+      let ancestor = node;
+      for (let depth = path5.length; depth > reservedAt; depth--)
+        ancestor = nodeParent(ancestor);
+      forcedFolds.set(ancestor, path5.slice(0, reservedAt));
+    }
+  }
+  for (const [node, path5] of forcedFolds)
+    emissionPaths.set(node, path5);
+  for (const node of denseRegions.keys()) {
+    const path5 = resolvePath(node);
+    if (path5 !== void 0 && !hasCoveringDenseRegion(node, path5, denseRegions))
+      emissionPaths.set(node, path5);
+  }
+  let maxDepth = 0;
+  for (const path5 of emissionPaths.values())
+    maxDepth = Math.max(maxDepth, path5.length);
+  const buckets = Array.from({ length: maxDepth + 1 }, () => []);
+  for (const [node, path5] of emissionPaths)
+    buckets[path5.length].push(node);
+  const folded = /* @__PURE__ */ new Set();
+  for (const bucket of buckets) {
+    for (const node of bucket) {
+      const path5 = emissionPaths.get(node);
+      if (hasPlacementAncestor(node) || hasFoldedAncestor(node, folded))
+        continue;
+      if (forcedFolds.has(node)) {
+        emitSet(operations, path5, cloneNode(node));
+        folded.add(node);
+        continue;
+      }
+      if (Array.isArray(nodeBase(node)))
+        emitArrayOperations(node, path5, operations, denseRegions.get(node));
+      else
+        emitObjectOperations(node, path5, operations);
+      if (operations.length > MAX_DELTA_OPERATIONS) {
+        locatedDenseArray = void 0;
+        return [["r", cloneNode(context.root)]];
+      }
+    }
+  }
+  locatedDenseArray = void 0;
+  return operations;
+}
+function emitSimpleObjectOperations(context) {
+  const nodes = [];
+  for (const node of context.dirty) {
+    if (Array.isArray(nodeBase(node)) || hasReservedMutation(node) || hasPlacementAncestor(node))
+      return void 0;
+    for (let parent = nodeParent(node); parent !== void 0; parent = nodeParent(parent)) {
+      if (Array.isArray(nodeBase(parent)))
+        return void 0;
+    }
+    const path5 = resolvePath(node);
+    if (path5 === void 0)
+      continue;
+    for (const segment of path5) {
+      if (typeof segment === "string" && RESERVED_SEGMENTS.has(segment))
+        return void 0;
+    }
+    nodes.push(node);
+    if (nodes.length > MAX_SIMPLE_OBJECT_NODES)
+      return void 0;
+  }
+  for (let index3 = 1; index3 < nodes.length; index3++) {
+    const node = nodes[index3];
+    const depth = node.preparedPath.length;
+    let at = index3;
+    while (at > 0 && nodes[at - 1].preparedPath.length > depth) {
+      nodes[at] = nodes[at - 1];
+      at -= 1;
+    }
+    nodes[at] = node;
+  }
+  const operations = [];
+  let canMaterializeDirectly = true;
+  for (const node of nodes) {
+    if (emitObjectOperations(node, node.preparedPath, operations))
+      canMaterializeDirectly = false;
+    if (operations.length > MAX_DELTA_OPERATIONS)
+      return [["r", cloneNode(context.root)]];
+  }
+  context.simpleObjectMaterialization = canMaterializeDirectly;
+  return operations;
+}
+var locatedDenseArray;
+var locatedDenseIndex = 0;
+function locateDenseArrayPosition(node) {
+  let child = node;
+  for (let parent = nodeParent(child); parent !== void 0; parent = nodeParent(child)) {
+    if (Array.isArray(nodeBase(parent))) {
+      const overlay = arrayOverlay(parent);
+      if (child.parentKind !== 1 || overlay.structural)
+        return false;
+      const sourceIndex = child.parentKey;
+      const valueIndex = overlay.baseOverrides?.get(sourceIndex);
+      const current = valueIndex === void 0 ? nodeBase(parent)[sourceIndex] : storedValue(parent.context, valueIndex);
+      if (current !== nodeBase(child))
+        return false;
+      locatedDenseArray = parent;
+      locatedDenseIndex = sourceIndex;
+      return true;
+    }
+    child = parent;
+  }
+  return false;
+}
+function hasCoveringDenseRegion(node, path5, denseRegions) {
+  for (let parent = nodeParent(node); parent !== void 0; parent = nodeParent(parent)) {
+    const regions = denseRegions.get(parent);
+    if (regions === void 0)
+      continue;
+    const parentPath = resolvePath(parent);
+    if (parentPath === void 0 || path5.length <= parentPath.length)
+      continue;
+    let matches = true;
+    for (let index4 = 0; index4 < parentPath.length; index4++) {
+      if (path5[index4] !== parentPath[index4]) {
+        matches = false;
+        break;
+      }
+    }
+    if (!matches)
+      continue;
+    const index3 = path5[parentPath.length];
+    if (typeof index3 === "number" && regionContaining(regions, index3))
+      return true;
+  }
+  return false;
+}
+function addDenseCandidate(candidates, index3) {
+  if (candidates.bits !== void 0) {
+    candidates.bits[index3] = 1;
+    return;
+  }
+  candidates.indices.push(index3);
+  if (candidates.indices.length < 256)
+    return;
+  candidates.bits = new Uint8Array(candidates.length);
+  for (const existing of candidates.indices)
+    candidates.bits[existing] = 1;
+  candidates.indices.length = 0;
+}
+function recordDenseArrayPosition(node, groups) {
+  if (!locateDenseArrayPosition(node))
+    return;
+  let candidates = groups.get(locatedDenseArray);
+  if (candidates === void 0) {
+    candidates = { indices: [], bits: void 0, length: nodeBase(locatedDenseArray).length };
+    groups.set(locatedDenseArray, candidates);
+  }
+  addDenseCandidate(candidates, locatedDenseIndex);
+}
+function buildDenseRegions(candidates) {
+  if (candidates.bits === void 0)
+    return [];
+  const regions = [];
+  const bits = candidates.bits;
+  for (let at = 0; at < bits.length; ) {
+    while (at < bits.length && bits[at] === 0)
+      at += 1;
+    if (at === bits.length)
+      break;
+    const start = at;
+    let end = at;
+    let count = 0;
+    let gap = 0;
+    while (at < bits.length) {
+      if (bits[at] !== 0) {
+        count += 1;
+        end = at;
+        gap = 0;
+      } else if (++gap > 1)
+        break;
+      at += 1;
+    }
+    const length = end - start + 1;
+    if (count >= 256 && count * 2 >= length)
+      regions.push({ start, length });
+  }
+  return regions;
+}
+function regionContaining(regions, index3) {
+  for (const region of regions)
+    if (index3 >= region.start && index3 < region.start + region.length)
+      return true;
+  return false;
+}
+function hasReservedMutation(node) {
+  if (node.writeKey !== void 0 && RESERVED_SEGMENTS.has(node.writeKey))
+    return true;
+  if (node.deleteKey !== void 0 && RESERVED_SEGMENTS.has(node.deleteKey))
+    return true;
+  if (node.writes !== void 0) {
+    for (const key of node.writes.keys())
+      if (RESERVED_SEGMENTS.has(key))
+        return true;
+  }
+  if (node.deletes !== void 0) {
+    for (const key of node.deletes)
+      if (RESERVED_SEGMENTS.has(key))
+        return true;
+  }
+  return false;
+}
+function hasFoldedAncestor(node, folded) {
+  for (let parent = nodeParent(node); parent !== void 0; parent = nodeParent(parent))
+    if (folded.has(parent))
+      return true;
+  return false;
+}
+function hasPlacementAncestor(node) {
+  for (let current = node; current !== void 0; current = nodeParent(current)) {
+    if (nodeParent(current) !== void 0 && current.parentPlacement)
+      return true;
+  }
+  return false;
+}
+function emitObjectWrite(node, path5, operations, key, value) {
+  const nextPath = [...path5, key];
+  const before = node.readded?.has(key) || !Object.hasOwn(nodeBase(node), key) ? void 0 : nodeBase(node)[key];
+  const after = cloneStored(value, node.context);
+  const emitted = emitChangedValue(operations, nextPath, before, after);
+  return isContainer2(before) && isContainer2(after) && !emitted;
+}
+function emitObjectOperations(node, path5, operations) {
+  if (node.readded !== void 0) {
+    for (const key of node.readded) {
+      if (Object.hasOwn(nodeBase(node), key))
+        operations.push(["d", [...path5, key]]);
+    }
+  }
+  let normalizedContainerWrite = false;
+  if (node.writeKey !== void 0)
+    normalizedContainerWrite = emitObjectWrite(node, path5, operations, node.writeKey, objectValue(node, node.writeKey));
+  if (node.writes !== void 0) {
+    for (const [key, valueIndex] of node.writes) {
+      if (operations.length > MAX_DELTA_OPERATIONS)
+        return normalizedContainerWrite;
+      if (emitObjectWrite(node, path5, operations, key, storedValue(node.context, valueIndex)))
+        normalizedContainerWrite = true;
+    }
+  }
+  if (node.deleteKey !== void 0 && Object.hasOwn(nodeBase(node), node.deleteKey)) {
+    operations.push(["d", [...path5, node.deleteKey]]);
+  }
+  if (node.deletes !== void 0) {
+    for (const key of node.deletes) {
+      if (operations.length > MAX_DELTA_OPERATIONS)
+        return normalizedContainerWrite;
+      if (Object.hasOwn(nodeBase(node), key))
+        operations.push(["d", [...path5, key]]);
+    }
+  }
+  return normalizedContainerWrite;
+}
+function buildArrayPlan(node) {
+  const overlay = arrayOverlay(node);
+  if (overlay.plan !== void 0)
+    return overlay.plan;
+  const base = nodeBase(node);
+  const pieces = piecesOf(overlay);
+  overlay.plan = orderedArrayPlan(base.length, pieces) ?? elementArrayPlan(base.length, pieces);
+  return overlay.plan;
+}
+function orderedArrayPlan(baseLength, pieces) {
+  const ranges = [];
+  for (const piece of pieces) {
+    if (piece.kind !== "base" || piece.length === 0)
+      continue;
+    if (piece.step !== 1 && piece.length > 1)
+      return void 0;
+    if (ranges.length > 0 && piece.start <= ranges[ranges.length - 1])
+      return void 0;
+    ranges.push(piece.start, piece.start + piece.length - 1);
+  }
+  const removeRuns = [];
+  let end = baseLength;
+  for (let index3 = ranges.length - 2; index3 >= -2; index3 -= 2) {
+    const start = index3 >= 0 ? ranges[index3 + 1] + 1 : 0;
+    if (end > start)
+      removeRuns.push(start, end - start);
+    if (index3 >= 0)
+      end = ranges[index3];
+  }
+  return { removeRuns, permutation: void 0, insertRuns: insertRunsOf(pieces) };
+}
+function elementArrayPlan(baseLength, pieces) {
+  const retained = new Uint8Array(baseLength);
+  const targetBase = [];
+  for (const piece of pieces) {
+    if (piece.kind !== "base")
+      continue;
+    for (let offset = 0; offset < piece.length; offset++) {
+      const index3 = piece.start + piece.step * offset;
+      retained[index3] = 1;
+      targetBase.push(index3);
+    }
+  }
+  const removeRuns = [];
+  for (let end = baseLength; end > 0; ) {
+    if (retained[end - 1] !== 0) {
+      end -= 1;
+      continue;
+    }
+    let start = end - 1;
+    while (start > 0 && retained[start - 1] === 0)
+      start -= 1;
+    removeRuns.push(start, end - start);
+    end = start;
+  }
+  const retainedBase = [];
+  for (let index3 = 0; index3 < retained.length; index3++)
+    if (retained[index3] !== 0)
+      retainedBase.push(index3);
+  let permutation;
+  if (targetBase.some((value, index3) => value !== retainedBase[index3])) {
+    const positions = new Map(retainedBase.map((value, index3) => [value, index3]));
+    permutation = targetBase.map((value) => positions.get(value));
+  }
+  return { removeRuns, permutation, insertRuns: insertRunsOf(pieces) };
+}
+function insertRunsOf(pieces) {
+  const insertRuns = [];
+  let logicalIndex = 0;
+  for (let pieceIndex = 0; pieceIndex < pieces.length; ) {
+    const piece = pieces[pieceIndex];
+    if (piece.kind === "base") {
+      logicalIndex += piece.length;
+      pieceIndex += 1;
+      continue;
+    }
+    const startPiece = pieceIndex;
+    while (pieceIndex < pieces.length && pieces[pieceIndex].kind === "insert") {
+      logicalIndex += pieces[pieceIndex].length;
+      pieceIndex += 1;
+    }
+    insertRuns.push(logicalIndex - rangeLength(pieces, startPiece, pieceIndex), startPiece, pieceIndex);
+  }
+  return insertRuns;
+}
+function rangeLength(pieces, start, end) {
+  let length = 0;
+  for (let index3 = start; index3 < end; index3++)
+    length += pieces[index3].length;
+  return length;
+}
+function emitArrayOperations(node, path5, operations, denseRegions) {
+  const overlay = arrayOverlay(node);
+  const base = nodeBase(node);
+  if (denseRegions !== void 0) {
+    for (const region of denseRegions) {
+      if (operations.length > MAX_DELTA_OPERATIONS)
+        return;
+      operations.push(["p", path5, region.start, region.length, cloneArrayRegion(node, region)]);
+    }
+  }
+  if (overlay.structural) {
+    const plan = buildArrayPlan(node);
+    for (let index3 = 0; index3 < plan.removeRuns.length; index3 += 2) {
+      if (operations.length > MAX_DELTA_OPERATIONS)
+        return;
+      operations.push(["p", path5, plan.removeRuns[index3], plan.removeRuns[index3 + 1], []]);
+    }
+    if (plan.permutation !== void 0)
+      operations.push(["m", path5, plan.permutation]);
+    const pieces = piecesOf(overlay);
+    for (let run2 = 0; run2 < plan.insertRuns.length; run2 += 3) {
+      if (operations.length > MAX_DELTA_OPERATIONS)
+        return;
+      const logicalIndex = plan.insertRuns[run2];
+      const items = [];
+      for (let pieceIndex = plan.insertRuns[run2 + 1]; pieceIndex < plan.insertRuns[run2 + 2]; pieceIndex++) {
+        const piece = pieces[pieceIndex];
+        for (let offset = 0; offset < piece.length; offset++) {
+          const sourceIndex = piece.start + piece.step * offset;
+          items.push(cloneStored(entryValueAt(node, piece, sourceIndex), node.context));
+        }
+      }
+      operations.push(["p", path5, logicalIndex, 0, items]);
+    }
+  }
+  for (const [baseIndex, valueIndex] of overlay.baseOverrides ?? []) {
+    if (operations.length > MAX_DELTA_OPERATIONS)
+      return;
+    const index3 = findEntryIndex(overlay, 1, baseIndex, void 0);
+    if (index3 === void 0 || denseRegions !== void 0 && regionContaining(denseRegions, index3))
+      continue;
+    emitChangedValue(operations, [...path5, index3], base[baseIndex], cloneStored(storedValue(node.context, valueIndex), node.context));
+  }
+}
+function cloneArrayRegion(node, region) {
+  const overlay = arrayOverlay(node);
+  const result = [];
+  for (let index3 = region.start; index3 < region.start + region.length; index3++) {
+    const piece = locatePiece(overlay, index3);
+    const sourceIndex = piece.start + piece.step * overlay.locatedOffset;
+    result.push(cloneStored(entryValueAt(node, piece, sourceIndex), node.context));
+  }
+  return result;
+}
+function emitChangedValue(operations, path5, before, after) {
+  if (!isContainer2(after) && before === after)
+    return false;
+  if (isContainer2(before) && isContainer2(after) && equalTrustedJson(before, after))
+    return false;
+  if (typeof before === "string" && typeof after === "string") {
+    if (after.length > before.length && after.slice(0, before.length) === before) {
+      operations.push(["a", path5, after.slice(before.length)]);
+      return true;
+    }
+    const shared = overlap(before, after, 65536);
+    if (shared > 0) {
+      operations.push(["t", path5, before.length - shared]);
+      if (after.length > shared)
+        operations.push(["a", path5, after.slice(shared)]);
+      return true;
+    }
+  }
+  operations.push(["s", path5, after]);
+  return true;
+}
+function emitSet(operations, path5, value) {
+  if (path5.length === 0)
+    operations.push(["r", value]);
+  else
+    operations.push(["s", path5, value]);
+}
+function resolvePath(node) {
+  if (node.preparedPath !== void 0)
+    return node.preparedPath;
+  const parent = nodeParent(node);
+  if (parent === void 0) {
+    node.preparedPath = [];
+    return node.preparedPath;
+  }
+  const parentPath = resolvePath(parent);
+  if (parentPath === void 0)
+    return void 0;
+  if (node.parentKind === 0) {
+    const key = node.parentKey;
+    if (!objectHas(parent, key) || objectValue(parent, key) !== nodeBase(node))
+      return void 0;
+    node.preparedPath = [...parentPath, key];
+    return node.preparedPath;
+  }
+  const overlay = arrayOverlay(parent);
+  const index3 = findEntryIndex(overlay, node.parentKind, node.parentKey, node.parentSource);
+  if (index3 === void 0)
+    return void 0;
+  const piece = locatePiece(overlay, index3);
+  if (entryValueAt(parent, piece, node.parentKey) !== nodeBase(node))
+    return void 0;
+  node.preparedPath = [...parentPath, index3];
+  return node.preparedPath;
+}
+function ensurePieceLocations(overlay) {
+  if (overlay.baseLocations !== void 0)
+    return;
+  overlay.baseLocations = [];
+  overlay.insertLocations = /* @__PURE__ */ new Map();
+  let logicalStart = 0;
+  for (const piece of piecesOf(overlay)) {
+    const last = piece.start + piece.step * (piece.length - 1);
+    const location = {
+      piece,
+      logicalStart,
+      minimum: Math.min(piece.start, last),
+      maximum: Math.max(piece.start, last)
+    };
+    if (piece.kind === "base")
+      overlay.baseLocations.push(location);
+    else {
+      let locations = overlay.insertLocations.get(piece.source);
+      if (locations === void 0) {
+        locations = [];
+        overlay.insertLocations.set(piece.source, locations);
+      }
+      locations.push(location);
+    }
+    logicalStart += piece.length;
+  }
+  const byMinimum = (left, right) => left.minimum - right.minimum;
+  overlay.baseLocations.sort(byMinimum);
+  for (const locations of overlay.insertLocations.values())
+    locations.sort(byMinimum);
+}
+function findEntryIndex(overlay, kind, sourceIndex, source) {
+  if (kind === 1 && !overlay.structural)
+    return sourceIndex;
+  ensurePieceLocations(overlay);
+  const locations = kind === 1 ? overlay.baseLocations : overlay.insertLocations.get(source);
+  if (locations === void 0)
+    return void 0;
+  let low = 0;
+  let high = locations.length;
+  while (low < high) {
+    const middle = low + high >>> 1;
+    if (locations[middle].minimum <= sourceIndex)
+      low = middle + 1;
+    else
+      high = middle;
+  }
+  const location = locations[low - 1];
+  if (location === void 0 || sourceIndex > location.maximum)
+    return void 0;
+  const offset = (sourceIndex - location.piece.start) / location.piece.step;
+  return offset >= 0 && offset < location.piece.length ? location.logicalStart + offset : void 0;
+}
+function ensureOperations(context) {
+  if (context.ops !== void 0)
+    return context.ops;
+  assertReadable(context);
+  if (context.replacement) {
+    const base = context.tracker.deref()?.replacementBase(context);
+    context.replacementNoop = base !== void 0 && equalTrustedJson(base, nodeBase(context.root));
+    context.ops = context.replacementNoop ? [] : [["r", nodeBase(context.root)]];
+  } else
+    context.ops = emitOperations(context);
+  return context.ops;
+}
+function equalTrustedJson(left, right) {
+  if (left === right)
+    return true;
+  if (!isContainer2(left) || !isContainer2(right) || Array.isArray(left) !== Array.isArray(right))
+    return false;
+  if (Array.isArray(left)) {
+    const other2 = right;
+    if (left.length !== other2.length)
+      return false;
+    for (let index3 = 0; index3 < left.length; index3++)
+      if (!equalTrustedJson(left[index3], other2[index3]))
+        return false;
+    return true;
+  }
+  const other = right;
+  const keys = Object.keys(left);
+  if (keys.length !== Object.keys(other).length)
+    return false;
+  for (const key of keys)
+    if (!Object.hasOwn(other, key) || !equalTrustedJson(left[key], other[key]))
+      return false;
+  return true;
+}
+function abortContext(context) {
+  if (context.status.value === "aborted" || context.status.value === "consumed" || context.status.value === "stale")
+    return;
+  context.status.value = "aborted";
+  clearContext(context);
+}
+function releaseOverlayReferences(context) {
+  context.tracker.deref()?.releaseContext(context);
+  if (locatedDenseArray?.context === context)
+    locatedDenseArray = void 0;
+  context.overlayReleased = true;
+  context.dirty.length = 0;
+  context.nodes.length = 0;
+  context.rawNodes = void 0;
+  context.ops = void 0;
+  context.root = void 0;
+  context.bases = void 0;
+  context.stored = void 0;
+  context.baseValue = void 0;
+}
+function clearContext(context) {
+  context.tracker.deref()?.releaseContext(context);
+  if (locatedDenseArray?.context === context)
+    locatedDenseArray = void 0;
+  for (const node of context.nodes) {
+    if (Array.isArray(node.target))
+      node.target.length = 0;
+    Reflect.deleteProperty(node.target, NODE);
+    node.writes?.clear();
+    node.deletes?.clear();
+    node.readded?.clear();
+    if (node.array?.pieces !== void 0)
+      node.array.pieces.length = 0;
+    if (node.array !== void 0) {
+      node.array.root = void 0;
+      node.array.baseLocations = void 0;
+      node.array.insertLocations = void 0;
+    }
+    node.array?.baseOverrides?.clear();
+    node.array?.insertOverrides?.clear();
+    node.parentSource = void 0;
+    node.target = RELEASED;
+    node.proxy = RELEASED;
+    node.writeKey = void 0;
+    node.writeValue = void 0;
+    node.writes = void 0;
+    node.deleteKey = void 0;
+    node.deletes = void 0;
+    node.readded = void 0;
+    node.array = void 0;
+    node.subtreeDirty = void 0;
+    node.preparedPath = void 0;
+  }
+  context.dirty.length = 0;
+  context.nodes.length = 0;
+  context.rawNodes = void 0;
+  context.ops = void 0;
+  context.root = void 0;
+  context.bases = void 0;
+  context.stored = void 0;
+  context.baseValue = void 0;
+  context.overlayReleased = true;
+}
+function isContainer2(value) {
+  return value !== null && typeof value === "object";
+}
+
+// node_modules/@earendil-works/chord/dist/delta/index.js
+var isObj2 = (value) => value !== null && typeof value === "object";
+function overlap(a, b, scan, probe = 64, maxCandidates = 8) {
+  if (a.length === 0 || b.length === 0 || scan === 0)
+    return 0;
+  const tail = a.length > scan ? a.slice(a.length - scan) : a;
+  for (const h of [Math.min(probe, b.length), 1]) {
+    const head = b.slice(0, h);
+    let tried = 0;
+    for (let k = tail.indexOf(head); k !== -1; k = tail.indexOf(head, k + 1)) {
+      if (++tried > maxCandidates)
+        break;
+      const n = tail.length - k;
+      if (n <= b.length && tail.slice(k) === b.slice(0, n))
+        return n;
+    }
+    if (h === 1)
+      break;
+  }
+  return 0;
+}
+var RESERVED_SEGMENTS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
+var UnsafePathError = class extends Error {
+  // Not a parameter property: Node's --experimental-strip-types rejects those,
+  // and these files are meant to run under it directly.
+  segment;
+  constructor(segment) {
+    super(`unsafe path segment: ${String(segment)}`);
+    this.segment = segment;
+    this.name = "UnsafePathError";
+  }
+};
+function assertValidOp(op) {
+  if (!Array.isArray(op) || op.length === 0)
+    throw new TypeError("op is not a tuple");
+  switch (op[0]) {
+    case "r":
+      if (op.length !== 2)
+        throw new TypeError("r arity");
+      return;
+    case "s":
+      if (op.length !== 3)
+        throw new TypeError("s arity");
+      assertPathArg(op[1], true);
+      return;
+    case "d":
+      if (op.length !== 2)
+        throw new TypeError("d arity");
+      assertPathArg(op[1], true);
+      return;
+    case "a":
+      if (op.length !== 3 || typeof op[2] !== "string")
+        throw new TypeError("a shape");
+      assertPathArg(op[1], true);
+      return;
+    case "t":
+      if (op.length !== 3 || !Number.isInteger(op[2]) || op[2] < 0)
+        throw new TypeError("t shape");
+      assertPathArg(op[1], true);
+      return;
+    case "p": {
+      if (op.length !== 5)
+        throw new TypeError("p arity");
+      assertPathArg(op[1]);
+      if (!Number.isInteger(op[2]) || op[2] < 0)
+        throw new TypeError("p index");
+      if (!Number.isInteger(op[3]) || op[3] < 0)
+        throw new TypeError("p remove");
+      if (!Array.isArray(op[4]))
+        throw new TypeError("p items");
+      return;
+    }
+    case "m":
+      if (op.length !== 3)
+        throw new TypeError("m arity");
+      assertPathArg(op[1]);
+      assertPermutation(op[2]);
+      return;
+    // Silently skipping an unknown verb is how a newer producer's op vanishes.
+    default:
+      throw new TypeError(`unknown op verb: ${String(op[0])}`);
+  }
+}
+function assertPathArg(p, nonEmpty = false) {
+  if (!Array.isArray(p))
+    throw new TypeError("path is not an array");
+  if (nonEmpty && p.length === 0)
+    throw new TypeError("path is empty");
+  assertSafePath(p);
+}
+function assertPermutation(value) {
+  if (!Array.isArray(value))
+    throw new TypeError("m permutation is not an array");
+  const seen = new Uint8Array(value.length);
+  for (const index3 of value) {
+    if (!Number.isInteger(index3) || index3 < 0 || index3 >= value.length || seen[index3] !== 0) {
+      throw new TypeError("m permutation is not a bijection");
+    }
+    seen[index3] = 1;
+  }
+}
+function assertSafePath(path5) {
+  for (const seg of path5) {
+    if (typeof seg === "string") {
+      if (RESERVED_SEGMENTS.has(seg))
+        throw new UnsafePathError(seg);
+    } else if (!Number.isInteger(seg) || seg < 0) {
+      throw new UnsafePathError(seg);
+    }
+  }
+}
+function assertIndexInRange(parent, index3) {
+  if (index3 > parent.length)
+    throw new UnsafePathError(index3);
+}
+var PathError = class extends Error {
+  path;
+  constructor(path5) {
+    super(`unresolvable path: ${JSON.stringify(path5)}`);
+    this.path = path5;
+    this.name = "PathError";
+  }
+};
+function applyOps(target, ops) {
+  let root = target;
+  for (const op of ops) {
+    assertValidOp(op);
+    if (op[0] === "r") {
+      root = op[1];
+      continue;
+    }
+    const path5 = op[1];
+    assertSafePath(path5);
+    if (op[0] === "p") {
+      const target_ = path5.length === 0 ? root : resolve(root, path5);
+      if (!Array.isArray(target_))
+        throw new PathError(path5);
+      target_.splice(op[2], op[3]);
+      const chunkSize = 1e4;
+      for (let offset = 0; offset < op[4].length; offset += chunkSize) {
+        target_.splice(op[2] + offset, 0, ...op[4].slice(offset, offset + chunkSize));
+      }
+      continue;
+    }
+    if (op[0] === "m") {
+      const target_ = path5.length === 0 ? root : resolve(root, path5);
+      if (!Array.isArray(target_) || target_.length !== op[2].length)
+        throw new PathError(path5);
+      const previous = target_.slice();
+      for (let index3 = 0; index3 < op[2].length; index3++)
+        target_[index3] = previous[op[2][index3]];
+      continue;
+    }
+    const parent = resolve(root, path5.slice(0, -1));
+    const key = path5[path5.length - 1];
+    if (Array.isArray(parent)) {
+      if (typeof key !== "number")
+        throw new UnsafePathError(key);
+      assertIndexInRange(parent, key);
+    }
+    const write = (value) => {
+      Object.defineProperty(parent, key, { value, writable: true, enumerable: true, configurable: true });
+    };
+    const read2 = () => Object.hasOwn(parent, key) ? parent[key] : void 0;
+    switch (op[0]) {
+      case "s":
+        write(op[2]);
+        break;
+      case "d":
+        if (Array.isArray(parent)) {
+          if (typeof key !== "number" || key >= parent.length)
+            throw new PathError(path5);
+          parent.splice(key, 1);
+        } else
+          delete parent[key];
+        break;
+      case "a": {
+        const current = read2();
+        if (typeof current !== "string")
+          throw new PathError(path5);
+        write(`${current}${op[2]}`);
+        break;
+      }
+      case "t": {
+        const current = read2();
+        if (typeof current !== "string")
+          throw new PathError(path5);
+        write(current.slice(op[2]));
+        break;
+      }
+    }
+  }
+  return root;
+}
+function applyImmutable(target, ops) {
+  return applyImmutableBatches(target, [ops]);
+}
+function applyImmutableBatches(target, batches) {
+  let root = target;
+  const owned = /* @__PURE__ */ new WeakSet();
+  for (const ops of batches) {
+    for (const op of ops) {
+      assertValidOp(op);
+      if (op[0] === "r") {
+        root = op[1];
+        continue;
+      }
+      if (op[0] === "p") {
+        const appended = appendCopy(root, op, owned);
+        if (appended !== void 0) {
+          root = appended;
+          continue;
+        }
+      }
+      root = copyContainers(root, op[0] === "p" || op[0] === "m" ? op[1] : op[1].slice(0, -1), owned);
+      root = applyOps(root, [op]);
+    }
+  }
+  return root;
+}
+function appendCopy(root, op, owned) {
+  const [, path5, index3, deleteCount, items] = op;
+  if (deleteCount !== 0)
+    return void 0;
+  let target = root;
+  for (const segment of path5) {
+    const valid = typeof segment === "string" ? !RESERVED_SEGMENTS.has(segment) && isObj2(target) && !Array.isArray(target) : Number.isInteger(segment) && segment >= 0 && Array.isArray(target);
+    if (!valid || !Object.hasOwn(target, segment))
+      return void 0;
+    target = target[segment];
+  }
+  if (!Array.isArray(target) || owned.has(target) || index3 !== target.length)
+    return void 0;
+  const appended = target.concat(items);
+  owned.add(appended);
+  if (path5.length === 0)
+    return appended;
+  const parentPath = path5.slice(0, -1);
+  const copiedRoot = copyContainers(root, parentPath, owned);
+  Object.defineProperty(resolve(copiedRoot, parentPath), path5[path5.length - 1], {
+    value: appended,
+    writable: true,
+    enumerable: true,
+    configurable: true
+  });
+  return copiedRoot;
+}
+function copyContainers(root, path5, owned) {
+  const copy2 = (value) => {
+    if (Array.isArray(value))
+      return value.slice();
+    if (!isObj2(value))
+      throw new PathError(path5);
+    const result = Object.create(Object.getPrototypeOf(value) === null ? null : Object.prototype);
+    for (const key of Object.keys(value)) {
+      Object.defineProperty(result, key, {
+        value: value[key],
+        writable: true,
+        enumerable: true,
+        configurable: true
+      });
+    }
+    return result;
+  };
+  if (!isObj2(root))
+    throw new PathError(path5);
+  let copiedRoot;
+  if (owned.has(root))
+    copiedRoot = root;
+  else {
+    copiedRoot = copy2(root);
+    owned.add(copiedRoot);
+  }
+  let destination = copiedRoot;
+  for (const segment of path5) {
+    if (!Object.hasOwn(destination, segment))
+      throw new PathError(path5);
+    if (Array.isArray(destination) && typeof segment !== "number")
+      throw new UnsafePathError(segment);
+    const child = destination[segment];
+    if (!isObj2(child))
+      throw new PathError(path5);
+    if (owned.has(child)) {
+      destination = child;
+      continue;
+    }
+    const copiedChild = copy2(child);
+    Object.defineProperty(destination, segment, {
+      value: copiedChild,
+      writable: true,
+      enumerable: true,
+      configurable: true
+    });
+    owned.add(copiedChild);
+    destination = copiedChild;
+  }
+  return copiedRoot;
+}
+function resolveValue(root, path5) {
+  let node = root;
+  for (const seg of path5) {
+    if (!isObj2(node))
+      throw new PathError(path5);
+    if (Array.isArray(node) && typeof seg !== "number")
+      throw new UnsafePathError(seg);
+    if (!Object.hasOwn(node, seg))
+      throw new PathError(path5);
+    node = node[seg];
+  }
+  return node;
+}
+function resolve(root, path5) {
+  const node = resolveValue(root, path5);
+  if (!isObj2(node))
+    throw new PathError(path5);
+  return node;
+}
+
+// node_modules/typebox/build/typebox.mjs
+var typebox_exports = {};
+__export(typebox_exports, {
+  Any: () => Any,
+  Array: () => _Array_,
+  BigInt: () => BigInt2,
+  Boolean: () => Boolean2,
+  Call: () => Call2,
+  Capitalize: () => Capitalize,
+  Codec: () => Codec,
+  Conditional: () => Conditional,
+  Constructor: () => Constructor,
+  ConstructorParameters: () => ConstructorParameters,
+  Cyclic: () => Cyclic,
+  Decode: () => Decode2,
+  DecodeBuilder: () => DecodeBuilder,
+  Dependent: () => Dependent,
+  Encode: () => Encode2,
+  EncodeBuilder: () => EncodeBuilder,
+  Enum: () => Enum,
+  Evaluate: () => Evaluate2,
+  Exclude: () => Exclude,
+  Extends: () => Extends,
+  ExtendsResult: () => result_exports,
+  Extract: () => Extract,
+  Function: () => _Function_,
+  Generic: () => Generic,
+  Identifier: () => Identifier,
+  Immutable: () => Immutable,
+  Index: () => Index,
+  Infer: () => Infer,
+  InstanceType: () => InstanceType,
+  Instantiate: () => Instantiate,
+  Integer: () => Integer,
+  Interface: () => Interface,
+  Intersect: () => Intersect,
+  IsAny: () => IsAny,
+  IsArray: () => IsArray3,
+  IsBigInt: () => IsBigInt3,
+  IsBoolean: () => IsBoolean4,
+  IsCall: () => IsCall,
+  IsCodec: () => IsCodec,
+  IsConstructor: () => IsConstructor3,
+  IsCyclic: () => IsCyclic,
+  IsDependent: () => IsDependent,
+  IsEnum: () => IsEnum2,
+  IsEnumValue: () => IsEnumValue,
+  IsFunction: () => IsFunction3,
+  IsGeneric: () => IsGeneric,
+  IsIdentifier: () => IsIdentifier2,
+  IsImmutable: () => IsImmutable,
+  IsInfer: () => IsInfer,
+  IsInteger: () => IsInteger3,
+  IsIntersect: () => IsIntersect,
+  IsKind: () => IsKind,
+  IsLiteral: () => IsLiteral,
+  IsNever: () => IsNever,
+  IsNull: () => IsNull3,
+  IsNumber: () => IsNumber4,
+  IsObject: () => IsObject3,
+  IsOptional: () => IsOptional,
+  IsParameter: () => IsParameter,
+  IsReadonly: () => IsReadonly,
+  IsRecord: () => IsRecord,
+  IsRef: () => IsRef2,
+  IsRefine: () => IsRefine2,
+  IsRest: () => IsRest,
+  IsSchema: () => IsSchema2,
+  IsString: () => IsString4,
+  IsSymbol: () => IsSymbol3,
+  IsTemplateLiteral: () => IsTemplateLiteral,
+  IsThis: () => IsThis,
+  IsTuple: () => IsTuple,
+  IsUndefined: () => IsUndefined3,
+  IsUnion: () => IsUnion,
+  IsUnknown: () => IsUnknown,
+  IsUnsafe: () => IsUnsafe,
+  IsVoid: () => IsVoid,
+  KeyOf: () => KeyOf2,
+  Literal: () => Literal,
+  Lowercase: () => Lowercase,
+  Mapped: () => Mapped,
+  Module: () => Module2,
+  Never: () => Never,
+  NonNullable: () => NonNullable,
+  Null: () => Null,
+  Number: () => Number2,
+  Object: () => _Object_,
+  Omit: () => Omit,
+  Optional: () => Optional,
+  Parameter: () => Parameter,
+  Parameters: () => Parameters,
+  Partial: () => Partial,
+  Pick: () => Pick,
+  Readonly: () => Readonly,
+  ReadonlyObject: () => ReadonlyObject,
+  ReadonlyType: () => ReadonlyType,
+  Record: () => Record,
+  RecordKey: () => RecordKey,
+  RecordPattern: () => RecordPattern,
+  RecordValue: () => RecordValue,
+  Ref: () => Ref2,
+  Refine: () => Refine,
+  Required: () => Required,
+  Rest: () => Rest,
+  ReturnType: () => ReturnType,
+  Script: () => Script2,
+  String: () => String2,
+  Symbol: () => Symbol2,
+  TemplateLiteral: () => TemplateLiteral2,
+  This: () => This,
+  Tuple: () => Tuple,
+  Uncapitalize: () => Uncapitalize,
+  Undefined: () => Undefined,
+  Union: () => Union,
+  Unknown: () => Unknown,
+  Unsafe: () => Unsafe,
+  Uppercase: () => Uppercase,
+  Void: () => Void,
+  With: () => With2
+});
+
+// node_modules/@earendil-works/chord/dist/state.js
+var StateSubscriber = class {
+  #listener;
+  #reportError;
+  #pending = [];
+  #running = false;
+  #started = false;
+  #closed = false;
+  constructor(listener, reportError) {
+    this.#listener = listener;
+    this.#reportError = reportError;
+  }
+  push(frame) {
+    if (this.#closed)
+      return;
+    if (this.#pending.length === 100) {
+      const hydration = this.#started ? void 0 : this.#pending[0];
+      this.#pending.length = 0;
+      if (hydration !== void 0)
+        this.#pending.push(hydration);
+    }
+    this.#pending.push(frame);
+  }
+  drain() {
+    if (this.#running || this.#closed)
+      return;
+    this.#running = true;
+    for (let frame = this.#pending.shift(); frame !== void 0; frame = this.#pending.shift()) {
+      this.#started = true;
+      try {
+        const result = this.#listener(frame.value, frame.context, frame.delivery);
+        if (isPromiseLike(result)) {
+          void Promise.resolve(result).then(() => this.#resume(), (error) => {
+            this.#report(error);
+            this.#resume();
+          });
+          return;
+        }
+      } catch (error) {
+        this.#report(error);
+      }
+    }
+    this.#running = false;
+  }
+  clear() {
+    this.#pending.length = 0;
+  }
+  close() {
+    this.#closed = true;
+    this.clear();
+  }
+  #resume() {
+    this.#running = false;
+    this.drain();
+  }
+  #report(error) {
+    try {
+      this.#reportError(toError(error));
+    } catch (reportError) {
+      reportErrorAsync(toError(reportError));
+    }
+  }
+};
+var ReplicatedStatePublisher = class {
+  #listeners = /* @__PURE__ */ new Map();
+  #reportError;
+  #publications = [];
+  #value;
+  #sequence = 0;
+  #delivering = false;
+  constructor(initial, reportError = reportErrorAsync) {
+    this.#value = initial;
+    this.#reportError = reportError;
+  }
+  get value() {
+    return this.#value;
+  }
+  snapshot() {
+    return { value: this.#value, sequence: this.#sequence };
+  }
+  subscribe(listener) {
+    const { value, sequence: sequence2 } = this.snapshot();
+    const subscriber = new StateSubscriber(listener, this.#reportError);
+    this.#listeners.set(subscriber, sequence2);
+    subscriber.push({ value, context: BACKGROUND_CONTEXT, delivery: { kind: "hydrate", sequence: sequence2 } });
+    subscriber.drain();
+    return () => {
+      subscriber.close();
+      this.#listeners.delete(subscriber);
+    };
+  }
+  /** Publish an already-prepared immutable revision. Subscriber failures are reported, never thrown. */
+  publish(value, context) {
+    this.#value = value;
+    this.#sequence += 1;
+    this.#publications.push({ value, sequence: this.#sequence, context });
+    if (this.#delivering)
+      return;
+    this.#delivering = true;
+    try {
+      for (let publication = this.#publications.shift(); publication !== void 0; publication = this.#publications.shift()) {
+        const delivery = { kind: "update", sequence: publication.sequence };
+        for (const [subscriber, hydratedSequence] of [...this.#listeners]) {
+          if (publication.sequence <= hydratedSequence)
+            continue;
+          subscriber.push({ value: publication.value, context: publication.context, delivery });
+          subscriber.drain();
+        }
+      }
+    } finally {
+      this.#delivering = false;
+    }
+  }
+};
+var MutableReplicatedStateImpl = class {
+  #tracker;
+  #publisher;
+  #changing = false;
+  constructor(initial) {
+    this.#tracker = track(initial);
+    this.#publisher = new ReplicatedStatePublisher(this.#tracker.value);
+  }
+  get value() {
+    return this.#tracker.value;
+  }
+  change(context, mutate) {
+    if (this.#changing)
+      throw new Error("Replicated state cannot be changed reentrantly from a change callback");
+    this.#changing = true;
+    let prepared;
+    try {
+      const change = this.#tracker.beginChange();
+      try {
+        const outcome = mutate(change.state);
+        if (isPromiseLike(outcome)) {
+          void Promise.resolve(outcome).catch(() => void 0);
+          throw new TypeError("Replicated state change callbacks must be synchronous");
+        }
+        prepared = change.prepare();
+      } catch (error) {
+        change.abort();
+        throw error;
+      }
+    } finally {
+      this.#changing = false;
+    }
+    this.#tracker.adopt(prepared);
+    if (prepared.ops.length > 0)
+      this.#publisher.publish(prepared.value, context);
+  }
+  replace(context, value) {
+    if (this.#changing)
+      throw new Error("Replicated state cannot be replaced from a change callback");
+    const prepared = this.#tracker.prepareReplace(value);
+    this.#tracker.adopt(prepared);
+    if (prepared.ops.length > 0)
+      this.#publisher.publish(prepared.value, context);
+  }
+  subscribe(listener) {
+    return this.#publisher.subscribe(listener);
+  }
+};
+var AttachedReplicatedStateImpl = class {
+  #publisher;
+  #attachment;
+  #reportError;
+  #cursor;
+  #disposed = false;
+  constructor(attachment, options) {
+    const { snapshot } = attachment;
+    assertCursor(snapshot.cursor, "snapshot");
+    this.#attachment = attachment;
+    this.#cursor = snapshot.cursor;
+    this.#reportError = options.onError ?? reportErrorAsync;
+    this.#publisher = new ReplicatedStatePublisher(snapshot.value, (error) => this.#report(error));
+  }
+  get value() {
+    return this.#publisher.value;
+  }
+  subscribe(listener) {
+    return this.#publisher.subscribe(listener);
+  }
+  activate() {
+    this.#attachment.activate((frame) => this.#receive(frame));
+  }
+  dispose() {
+    if (this.#disposed)
+      return;
+    this.#disposed = true;
+    this.#attachment.dispose();
+  }
+  #receive(frame) {
+    if (this.#disposed)
+      return;
+    try {
+      assertCursor(frame.cursor, "frame");
+      const expected = this.#cursor + 1;
+      if (frame.cursor !== expected) {
+        throw new Error(`Replicated state source cursor has a gap: expected ${expected}, received ${frame.cursor}`);
+      }
+      this.#cursor = frame.cursor;
+      this.#publisher.publish(frame.value, frame.context);
+    } catch (error) {
+      this.#fail(toError(error));
+    }
+  }
+  #fail(error) {
+    if (this.#disposed)
+      return;
+    this.#disposed = true;
+    try {
+      this.#attachment.dispose();
+    } catch (disposeError) {
+      this.#report(new AggregateError([error, disposeError], "Replicated state source contract failed"));
+      return;
+    }
+    this.#report(error);
+  }
+  #report(error) {
+    try {
+      this.#reportError(toError(error));
+    } catch (reportError) {
+      reportErrorAsync(toError(reportError));
+    }
+  }
+};
+function attachReplicatedStateSource(source, options = {}) {
+  const attachment = source.attach();
+  try {
+    const state3 = new AttachedReplicatedStateImpl(attachment, options);
+    state3.activate();
+    return state3;
+  } catch (error) {
+    try {
+      attachment.dispose();
+    } catch (disposeError) {
+      throw new AggregateError([error, disposeError], "Failed to attach replicated state source");
+    }
+    throw error;
+  }
+}
+function assertCursor(cursor, kind) {
+  if (!Number.isSafeInteger(cursor))
+    throw new TypeError(`Replicated state source ${kind} cursor must be a safe integer`);
+}
+function isPromiseLike(value) {
+  return (typeof value === "object" && value !== null || typeof value === "function") && typeof value.then === "function";
+}
+function reportErrorAsync(error) {
+  queueMicrotask(() => {
+    throw error;
+  });
+}
+function toError(error) {
+  return error instanceof Error ? error : new Error(String(error));
+}
+function replicatedState(initialOrSource, options) {
+  if (isReplicatedStateSource(initialOrSource))
+    return attachReplicatedStateSource(initialOrSource, options);
+  return new MutableReplicatedStateImpl(initialOrSource);
+}
+function isReplicatedStateSource(value) {
+  return typeof value.attach === "function";
+}
+
+// node_modules/@earendil-works/pi-durable/dist/ids.js
+function idFromNumber(value) {
+  return value;
+}
+function seqFromNumber(value) {
+  return value;
+}
+
+// node_modules/@earendil-works/pi-durable/dist/documents.js
+function defineDoc(definition) {
+  validateDefinition(definition);
+  return { definition };
+}
+function defineDocFamily(definition) {
+  validateDefinition(definition);
+  return { definition };
+}
+function validateDefinition(definition) {
+  if (!Number.isSafeInteger(definition.version) || definition.version < 1) {
+    throw new TypeError(`Document ${definition.kind} version must be a positive integer`);
+  }
+}
+function resolveAddress(definition, args) {
+  let index3 = 0;
+  let scope;
+  switch (definition.scope) {
+    case "session":
+      scope = { kind: "session" };
+      break;
+    case "conversation":
+      scope = { kind: "conversation", conversationId: ownerId(args[index3++], definition) };
+      break;
+    case "task":
+      scope = { kind: "task", taskId: ownerId(args[index3++], definition) };
+      break;
+  }
+  const key = definition.family === true ? args[index3++] : void 0;
+  const address = key === void 0 ? { kind: definition.kind, scope } : { kind: definition.kind, scope, key };
+  return { address, id: addressId(address), nextArgument: index3 };
+}
+function ownerId(value, definition) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
+    throw new TypeError(`Document ${definition.kind} requires a ${definition.scope} ID`);
+  }
+  return idFromNumber(value);
+}
+function addressId(address) {
+  const owner = address.scope.kind === "session" ? null : address.scope.kind === "conversation" ? address.scope.conversationId : address.scope.taskId;
+  return JSON.stringify([address.kind, address.scope.kind, owner, address.key ?? null]);
+}
+function documentCreate(definition, address, id) {
+  const key = address.key === void 0 ? {} : { key: address.key };
+  switch (address.scope.kind) {
+    case "session":
+      return { id, kind: address.kind, ...key, scope: address.scope };
+    case "task":
+      return { id, kind: address.kind, ...key, scope: address.scope };
+    case "conversation":
+      return {
+        id,
+        kind: address.kind,
+        ...key,
+        scope: address.scope,
+        history: definition.history,
+        fork: definition.fork
+      };
+  }
+}
+function checkRecordScope(definition, record) {
+  if (record.scope.kind !== definition.scope || record.scope.kind === "conversation" && (record.history !== definition.history || record.fork !== definition.fork)) {
+    throw new TypeError(`Document ${record.id} (${record.kind}) does not match the supplied definition semantics`);
+  }
+}
+function checkRecordVersion(definition, record, version) {
+  if (version > definition.version) {
+    throw new Error(`Document ${record.id} (${record.kind}) has newer version ${version} than ${definition.version}`);
+  }
+  if (version < definition.version && definition.migrate === void 0) {
+    throw new Error(`Document ${record.id} (${record.kind}) requires migration from version ${version}`);
+  }
+}
+function materializeDocument(definition, stored) {
+  return materializeDocumentValue(definition, stored.record, stored.version, stored.value);
+}
+function materializeDocumentValue(definition, record, version, value) {
+  checkRecordScope(definition, record);
+  checkRecordVersion(definition, record, version);
+  if (version === definition.version)
+    return value;
+  return copyJson(definition.migrate(value, version));
+}
+
+// node_modules/@earendil-works/pi-durable/dist/entries.js
+function defineEntry(kind) {
+  if (typeof kind !== "string" || kind.length === 0)
+    throw new TypeError("Entry kind must be a non-empty string");
+  return {
+    kind,
+    is: (entry) => entry !== void 0 && entry.kind === kind
+  };
+}
+var UserEntry = defineEntry("pi.user");
+var AssistantEntry = defineEntry("pi.assistant");
+var SystemEntry = defineEntry("pi.system");
+var ToolResultEntry = defineEntry("pi.tool-result");
+var ResetEntry = defineEntry("pi.reset");
+var CompactionEntry = defineEntry("pi.compaction");
+
+// node_modules/@earendil-works/pi-durable/dist/errors.js
+function errorMessage(error) {
+  if (error instanceof Error)
+    return error.message;
+  try {
+    return String(error);
+  } catch {
+    return Object.prototype.toString.call(error);
+  }
+}
+var ReadAfterWrite = class extends Error {
+  constructor(method) {
+    super(`Tx.${method}() cannot read tables after the first table write`);
+    this.name = "ReadAfterWrite";
+  }
+};
+var StorageRequestError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "StorageRequestError";
+  }
+};
+var SessionFailed = class extends Error {
+  constructor(cause) {
+    super("Session failed after a storage error; close and reopen it", { cause });
+    this.name = "SessionFailed";
+  }
+};
+var ConversationBusy = class extends Error {
+  conversationId;
+  constructor(conversationId) {
+    super(`Conversation ${conversationId} is busy`);
+    this.name = "ConversationBusy";
+    this.conversationId = conversationId;
+  }
+};
+
+// node_modules/@earendil-works/pi-durable/dist/session/observation.js
+var MAX_PENDING_WATCH_FRAMES = 100;
+var RETIREMENT_OPERATIONS = [["r", null]];
+var CommittedStateSource = class {
+  #attachments = /* @__PURE__ */ new Set();
+  #release;
+  /** Released on disposal. */
+  #value;
+  #cursor = 0;
+  #retired = false;
+  #closed = false;
+  constructor(value, release) {
+    this.#value = value;
+    this.#release = release;
+  }
+  attach() {
+    if (this.#closed)
+      throw new Error("State source is closed");
+    const attachment = new SessionSourceAttachment({ value: this.#value, cursor: this.#cursor }, () => {
+      this.#attachments.delete(attachment);
+      if (this.#attachments.size === 0)
+        this.#finishDisposal();
+    });
+    this.#attachments.add(attachment);
+    return attachment;
+  }
+  advance(value, ops, context) {
+    if (this.#closed || this.#retired)
+      return;
+    this.#value = value;
+    this.#cursor += 1;
+    if (value === null)
+      this.#retired = true;
+    const frame = {
+      cursor: this.#cursor,
+      value,
+      ops,
+      context
+    };
+    for (const attachment of [...this.#attachments])
+      attachment.publish(frame);
+  }
+  /** Stop publishing; the attached states keep their last value. A failure ends them the same way. */
+  closeSession() {
+    if (this.#closed)
+      return;
+    for (const attachment of [...this.#attachments])
+      attachment.dispose();
+    this.#finishDisposal();
+  }
+  #finishDisposal() {
+    if (this.#closed)
+      return;
+    this.#closed = true;
+    this.#value = void 0;
+    const release = this.#release;
+    this.#release = void 0;
+    release?.();
+  }
+};
+var SessionSourceAttachment = class {
+  snapshot;
+  #release;
+  #frames = [];
+  #listener;
+  #activated = false;
+  #disposed = false;
+  #scheduled = false;
+  #delivering = false;
+  constructor(snapshot, release) {
+    this.snapshot = snapshot;
+    this.#release = release;
+  }
+  activate(listener) {
+    if (this.#activated)
+      throw new Error("State attachment is already active");
+    if (this.#disposed)
+      throw new Error("State attachment is disposed");
+    this.#activated = true;
+    this.#listener = listener;
+    this.#drain();
+  }
+  publish(frame) {
+    if (this.#disposed)
+      return;
+    this.#frames.push(frame);
+    if (!this.#activated || this.#delivering || this.#scheduled)
+      return;
+    this.#scheduled = true;
+    queueMicrotask(() => {
+      this.#scheduled = false;
+      if (this.#disposed)
+        return;
+      try {
+        this.#drain();
+      } catch {
+        this.dispose();
+      }
+    });
+  }
+  dispose() {
+    if (this.#disposed)
+      return;
+    this.#disposed = true;
+    this.#frames.length = 0;
+    this.#listener = void 0;
+    const release = this.#release;
+    this.#release = void 0;
+    release?.();
+  }
+  #drain() {
+    const listener = this.#listener;
+    if (listener === void 0 || this.#delivering || this.#disposed)
+      return;
+    this.#delivering = true;
+    try {
+      while (!this.#disposed) {
+        const frame = this.#frames.shift();
+        if (frame === void 0)
+          break;
+        listener(frame);
+      }
+    } finally {
+      this.#delivering = false;
+    }
+  }
+};
+var CommittedWatch = class {
+  #detach;
+  #report;
+  #replace;
+  #closed = Promise.withResolvers();
+  #pending = [];
+  #value;
+  #listener;
+  #started = false;
+  #scheduled = false;
+  #running = false;
+  #retired = false;
+  /** Set once, by `#terminate()`. */
+  #end;
+  #cancellationSignal;
+  #cancellationListener;
+  /**
+   * `report` gets a listener's throw, which also ends the watch. `replace` gives the value an overflow delivers; by
+   * default the newest value.
+   */
+  constructor(value, detach, report, replace) {
+    this.#value = value;
+    this.#detach = detach;
+    this.#report = report;
+    this.#replace = replace;
+  }
+  get value() {
+    return this.#value;
+  }
+  get closed() {
+    return this.#closed.promise;
+  }
+  start(listener) {
+    if (this.#started)
+      throw new Error("Watch is already started");
+    if (this.#end !== void 0)
+      throw new Error("Watch is stopped");
+    this.#started = true;
+    this.#listener = listener;
+    if (this.#pending.length > 0)
+      this.#schedule();
+  }
+  stop() {
+    this.#terminate({ reason: "stopped" });
+    return this.#closed.promise;
+  }
+  observeCancellation(signal) {
+    if (this.#cancellationSignal !== void 0)
+      throw new Error("Watch cancellation is already installed");
+    if (this.#end !== void 0)
+      return;
+    this.#cancellationSignal = signal;
+    this.#cancellationListener = () => this.cancel();
+    signal.addEventListener("abort", this.#cancellationListener, { once: true });
+    if (signal.aborted)
+      this.cancel();
+  }
+  cancel() {
+    this.#terminate({ reason: "cancelled" });
+  }
+  /** End with `session_closed`, or with `session_failed` and the error when the Session failed. */
+  closeSession(failure) {
+    this.#terminate(failure === void 0 ? { reason: "session_closed" } : { reason: "session_failed", error: failure.error });
+  }
+  advance(value, ops, context) {
+    if (this.#end !== void 0 || this.#retired)
+      return;
+    if (value === null)
+      this.#retired = true;
+    if (this.#pending.length >= MAX_PENDING_WATCH_FRAMES) {
+      this.#pending.length = 0;
+      const replacement = this.#replace?.() ?? value;
+      this.#pending.push({ value: replacement, ops: [["r", replacement]], context });
+    } else {
+      this.#pending.push({ value, ops, context });
+    }
+    if (this.#started)
+      this.#schedule();
+  }
+  #schedule() {
+    if (this.#scheduled || this.#running || this.#end !== void 0)
+      return;
+    this.#scheduled = true;
+    queueMicrotask(() => {
+      this.#scheduled = false;
+      void this.#drain();
+    });
+  }
+  async #drain() {
+    if (this.#running || this.#end !== void 0 || !this.#started)
+      return;
+    this.#running = true;
+    try {
+      while (this.#end === void 0) {
+        const frame = this.#pending.shift();
+        if (frame === void 0)
+          break;
+        this.#value = frame.value;
+        const deliveryContext = withoutAbortSignal(frame.context);
+        try {
+          await this.#listener(frame.value, frame.ops, deliveryContext);
+        } catch (error) {
+          if (this.#end === void 0) {
+            this.#report(error);
+            this.#terminate({ reason: "listener_error", error: toError2(error) });
+          }
+          break;
+        }
+        if (frame.value === null) {
+          this.#terminate({ reason: "retired" });
+          break;
+        }
+      }
+    } finally {
+      this.#running = false;
+      if (this.#end === void 0 && this.#pending.length > 0)
+        this.#schedule();
+    }
+  }
+  /** End the watch, once: detach, drop pending frames, and settle `closed`. A callback already running keeps running. */
+  #terminate(end) {
+    if (this.#end !== void 0)
+      return;
+    this.#end = end;
+    this.#detach();
+    this.#pending.length = 0;
+    if (this.#cancellationListener !== void 0) {
+      this.#cancellationSignal?.removeEventListener("abort", this.#cancellationListener);
+    }
+    this.#closed.resolve(end);
+  }
+};
+function toError2(error) {
+  return error instanceof Error ? error : new Error(errorMessage(error));
+}
+
+// node_modules/@earendil-works/pi-durable/dist/types.js
+var ROOT_CONVERSATION_ID = 1;
+
+// node_modules/@earendil-works/pi-durable/dist/session/forks.js
+var SCAN_PAGE_SIZE = 256;
+async function prepareForkDocumentCopies(storage, parentConversationId, at, childConversationId, context) {
+  const entry = await storage.entry(parentConversationId, at, context);
+  if (entry === void 0)
+    throw new Error(`Entry ${at} is not visible from conversation ${parentConversationId}`);
+  const copies = [];
+  const copiedAddresses = /* @__PURE__ */ new Set();
+  await collectCopies(storage, { kind: "conversation", conversationId: entry.entry.conversationId }, entry.commitSeq, "asOf", childConversationId, copies, copiedAddresses, context);
+  await collectCopies(storage, { kind: "conversation", conversationId: parentConversationId }, "current", "current", childConversationId, copies, copiedAddresses, context);
+  return copies;
+}
+async function collectCopies(storage, scope, at, policy, childConversationId, copies, copiedAddresses, context) {
+  let cursor;
+  do {
+    const page2 = await storage.scanDocuments({ scope, at }, SCAN_PAGE_SIZE, cursor, context);
+    for (const source of page2.items) {
+      if (source.scope.kind !== "conversation" || source.fork !== policy)
+        continue;
+      const id = await storage.mintId();
+      const identity = {
+        id,
+        kind: source.kind,
+        ...source.key === void 0 ? {} : { key: source.key },
+        scope: { kind: "conversation", conversationId: childConversationId }
+      };
+      const record = source.history === "latest" ? { ...identity, history: "latest", fork: source.fork } : { ...identity, history: "rewindable", fork: source.fork };
+      const copyAddress = addressId(record);
+      if (copiedAddresses.has(copyAddress)) {
+        const member = record.key === void 0 ? record.kind : `${record.kind}/${record.key}`;
+        throw new Error(`Fork selects multiple source documents for ${member}`);
+      }
+      copiedAddresses.add(copyAddress);
+      copies.push({ record, source: { id: source.id, at } });
+    }
+    cursor = page2.next;
+  } while (cursor !== void 0);
+}
+
+// node_modules/@earendil-works/pi-durable/dist/session/transaction.js
+function applySubmissionChange(current, change) {
+  if (current.status === "done" || current.status === "unanswered")
+    return current;
+  if (change.status === "placed") {
+    if (current.status !== "queued")
+      throw new Error(`Submission ${current.id} is not queued`);
+    const status = current.type === "input" ? "placed" : "done";
+    return { ...current, status, entry: change.entry };
+  }
+  if (change.status === "done" && current.status !== "placed") {
+    throw new Error(`Submission ${current.id} is not a placed input`);
+  }
+  return { ...current, ...change };
+}
+var INTERNAL_SCAN_PAGE_SIZE = 256;
+var EMPTY_OPERATIONS = [];
+var TABLE_JSON_COPY_OPTIONS = { omitUndefinedProperties: true };
+var Transaction = class {
+  #host;
+  #context;
+  #scope;
+  #pendingOperations = /* @__PURE__ */ new Set();
+  #sealed = false;
+  #hasTableWrite = false;
+  /** Atomic batch; conversation and entry writes stage eagerly, while task and document writes assemble later. */
+  #writes = [];
+  #createdConversationIds = /* @__PURE__ */ new Set();
+  #forkSourceConversationIds = /* @__PURE__ */ new Set();
+  #forkSourceDocumentIds = /* @__PURE__ */ new Set();
+  /** One entry per task touched by a public read, candidate write, or document-owner lookup. */
+  #tasksById = /* @__PURE__ */ new Map();
+  /** Submissions created by this transaction, by ID. */
+  #submissions = /* @__PURE__ */ new Map();
+  /** Submission settlements and placements in staging order; resolved against the latest candidate record during assembly. */
+  #submissionChanges = [];
+  /** Write and publication plans of every staged incarnation, built during assembly. */
+  #plans = [];
+  /** Every document acquisition or retirement marker in staging order. */
+  #documents = [];
+  /** Latest transaction-local incarnation or retirement marker at each logical address. */
+  #latestDocumentByAddress = /* @__PURE__ */ new Map();
+  constructor(host, context, scope = {}) {
+    this.#host = host;
+    this.#context = context;
+    this.#scope = scope;
+  }
+  // ─── Table reads ────────────────────────────────────────────────────────
+  conversation(id) {
+    return this.#read("conversation", () => this.#host.storage.conversation(id, this.#context));
+  }
+  entry(first, second) {
+    const kind = typeof first === "number" ? void 0 : first.kind;
+    const id = typeof first === "number" ? first : second;
+    return this.#read("entry", async () => {
+      const entry = (await this.#host.storage.entry(id, this.#context))?.entry;
+      return kind === void 0 || entry?.kind === kind ? entry : void 0;
+    });
+  }
+  task(id) {
+    return this.#read("task", () => this.#committedTask(id));
+  }
+  scanConversations(query, limit2, cursor) {
+    return this.#read("scanConversations", () => this.#host.storage.scanConversations(query, limit2, cursor, this.#context));
+  }
+  scanEntries(query, limit2, cursor) {
+    return this.#read("scanEntries", () => this.#host.storage.scanEntries(query, limit2, cursor, this.#context));
+  }
+  latestHeadMarker(conversationId) {
+    return this.#read("latestHeadMarker", () => this.#host.storage.findLatestHeadMarker(conversationId, void 0, this.#context));
+  }
+  scanTasks(query, limit2, cursor) {
+    return this.#read("scanTasks", () => this.#host.storage.scanTasks(query, limit2, cursor, this.#context));
+  }
+  /** Internal: committed submission record. */
+  submission(id) {
+    return this.#read("submission", () => this.#host.storage.submission(id, this.#context));
+  }
+  /** Committed submission with a conversation-scoped request ID. */
+  submissionByRequest(conversationId, requestId) {
+    return this.#read("submissionByRequest", () => this.#host.storage.submissionByRequest(conversationId, requestId, this.#context));
+  }
+  // ─── Table writes ───────────────────────────────────────────────────────
+  createConversation(options) {
+    return this.#write(() => this.#stageConversation(void 0, options.ownership));
+  }
+  /** Internal final-form bootstrap path for the reserved root identity. */
+  createRootConversation() {
+    return this.#write(() => this.#stageConversation(void 0, { kind: "ownerless" }, ROOT_CONVERSATION_ID));
+  }
+  forkConversation(parentConversationId, at, options) {
+    return this.#write(() => this.#stageConversation({ conversationId: parentConversationId, at }, options.ownership));
+  }
+  async #stageConversation(parent, ownership, reservedId) {
+    const ownerTaskId = ownership.kind === "task" ? ownership.taskId : void 0;
+    const id = reservedId ?? await this.#host.storage.mintId();
+    this.#assertOpen();
+    let owner;
+    if (ownerTaskId !== void 0) {
+      const task = await this.#currentTask(ownerTaskId);
+      this.#assertOpen();
+      if (task === void 0)
+        throw new Error(`Conversation owner task ${ownerTaskId} does not exist`);
+      owner = { conversationId: task.conversationId, taskId: ownerTaskId };
+    }
+    const record = {
+      id,
+      ...parent === void 0 ? {} : { parent },
+      ...owner === void 0 ? {} : { owner }
+    };
+    const copies = parent === void 0 ? [] : await prepareForkDocumentCopies(this.#host.storage, parent.conversationId, parent.at, id, this.#context);
+    this.#assertOpen();
+    for (const copy2 of copies) {
+      this.#forkSourceDocumentIds.add(copy2.source.id);
+      const entry = {
+        addressId: addressId(copy2.record),
+        address: copy2.record,
+        target: { kind: "fork-copy", ...copy2 },
+        retireOnCommit: false
+      };
+      this.#documents.push(entry);
+      this.#latestDocumentByAddress.set(entry.addressId, entry);
+    }
+    if (parent !== void 0)
+      this.#forkSourceConversationIds.add(parent.conversationId);
+    this.#createdConversationIds.add(id);
+    this.#writes.push({ type: "conversation", value: record });
+    await this.#host.conversationCreated(this, record);
+    this.#assertOpen();
+    return record;
+  }
+  appendEntry(first, second, third) {
+    if (typeof first === "number")
+      return this.#appendEntry(first, second);
+    return this.#appendEntry(second, { ...third, kind: first.kind });
+  }
+  #appendEntry(conversationId, value) {
+    return this.#write(async () => {
+      await this.#requireConversation(conversationId);
+      this.#assertOpen();
+      const id = await this.#host.storage.mintId();
+      this.#assertOpen();
+      const { head, ...rest } = value;
+      const record = copyJson({
+        ...rest,
+        id,
+        conversationId,
+        head: head === "self" ? id : head,
+        byTaskId: this.#scope.taskId
+      }, TABLE_JSON_COPY_OPTIONS);
+      this.#writes.push({ type: "entry", value: record });
+      return record;
+    });
+  }
+  createTask(task, input, options) {
+    return this.#write(async () => {
+      const ownership = options.ownership;
+      let owner;
+      if (ownership.kind === "task") {
+        owner = await this.#currentTask(ownership.taskId);
+        this.#assertOpen();
+        if (owner === void 0)
+          throw new Error(`Task owner ${ownership.taskId} does not exist`);
+        if (options.background === true)
+          throw new TypeError("A child task cannot be background");
+        if (options.conversationId !== void 0 && options.conversationId !== owner.conversationId) {
+          throw new Error(`A child task lives in its owner's conversation ${owner.conversationId}`);
+        }
+      }
+      const conversationId = owner?.conversationId ?? options.conversationId ?? this.#scope.conversationId;
+      if (conversationId === void 0)
+        throw new TypeError("Tx.createTask() requires options.conversationId");
+      await this.#requireConversation(conversationId);
+      this.#assertOpen();
+      const definition = task.definition;
+      const checkpoint = definition.initial(input);
+      const id = await this.#host.storage.mintId();
+      this.#assertOpen();
+      const record = copyJson({
+        id,
+        conversationId,
+        kind: definition.name,
+        version: definition.version,
+        input,
+        ...owner === void 0 ? {} : { owner: owner.id },
+        background: options.background ?? false,
+        abortRequested: false,
+        ...options.abandonOnRestart === true ? { abandonOnRestart: true } : {},
+        state: { status: "pending", checkpoint }
+      }, TABLE_JSON_COPY_OPTIONS);
+      this.#tasksById.set(id, { write: { kind: "create", record } });
+      return id;
+    });
+  }
+  /** Create a raw submission record with a fresh ID; no admission rules apply. */
+  createSubmission(create) {
+    return this.#write(async () => {
+      await this.#requireConversation(create.conversationId);
+      this.#assertOpen();
+      const id = await this.#host.storage.mintId();
+      this.#assertOpen();
+      const record = copyJson({ ...create, id }, TABLE_JSON_COPY_OPTIONS);
+      this.#submissions.set(id, record);
+      return record;
+    });
+  }
+  /**
+   * Settle a submission. Resolved during assembly against the transaction's latest candidate record, falling back to
+   * committed state, so it is not a caller table read and works after the first table write.
+   */
+  settleSubmission(id, settlement) {
+    this.#assertOpen();
+    this.#hasTableWrite = true;
+    this.#submissionChanges.push({ id, change: copyJson(settlement) });
+  }
+  /** Place a queued submission at `entry`; resolved during assembly like `settleSubmission()`. */
+  placeSubmission(id, entry) {
+    this.#assertOpen();
+    this.#hasTableWrite = true;
+    this.#submissionChanges.push({ id, change: { status: "placed", entry } });
+  }
+  /** Internal: replace one task record completely. Tasks change their own state through their runtime. */
+  setTask(value) {
+    this.#assertOpen();
+    this.#hasTableWrite = true;
+    const task = this.#taskEntry(value.id);
+    const candidate = task.write?.record;
+    if (candidate?.state.status === "terminal") {
+      throw new Error(`Task ${value.id} already has a terminal candidate`);
+    }
+    if (candidate !== void 0 && candidate.conversationId !== value.conversationId) {
+      throw new Error(`Task ${value.id} cannot change conversations`);
+    }
+    task.write = {
+      kind: task.write?.kind === "create" ? "create" : "replace",
+      record: copyJson(this.#stampTimes(value, candidate), TABLE_JSON_COPY_OPTIONS)
+    };
+  }
+  /** Internal: candidate records of the tasks this transaction created or replaced so far. */
+  stagedTasks() {
+    const records = [];
+    for (const task of this.#tasksById.values())
+      if (task.write !== void 0)
+        records.push(task.write.record);
+    return records;
+  }
+  /** Internal: conversations this transaction created or forked so far. */
+  stagedConversations() {
+    const records = [];
+    for (const write of this.#writes)
+      if (write.type === "conversation")
+        records.push(write.value);
+    return records;
+  }
+  doc(token, ...args) {
+    try {
+      this.#assertOpen();
+      const definition = token.definition;
+      const resolved = resolveAddress(definition, args);
+      this.#assertTaskDocumentsOpen(resolved);
+      const latest = this.#latestDocumentByAddress.get(resolved.id);
+      if (latest !== void 0 && !latest.retireOnCommit) {
+        if (latest.draftPromise !== void 0)
+          return latest.draftPromise;
+        if (latest.target?.kind === "fork-copy") {
+          latest.draftPromise = this.#track(this.#acquireForkCopy(latest, definition, latest.target));
+          return latest.draftPromise;
+        }
+      }
+      const seed = definition.family === true ? copyJson(args[resolved.nextArgument]) : void 0;
+      const docEntry = {
+        addressId: resolved.id,
+        address: resolved.address,
+        definition,
+        retireOnCommit: false
+      };
+      this.#documents.push(docEntry);
+      this.#latestDocumentByAddress.set(docEntry.addressId, docEntry);
+      docEntry.draftPromise = this.#track(this.#acquire(docEntry, seed, latest?.retireOnCommit === true));
+      return docEntry.draftPromise;
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+  retireDoc(token, ...args) {
+    try {
+      this.#assertOpen();
+      const definition = token.definition;
+      const resolved = resolveAddress(definition, args);
+      const latest = this.#latestDocumentByAddress.get(resolved.id);
+      if (latest?.retireOnCommit)
+        return Promise.resolve();
+      if (latest?.target?.kind === "fork-copy") {
+        checkRecordScope(definition, latest.target.record);
+        latest.retireOnCommit = true;
+        return Promise.resolve();
+      }
+      if (latest?.draftPromise !== void 0) {
+        latest.retireOnCommit = true;
+        return this.#track(latest.draftPromise.then(() => void 0));
+      }
+      const entry = {
+        addressId: resolved.id,
+        address: resolved.address,
+        definition,
+        retireOnCommit: true
+      };
+      this.#documents.push(entry);
+      this.#latestDocumentByAddress.set(entry.addressId, entry);
+      return this.#track(this.#findRetirement(entry));
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+  async #acquire(entry, seed, skipLoad) {
+    const definition = entry.definition;
+    const loaded = skipLoad ? void 0 : await this.#host.load(definition, entry.addressId, entry.address, this.#context);
+    this.#assertOpen();
+    if (loaded !== void 0) {
+      checkRecordScope(definition, loaded.record);
+      checkRecordVersion(definition, loaded.record, loaded.storedVersion);
+      entry.target = { kind: "loaded", document: loaded };
+      entry.change = loaded.tracker.beginChange();
+      return entry.change.state;
+    }
+    const scope = entry.address.scope;
+    if (scope.kind === "conversation")
+      await this.#requireConversation(scope.conversationId);
+    if (scope.kind === "task") {
+      const task = await this.#currentTask(scope.taskId);
+      if (task === void 0)
+        throw new Error(`Task ${scope.taskId} does not exist`);
+      if (task.state.status === "terminal")
+        throw new Error(`Task ${scope.taskId} is terminal`);
+    }
+    this.#assertOpen();
+    const value = copyJson(definition.family === true ? definition.initial(seed) : definition.initial());
+    const id = await this.#host.storage.mintId();
+    this.#assertOpen();
+    const tracker = track(value);
+    entry.target = {
+      kind: "created",
+      record: documentCreate(definition, entry.address, id),
+      version: definition.version,
+      tracker
+    };
+    entry.change = tracker.beginChange();
+    return entry.change.state;
+  }
+  async #acquireForkCopy(entry, definition, target) {
+    const stored = await this.#host.storage.document(target.source.id, target.source.at, this.#context);
+    this.#assertOpen();
+    if (stored === void 0) {
+      throw new Error(`Fork source document ${target.source.id} cannot be read`);
+    }
+    if (stored.record.scope.kind !== "conversation" || stored.record.kind !== target.record.kind || stored.record.key !== target.record.key || stored.record.history !== target.record.history || stored.record.fork !== target.record.fork) {
+      throw new Error(`Fork source document ${target.source.id} does not match the copied record`);
+    }
+    const value = materializeDocumentValue(definition, target.record, stored.version, stored.value);
+    const tracker = track(value);
+    entry.definition = definition;
+    entry.target = { kind: "created", record: target.record, version: definition.version, tracker };
+    entry.change = tracker.beginChange();
+    return entry.change.state;
+  }
+  async #findRetirement(entry) {
+    const record = this.#host.cached(entry.addressId)?.record ?? await this.#host.storage.findDocument(entry.address, "current", this.#context);
+    this.#assertOpen();
+    if (record === void 0)
+      return;
+    checkRecordScope(entry.definition, record);
+    entry.target = { kind: "retire-only", record };
+  }
+  // ─── Settlement ─────────────────────────────────────────────────────────
+  /** Seal after callback failure: abort every change and observe every pending operation. */
+  async settleFailure() {
+    this.#sealed = true;
+    this.#abortChanges();
+    await Promise.allSettled(this.#pendingOperations);
+  }
+  /**
+   * Seal after callback success, prepare every open change, and assemble the atomic batch.
+   * Any failure aborts every change before Storage admission.
+   */
+  async settleSuccess() {
+    this.#sealed = true;
+    if (this.#pendingOperations.size > 0) {
+      this.#abortChanges();
+      await Promise.allSettled(this.#pendingOperations);
+      throw new Error("Session commit callback settled before its pending Tx operations");
+    }
+    try {
+      for (const document of this.#documents) {
+        if (document.change !== void 0)
+          document.prepared = document.change.prepare();
+      }
+      return await this.#assemble();
+    } catch (error) {
+      this.#abortChanges();
+      throw error;
+    }
+  }
+  /** Abort every prepared change after Storage failure or when no write is required. */
+  discard() {
+    this.#abortChanges();
+  }
+  /** Adopt every prepared change by pointer swap after Storage success and describe the publication. */
+  adopt(seq) {
+    const publications = [];
+    for (const plan of this.#plans) {
+      const committed = "createdAt" in plan.record;
+      let record = committed ? plan.record : { ...plan.record, createdAt: seq };
+      if (plan.retire)
+        record = { ...record, retiredAt: seq };
+      const change = plan.change;
+      if (change !== void 0) {
+        const { tracker, prepared, loaded, version } = change;
+        if (loaded === void 0 ? !plan.retire : prepared.ops.length > 0)
+          tracker.adopt(prepared);
+        else
+          prepared.abort();
+        if (loaded !== void 0) {
+          if (loaded.storedVersion < version)
+            loaded.storedVersion = version;
+          if (plan.content?.type === "document.change") {
+            if (plan.content.content.kind === "base")
+              loaded.deltasSinceBase = 0;
+            else
+              loaded.deltasSinceBase++;
+          }
+        } else if (!plan.retire) {
+          this.#host.install({
+            addressId: plan.addressId,
+            record,
+            storedVersion: version,
+            valueVersion: version,
+            deltasSinceBase: 0,
+            tracker
+          });
+        }
+      }
+      const conversationId = plan.conversationId;
+      if (plan.retire) {
+        if (committed)
+          this.#host.evict(plan.addressId, record.id);
+        const retired = { version: void 0, value: null, ops: EMPTY_OPERATIONS };
+        publications.push({ type: "document", record, conversationId, ...retired });
+      } else if (plan.content?.type === "document.copy") {
+        publications.push({
+          type: "document.copy",
+          record,
+          conversationId,
+          source: plan.content.source
+        });
+      } else if (change !== void 0 && publishes(plan)) {
+        const ops = change.loaded === void 0 ? EMPTY_OPERATIONS : change.prepared.ops;
+        publications.push({
+          type: "document",
+          record,
+          conversationId,
+          version: change.version,
+          value: change.prepared.value,
+          ops
+        });
+      }
+    }
+    return publications;
+  }
+  async #assemble() {
+    const storage = this.#host.storage;
+    const plans = this.#plans;
+    for (const document of this.#documents) {
+      const plan = planDocument(document);
+      if (plan !== void 0)
+        plans.push(plan);
+    }
+    this.#rejectForkSourceWrites(plans);
+    await this.#validateOwners();
+    for (const [id, task] of this.#tasksById) {
+      if (task.write?.kind !== "replace")
+        continue;
+      const committed = await this.#committedTask(id);
+      if (committed === void 0)
+        throw new Error(`Task ${id} does not exist`);
+      if (committed.state.status === "terminal")
+        throw new Error(`Task ${id} is already terminal`);
+      if (committed.conversationId !== task.write.record.conversationId) {
+        throw new Error(`Task ${id} cannot change conversations`);
+      }
+    }
+    const terminalTaskIds = /* @__PURE__ */ new Set();
+    for (const task of this.#tasksById.values()) {
+      if (task.write?.record.state.status === "terminal")
+        terminalTaskIds.add(task.write.record.id);
+    }
+    if (terminalTaskIds.size > 0) {
+      const retiring = /* @__PURE__ */ new Set();
+      for (const plan of plans) {
+        const scope = plan.record.scope;
+        if (scope.kind !== "task" || !terminalTaskIds.has(scope.taskId))
+          continue;
+        plan.retire = true;
+        retiring.add(plan.record.id);
+      }
+      for (const taskId of terminalTaskIds) {
+        if (this.#tasksById.get(taskId)?.write?.kind === "create")
+          continue;
+        let cursor;
+        do {
+          const page2 = await storage.scanDocuments({ scope: { kind: "task", taskId }, at: "current" }, INTERNAL_SCAN_PAGE_SIZE, cursor, this.#context);
+          for (const record of page2.items) {
+            if (retiring.has(record.id))
+              continue;
+            plans.push({ addressId: addressId(record), record, retire: true });
+            retiring.add(record.id);
+          }
+          cursor = page2.next;
+        } while (cursor !== void 0);
+      }
+    }
+    for (const plan of plans) {
+      if (!publishes(plan))
+        continue;
+      const scope = plan.record.scope;
+      if (scope.kind === "conversation")
+        plan.conversationId = scope.conversationId;
+      if (scope.kind !== "task")
+        continue;
+      const task = this.#taskEntry(scope.taskId);
+      if (task.publicationConversationId === void 0) {
+        const current = await this.#currentTask(scope.taskId);
+        if (current !== void 0)
+          task.publicationConversationId = current.conversationId;
+      }
+      plan.conversationId = task.publicationConversationId;
+    }
+    for (const { id, change } of this.#submissionChanges) {
+      const current = this.#submissions.get(id) ?? await storage.submission(id, this.#context);
+      if (current === void 0)
+        throw new Error(`Submission ${id} does not exist`);
+      const next = applySubmissionChange(current, change);
+      if (next !== current)
+        this.#submissions.set(id, next);
+    }
+    const writes = this.#writes;
+    for (const value of this.#submissions.values())
+      writes.push({ type: "submission", value });
+    for (const task of this.#tasksById.values()) {
+      if (task.write !== void 0)
+        writes.push({ type: "task", value: task.write.record });
+    }
+    for (const plan of plans) {
+      const change = plan.change;
+      if (plan.content?.type === "document.change" && plan.content.content.kind === "delta" && change?.loaded) {
+        const { prepared, version } = change;
+        const info = { deltasSinceBase: change.loaded.deltasSinceBase };
+        if (change.definition?.checkpointWhen?.(prepared.value, prepared.ops, info)) {
+          plan.content = { ...plan.content, content: { version, kind: "base", value: prepared.value } };
+        }
+      }
+      if (plan.content !== void 0)
+        writes.push(plan.content);
+      if (plan.retire)
+        writes.push({ type: "document.retire", id: plan.record.id });
+    }
+    return writes;
+  }
+  // ─── Helpers ────────────────────────────────────────────────────────────
+  /**
+   * New owned work needs a live owner, judged on the owner's final candidate: not `completing`, terminal, or
+   * abort-marked. A task therefore cannot create owned work in the commit that finishes it (spec §5.5).
+   */
+  async #validateOwners() {
+    const owners = [];
+    for (const write of this.#writes) {
+      if (write.type !== "conversation" || write.value.owner === void 0)
+        continue;
+      owners.push({ what: "Conversation owner task", taskId: write.value.owner.taskId });
+    }
+    for (const task of this.#tasksById.values()) {
+      const record = task.write?.kind === "create" ? task.write.record : void 0;
+      if (record?.owner !== void 0)
+        owners.push({ what: "Task owner", taskId: record.owner });
+    }
+    for (const { what, taskId } of owners) {
+      const task = await this.#currentTask(taskId);
+      if (task === void 0)
+        throw new Error(`${what} ${taskId} does not exist`);
+      if (task.state.status === "terminal" || task.state.status === "completing") {
+        throw new Error(`${what} ${taskId} is ${task.state.status}`);
+      }
+      if (task.abortRequested)
+        throw new Error(`${what} ${taskId} is abort-marked`);
+    }
+  }
+  #rejectForkSourceWrites(plans) {
+    for (const plan of plans) {
+      if (plan.content === void 0 && !plan.retire)
+        continue;
+      const record = plan.record;
+      if (this.#forkSourceDocumentIds.has(record.id)) {
+        throw new Error(`Cannot change fork source document ${record.id} in the fork transaction`);
+      }
+      const scope = plan.record.scope;
+      if (scope.kind === "conversation" && this.#forkSourceConversationIds.has(scope.conversationId) && record.scope.kind === "conversation" && record.fork === "current") {
+        throw new Error(`Cannot fork conversation ${scope.conversationId} while changing its current-policy documents`);
+      }
+    }
+  }
+  #abortChanges() {
+    for (const document of this.#documents)
+      document.change?.abort();
+  }
+  #assertOpen() {
+    if (this.#sealed)
+      throw new Error("Transaction has settled");
+  }
+  #assertTaskDocumentsOpen(resolved) {
+    const scope = resolved.address.scope;
+    if (scope.kind === "task" && this.#tasksById.get(scope.taskId)?.write?.record.state.status === "terminal") {
+      throw new Error(`Task ${scope.taskId} is terminal`);
+    }
+  }
+  /** Register an operation so callback settlement can reject and drain it. */
+  #track(operation) {
+    this.#pendingOperations.add(operation);
+    const settle3 = () => {
+      this.#pendingOperations.delete(operation);
+    };
+    operation.then(settle3, settle3);
+    return operation;
+  }
+  #read(method, read2) {
+    try {
+      this.#assertOpen();
+      if (this.#hasTableWrite)
+        throw new ReadAfterWrite(method);
+      return this.#track(read2());
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+  #write(write) {
+    try {
+      this.#assertOpen();
+      this.#hasTableWrite = true;
+      return this.#track(write());
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+  async #requireConversation(id) {
+    if (this.#createdConversationIds.has(id))
+      return;
+    if (await this.#host.storage.conversation(id, this.#context) === void 0) {
+      throw new Error(`Conversation ${id} does not exist`);
+    }
+  }
+  /**
+   * Lifecycle times: `startedAt` on the first change to `running`, `endedAt` on the change to `terminal`. Once set,
+   * they carry over from the replaced record; records written before they existed lack them.
+   */
+  #stampTimes(value, candidate) {
+    const status = value.state.status;
+    const now = (stamps) => stamps ? this.#host.now() : void 0;
+    const startedAt = candidate?.startedAt ?? value.startedAt ?? now(status === "running");
+    const endedAt = candidate?.endedAt ?? value.endedAt ?? now(status === "terminal");
+    if (startedAt === value.startedAt && endedAt === value.endedAt)
+      return value;
+    return {
+      ...value,
+      ...startedAt === void 0 ? {} : { startedAt },
+      ...endedAt === void 0 ? {} : { endedAt }
+    };
+  }
+  #taskEntry(id) {
+    let task = this.#tasksById.get(id);
+    if (task === void 0) {
+      task = {};
+      this.#tasksById.set(id, task);
+    }
+    return task;
+  }
+  /** Latest candidate task record, falling back to committed state; not a caller table read. */
+  async #currentTask(id) {
+    return this.#tasksById.get(id)?.write?.record ?? await this.#committedTask(id);
+  }
+  #committedTask(id) {
+    const task = this.#taskEntry(id);
+    task.committedRead ??= this.#host.storage.task(id, this.#context);
+    return task.committedRead;
+  }
+};
+function planDocument(document) {
+  const target = document.target;
+  if (target === void 0)
+    return void 0;
+  const plan = { addressId: document.addressId, retire: document.retireOnCommit };
+  switch (target.kind) {
+    case "created": {
+      const prepared = document.prepared;
+      const { record, version, tracker } = target;
+      const content = { version, kind: "base", value: prepared.value };
+      return {
+        ...plan,
+        record,
+        content: { type: "document.create", record, content },
+        change: { tracker, prepared, version }
+      };
+    }
+    case "fork-copy":
+      return {
+        ...plan,
+        record: target.record,
+        content: { type: "document.copy", record: target.record, source: target.source }
+      };
+    case "retire-only":
+      return { ...plan, record: target.record };
+    case "loaded": {
+      const loaded = target.document;
+      const definition = document.definition;
+      const prepared = document.prepared;
+      const version = definition.version;
+      const id = loaded.record.id;
+      const content = loaded.storedVersion < version ? { type: "document.change", id, content: { version, kind: "base", value: prepared.value } } : prepared.ops.length > 0 ? { type: "document.change", id, content: { version, kind: "delta", ops: prepared.ops } } : void 0;
+      const change = {
+        tracker: loaded.tracker,
+        prepared,
+        version,
+        loaded,
+        definition
+      };
+      return { ...plan, record: loaded.record, change, ...content === void 0 ? {} : { content } };
+    }
+  }
+}
+function publishes(plan) {
+  return plan.retire || plan.change?.loaded === void 0 || plan.content !== void 0;
+}
+
+// node_modules/@earendil-works/pi-durable/dist/session/session.js
+var defaultRetention = 6e5;
+function documentRetention(ms) {
+  return typeof ms === "number" && ms >= 0 ? ms : defaultRetention;
+}
+var MAX_TIMER_DELAY = 2147483647;
+var SessionImpl = class {
+  #storage;
+  #documents = /* @__PURE__ */ new Map();
+  /** Cached documents with no observer attached, by address, oldest use first, with the time of that use. */
+  #idleDocuments = /* @__PURE__ */ new Map();
+  /** Observers attached per document incarnation (record ID); a cached incarnation with any is never evicted. */
+  #attachedDocuments = /* @__PURE__ */ new Map();
+  #clock;
+  #documentRetentionMs;
+  /** The pending eviction: a timer for the oldest idle document, or a line job when the retention is 0. */
+  #documentSweep;
+  #sweepJobs = 0;
+  /** Set once a timer could not be unreferenced: then none is kept, and the end of each commit evicts what expired. */
+  #documentTimersUnavailable = false;
+  #commitListeners = /* @__PURE__ */ new Set();
+  /** The Session's own listeners, such as its scheduler's: they keep memory in step with storage, so a throw fails it. */
+  #internalListeners = /* @__PURE__ */ new Set();
+  #closeListeners = /* @__PURE__ */ new Set();
+  #host;
+  #tail = Promise.resolve();
+  #closing;
+  #failure;
+  /** Set when close reaches the backend: calls that fail from then on fail because it closes. */
+  #failed = Promise.withResolvers();
+  #closed = Promise.withResolvers();
+  get closed() {
+    return this.#closed.promise;
+  }
+  /** Internal: the error that failed the Session, if one did. */
+  get failure() {
+    return this.#failure;
+  }
+  /** Internal: rejects with `SessionFailed` the moment the Session fails, before work underway has ended; never resolves. */
+  get failed() {
+    return this.#failed.promise;
+  }
+  constructor(storage, now = Date.now, documentRetentionMs = () => void 0) {
+    this.#failed.promise.catch(() => {
+    });
+    this.#storage = new GuardedStorage(storage, this);
+    this.#clock = () => {
+      try {
+        return now();
+      } catch {
+        return Date.now();
+      }
+    };
+    this.#documentRetentionMs = () => {
+      try {
+        return documentRetention(documentRetentionMs());
+      } catch {
+        return documentRetention(void 0);
+      }
+    };
+    this.#host = {
+      storage: this.#storage,
+      now,
+      cached: (id) => {
+        const cached = this.#documents.get(id);
+        if (cached !== void 0)
+          this.#touchDocument(id);
+        return cached;
+      },
+      load: (definition, addressId2, address, context) => this.#loadDocument(definition, addressId2, address, context),
+      install: (document) => {
+        this.#documents.set(document.addressId, document);
+        this.#touchDocument(document.addressId);
+      },
+      evict: (id, recordId) => {
+        if (this.#documents.get(id)?.record.id === recordId)
+          this.#dropDocument(id);
+      },
+      conversationCreated: (tx, record) => this.conversationCreated(tx, record)
+    };
+  }
+  /** The Storage behind the failure guard; every component reads and writes through it. */
+  get storage() {
+    return this.#storage;
+  }
+  commit(change, context) {
+    return this.commitWith(change, context);
+  }
+  /**
+   * Internal: fail the Session with `error`, the first wins, and report it once. Admission ends, and close listeners run
+   * now; they read the error from `failure`. The Storage guard calls this; the Harness also calls it for a throw in its
+   * scheduler's own commits.
+   */
+  fail(error) {
+    if (this.#failure !== void 0)
+      return;
+    this.#failure = { error };
+    this.#failed.reject(new SessionFailed(error));
+    this.close(BACKGROUND_CONTEXT).catch(() => {
+    });
+    this.report(error);
+  }
+  /**
+   * Internal commit exposing the concrete transaction and its internal operations, such as the reserved-ID root
+   * bootstrap and task replacement. `scope` sets the default `tx.createTask()` conversation and the task attributed to
+   * appended entries.
+   */
+  commitWith(change, context, scope) {
+    try {
+      this.assertUsable();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    return this.#enqueue(() => this.#runCommit(change, context, scope));
+  }
+  /** Internal: run a read-only job on the mutation line so multi-read derivations observe one committed state. */
+  readOnLine(job) {
+    try {
+      this.assertUsable();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    return this.#enqueue(async () => {
+      this.#assertHealthy();
+      return job();
+    });
+  }
+  /**
+   * Internal: a conversation document's current incarnation and value, for a job already running on the line (see
+   * `readOnLine()`). Absent documents are `undefined`.
+   */
+  async conversationDocumentOnLine(token, conversationId, context) {
+    const definition = token.definition;
+    const resolved = resolveAddress(definition, [conversationId, context]);
+    const loaded = await this.#loadDocument(definition, resolved.id, resolved.address, context);
+    if (loaded === void 0)
+      return void 0;
+    checkRecordScope(definition, loaded.record);
+    checkRecordVersion(definition, loaded.record, loaded.storedVersion);
+    return { record: loaded.record, version: loaded.valueVersion, value: loaded.tracker.value };
+  }
+  async snapshot(token, ...args) {
+    this.assertUsable();
+    const definition = token.definition;
+    const resolved = resolveAddress(definition, args);
+    const context = args[resolved.nextArgument];
+    const cached = this.#documents.get(resolved.id);
+    if (cached?.valueVersion === definition.version)
+      this.#touchDocument(resolved.id);
+    const loaded = cached?.valueVersion === definition.version ? cached : await this.#enqueue(async () => {
+      this.#assertHealthy();
+      return this.#loadDocument(definition, resolved.id, resolved.address, context);
+    });
+    if (loaded === void 0)
+      return void 0;
+    checkRecordScope(definition, loaded.record);
+    checkRecordVersion(definition, loaded.record, loaded.storedVersion);
+    return loaded.tracker.value;
+  }
+  documentState(token, ...args) {
+    try {
+      this.assertUsable();
+      const definition = token.definition;
+      const resolved = resolveAddress(definition, args);
+      const context = args[resolved.nextArgument];
+      return this.#enqueue(async () => {
+        this.#assertHealthy();
+        const loaded = await this.#loadDocument(definition, resolved.id, resolved.address, context);
+        if (loaded === void 0)
+          return void 0;
+        const { observer: source, detach } = this.#attachDocument(definition, loaded, (value, release) => new CommittedStateSource(value, release));
+        try {
+          return replicatedState(source, { onError: (error) => this.report(error) });
+        } catch (error) {
+          detach();
+          throw error;
+        }
+      });
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+  async watchDoc(token, ...args) {
+    this.assertUsable();
+    const definition = token.definition;
+    const resolved = resolveAddress(definition, args);
+    const context = args[resolved.nextArgument];
+    const signal = context.abortSignal;
+    let cancelled = signal?.aborted ?? false;
+    const markCancelled = () => {
+      cancelled = true;
+    };
+    signal?.addEventListener("abort", markCancelled, { once: true });
+    try {
+      const watch = await this.#enqueue(async () => {
+        this.#assertHealthy();
+        if (cancelled)
+          throw cancellationError(signal);
+        const loaded = await this.#loadDocument(definition, resolved.id, resolved.address, context);
+        if (cancelled)
+          throw cancellationError(signal);
+        if (loaded === void 0)
+          return void 0;
+        return this.#attachDocument(definition, loaded, (value, release) => new CommittedWatch(value, release, (error) => this.report(error))).observer;
+      });
+      if (watch === void 0)
+        return void 0;
+      if (cancelled) {
+        watch.cancel();
+        throw cancellationError(signal);
+      }
+      if (signal !== void 0)
+        watch.observeCancellation(signal);
+      return watch;
+    } finally {
+      signal?.removeEventListener("abort", markCancelled);
+    }
+  }
+  async snapshotAsOf(token, ...args) {
+    this.assertUsable();
+    const definition = token.definition;
+    const resolved = resolveAddress(definition, args);
+    if (resolved.address.scope.kind !== "conversation") {
+      throw new TypeError("Session.snapshotAsOf() requires a conversation document");
+    }
+    const conversationId = resolved.address.scope.conversationId;
+    const atValue = args[resolved.nextArgument];
+    if (typeof atValue !== "number" || !Number.isSafeInteger(atValue)) {
+      throw new TypeError("Session.snapshotAsOf() requires an entry ID");
+    }
+    const at = idFromNumber(atValue);
+    const context = args[resolved.nextArgument + 1];
+    return this.#enqueue(async () => {
+      this.#assertHealthy();
+      const storedEntry = await this.#storage.entry(conversationId, at, context);
+      if (storedEntry === void 0) {
+        throw new Error(`Entry ${at} is not visible from conversation ${conversationId}`);
+      }
+      const address = {
+        ...resolved.address,
+        scope: { kind: "conversation", conversationId: storedEntry.entry.conversationId }
+      };
+      const record = await this.#storage.findDocument(address, storedEntry.commitSeq, context);
+      if (record === void 0)
+        return void 0;
+      const stored = await this.#storage.document(record.id, storedEntry.commitSeq, context);
+      if (stored === void 0) {
+        throw new Error(`Historical document ${record.id} (${record.kind}) cannot be read`);
+      }
+      return materializeDocument(definition, stored);
+    });
+  }
+  close(context) {
+    if (this.#closing === void 0) {
+      const cleanup = withoutAbortSignal(context);
+      this.#closing = Promise.resolve().then(() => this.beforeClose()).then(() => this.#enqueue(async () => {
+        this.#commitListeners.clear();
+        this.#internalListeners.clear();
+        this.#documents.clear();
+        this.#idleDocuments.clear();
+        this.#attachedDocuments.clear();
+        try {
+          await this.#storage.close(cleanup);
+        } catch (error) {
+          if (this.#failure === void 0) {
+            this.#failure = { error };
+            this.report(error);
+          }
+          throw error;
+        }
+      })).finally(() => {
+        const failure = this.#failure;
+        this.#closed.resolve(failure === void 0 ? { reason: "closed" } : { reason: "failed", error: failure.error });
+      });
+      this.#notifyClose();
+    }
+    return awaitWithContext(this.#closing, context);
+  }
+  /** Run the close listeners once, each on its own: one that fails is reported, and the rest still run. */
+  #notifyClose() {
+    if (this.#documentSweep?.timer !== void 0)
+      clearTimeout(this.#documentSweep.timer);
+    this.#documentSweep = void 0;
+    const listeners = [...this.#closeListeners];
+    this.#closeListeners.clear();
+    for (const listener of listeners)
+      contained(listener, (error) => this.report(error));
+  }
+  /** Internal: the Session's failure, and errors of listeners, which never fail what ran them. A plain Session drops them. */
+  report(_error) {
+  }
+  /**
+   * Runs inside every transaction that creates or forks a conversation, after the conversation record is staged. A
+   * plain Session stages nothing; a Harness stages its built-in documents.
+   */
+  conversationCreated(_tx, _record) {
+    return Promise.resolve();
+  }
+  /** Runs after close seals admission and before the line closes Storage; must not reject. */
+  beforeClose() {
+    return Promise.resolve();
+  }
+  /** Register a synchronous post-adoption listener. It must not block or call Session operations; a throw is reported. */
+  subscribeCommits(listener) {
+    this.assertUsable();
+    this.#commitListeners.add(listener);
+    return () => this.#commitListeners.delete(listener);
+  }
+  /**
+   * Internal: `subscribeCommits()` for the Session's own components, whose state follows each commit. A throw leaves
+   * that state behind storage, so it fails the Session instead of being reported. They run before host listeners.
+   */
+  observeCommits(listener) {
+    this.assertUsable();
+    this.#internalListeners.add(listener);
+    return () => this.#internalListeners.delete(listener);
+  }
+  /**
+   * Register a listener called synchronously when close begins, also when a failure closes the Session (`failure` is
+   * then set). It must not block or call Session operations; a throw is reported.
+   */
+  subscribeClose(listener) {
+    this.assertUsable();
+    this.#closeListeners.add(listener);
+    return () => this.#closeListeners.delete(listener);
+  }
+  /** Drop every loaded tracker on the mutation line; later access cold-loads from Storage. */
+  unloadDocuments() {
+    return this.#enqueue(async () => {
+      this.#documents.clear();
+      this.#idleDocuments.clear();
+    });
+  }
+  /**
+   * Internal, for tests: how many documents the cache holds, how many are idle, how many incarnations are pinned, and how
+   * many sweep jobs were queued on the line so far.
+   */
+  get documentCacheSizes() {
+    return {
+      cached: this.#documents.size,
+      idle: this.#idleDocuments.size,
+      attached: this.#attachedDocuments.size,
+      sweeps: this.#sweepJobs
+    };
+  }
+  /** Note a use of a cached document: an unattached one becomes the newest idle one, and an eviction is scheduled. */
+  #touchDocument(addressId2) {
+    const cached = this.#documents.get(addressId2);
+    if (cached === void 0 || this.#attachedDocuments.has(cached.record.id))
+      return;
+    const now = this.#clock();
+    const since = this.#idleDocuments.get(addressId2);
+    if (since !== void 0 && now - since < Math.min(1e3, this.#documentRetentionMs() / 10))
+      return;
+    this.#idleDocuments.delete(addressId2);
+    this.#idleDocuments.set(addressId2, now);
+    if (this.#documentSweep === void 0 || this.#documentSweep.at > now + this.#documentRetentionMs()) {
+      this.#scheduleDocumentSweep();
+    }
+  }
+  #dropDocument(addressId2) {
+    this.#documents.delete(addressId2);
+    this.#idleDocuments.delete(addressId2);
+  }
+  /**
+   * Schedule the eviction of the oldest idle document: on the line at once when the retention is 0, otherwise when it
+   * expires, by a timer that never keeps the process alive. Where timers cannot be unreferenced, as in Cloudflare
+   * Workers, none is kept: the end of each commit evicts what expired.
+   */
+  #scheduleDocumentSweep() {
+    if (this.#closing !== void 0)
+      return;
+    const oldest = this.#idleDocuments.values().next();
+    if (oldest.done === true)
+      return;
+    const at = oldest.value + this.#documentRetentionMs();
+    if (this.#documentSweep !== void 0 && this.#documentSweep.at <= at)
+      return;
+    if (this.#documentSweep?.timer !== void 0)
+      clearTimeout(this.#documentSweep.timer);
+    const sweep = { at, timer: void 0 };
+    const run2 = () => {
+      this.#sweepJobs++;
+      this.#enqueue(async () => {
+        if (this.#documentSweep === sweep)
+          this.#documentSweep = void 0;
+        if (this.#closing === void 0)
+          this.#sweepDocuments();
+      }).catch(() => {
+      });
+    };
+    const delay2 = at - this.#clock();
+    this.#documentSweep = sweep;
+    if (delay2 <= 0) {
+      queueMicrotask(run2);
+      return;
+    }
+    if (this.#documentTimersUnavailable) {
+      this.#documentSweep = void 0;
+      return;
+    }
+    const timer = setTimeout(run2, Math.min(delay2, MAX_TIMER_DELAY));
+    const unref = timer.unref;
+    if (typeof unref !== "function") {
+      clearTimeout(timer);
+      this.#documentTimersUnavailable = true;
+      this.#documentSweep = void 0;
+      return;
+    }
+    unref.call(timer);
+    sweep.timer = timer;
+  }
+  /** On the line: evict the idle documents whose retention passed, oldest first, then schedule the next eviction. */
+  #sweepDocuments() {
+    const expired = this.#clock() - this.#documentRetentionMs();
+    for (const [addressId2, since] of this.#idleDocuments) {
+      if (since > expired)
+        break;
+      this.#dropDocument(addressId2);
+    }
+    this.#scheduleDocumentSweep();
+  }
+  /** Pin a cached incarnation for one observer; the returned release unpins it once, idle again after the last. */
+  #pinDocument(addressId2, recordId) {
+    this.#attachedDocuments.set(recordId, (this.#attachedDocuments.get(recordId) ?? 0) + 1);
+    this.#idleDocuments.delete(addressId2);
+    let pinned = true;
+    return () => {
+      if (!pinned)
+        return;
+      pinned = false;
+      const count = (this.#attachedDocuments.get(recordId) ?? 1) - 1;
+      if (count > 0) {
+        this.#attachedDocuments.set(recordId, count);
+        return;
+      }
+      this.#attachedDocuments.delete(recordId);
+      if (this.#documents.get(addressId2)?.record.id === recordId)
+        this.#touchDocument(addressId2);
+    };
+  }
+  async #runCommit(change, context, scope) {
+    this.#assertHealthy();
+    context.abortSignal?.throwIfAborted();
+    const tx = new Transaction(this.#host, context, scope);
+    let result;
+    try {
+      result = await change(tx);
+      this.#assertHealthy();
+    } catch (error) {
+      await tx.settleFailure();
+      this.#sweepDocuments();
+      throw error;
+    }
+    let writes;
+    try {
+      writes = await tx.settleSuccess();
+    } catch (error) {
+      this.#sweepDocuments();
+      throw error;
+    }
+    if (writes.length === 0) {
+      tx.discard();
+      this.#sweepDocuments();
+      return result;
+    }
+    let seq;
+    try {
+      seq = await this.#storage.commit(writes, withoutAbortSignal(context));
+    } catch (error) {
+      tx.discard();
+      throw error;
+    }
+    let documents;
+    try {
+      documents = tx.adopt(seq);
+    } catch (error) {
+      this.fail(error);
+      throw error;
+    }
+    for (const document of documents)
+      this.#touchDocument(addressId(document.record));
+    this.#publish(seq, writes, documents, context);
+    this.#sweepDocuments();
+    return result;
+  }
+  #publish(seq, writes, documents, context) {
+    if (this.#commitListeners.size === 0 && this.#internalListeners.size === 0)
+      return;
+    const changes = [];
+    for (const write of writes) {
+      switch (write.type) {
+        case "conversation":
+        case "entry":
+        case "task":
+        case "submission":
+          changes.push(write);
+      }
+    }
+    for (const document of documents)
+      changes.push(document);
+    const publication = { seq, changes };
+    for (const listener of [...this.#internalListeners]) {
+      contained(() => listener(publication, context), (error) => this.fail(error));
+    }
+    for (const listener of [...this.#commitListeners]) {
+      contained(() => listener(publication, context), (error) => this.report(error));
+    }
+  }
+  /**
+   * Attach an observer to one committed incarnation: check the definition, then forward this incarnation's committed
+   * changes and close. `detach` removes both subscriptions.
+   */
+  #attachDocument(definition, loaded, create) {
+    checkRecordScope(definition, loaded.record);
+    checkRecordVersion(definition, loaded.record, loaded.storedVersion);
+    let unsubscribeCommit = () => {
+    };
+    let unsubscribeClose = () => {
+    };
+    const unpin = this.#pinDocument(loaded.addressId, loaded.record.id);
+    const detach = () => {
+      unsubscribeCommit();
+      unsubscribeClose();
+      unpin();
+    };
+    let observer;
+    try {
+      observer = create(loaded.tracker.value, detach);
+    } catch (error) {
+      unpin();
+      throw error;
+    }
+    const observed = { version: loaded.valueVersion };
+    unsubscribeCommit = this.observeCommits((publication, context) => {
+      for (const change of publication.changes) {
+        if (change.type !== "document" || change.record.id !== loaded.record.id)
+          continue;
+        const frameContext = observer instanceof CommittedStateSource ? withoutAbortSignal(context) : context;
+        const ops = observedOperations(observed, change);
+        if (ops.length === 0)
+          continue;
+        if (change.value === null)
+          unpin();
+        observer.advance(change.value, ops, frameContext);
+      }
+    });
+    unsubscribeClose = this.subscribeClose(() => observer.closeSession(this.#failure));
+    return { observer, detach };
+  }
+  async #loadDocument(definition, addressId2, address, context) {
+    const cached = this.#documents.get(addressId2);
+    if (cached?.valueVersion === definition.version) {
+      this.#touchDocument(addressId2);
+      return cached;
+    }
+    if (cached !== void 0)
+      this.#dropDocument(addressId2);
+    const record = await this.#storage.findDocument(address, "current", context);
+    if (record === void 0)
+      return void 0;
+    const stored = await this.#storage.document(record.id, "current", context);
+    if (stored === void 0)
+      throw new Error(`Current document ${record.id} (${record.kind}) cannot be read`);
+    const value = materializeDocument(definition, stored);
+    const loaded = {
+      addressId: addressId2,
+      record: stored.record,
+      storedVersion: stored.version,
+      valueVersion: definition.version,
+      deltasSinceBase: stored.deltasSinceBase,
+      tracker: track(value)
+    };
+    this.#documents.set(addressId2, loaded);
+    this.#touchDocument(addressId2);
+    return loaded;
+  }
+  #enqueue(job) {
+    const run2 = this.#tail.then(job);
+    this.#tail = run2.then(() => void 0, () => void 0);
+    return run2;
+  }
+  /** Internal: throw `SessionFailed` when failed, else an error when closing. */
+  assertUsable() {
+    this.#assertHealthy();
+    if (this.#closing !== void 0)
+      throw new Error("Session is closed");
+  }
+  #assertHealthy() {
+    if (this.#failure !== void 0)
+      throw new SessionFailed(this.#failure.error);
+  }
+};
+function contained(callback, onError) {
+  try {
+    const result = callback();
+    if (typeof result?.then === "function")
+      Promise.resolve(result).catch(onError);
+  } catch (error) {
+    onError(error);
+  }
+}
+function observedOperations(observed, change) {
+  if (change.value === null)
+    return RETIREMENT_OPERATIONS;
+  if (change.version === observed.version)
+    return change.ops;
+  observed.version = change.version;
+  return [["r", change.value]];
+}
+function cancellationError(signal) {
+  return signal.reason instanceof Error ? signal.reason : new DOMException("The operation was aborted", "AbortError");
+}
+var GuardedStorage = class {
+  #storage;
+  #latch;
+  /** Backend calls underway, also those off the Session line, which close waits for before it closes the backend. */
+  #underway = /* @__PURE__ */ new Set();
+  #closing = false;
+  constructor(storage, latch) {
+    this.#storage = storage;
+    this.#latch = latch;
+  }
+  /** Never exempt, whatever it throws: once admitted, whether a failed batch committed is unknown. */
+  commit(writes, context) {
+    return this.#call(void 0, () => this.#storage.commit(writes, context));
+  }
+  mintId() {
+    return this.#call(void 0, () => this.#storage.mintId());
+  }
+  conversation(id, context) {
+    return this.#call(context, () => this.#storage.conversation(id, context));
+  }
+  scanConversations(query, limit2, cursor, context) {
+    return this.#call(context, () => this.#storage.scanConversations(query, limit2, cursor, context));
+  }
+  entry(first, second, third) {
+    if (third === void 0) {
+      const context = second;
+      return this.#call(context, () => this.#storage.entry(first, context));
+    }
+    return this.#call(third, () => this.#storage.entry(first, second, third));
+  }
+  findLatestHeadMarker(conversationId, atOrBeforeEntryId, context) {
+    return this.#call(context, () => this.#storage.findLatestHeadMarker(conversationId, atOrBeforeEntryId, context));
+  }
+  scanEntries(query, limit2, cursor, context) {
+    return this.#call(context, () => this.#storage.scanEntries(query, limit2, cursor, context));
+  }
+  task(id, context) {
+    return this.#call(context, () => this.#storage.task(id, context));
+  }
+  scanTasks(query, limit2, cursor, context) {
+    return this.#call(context, () => this.#storage.scanTasks(query, limit2, cursor, context));
+  }
+  submission(id, context) {
+    return this.#call(context, () => this.#storage.submission(id, context));
+  }
+  scanSubmissions(query, limit2, cursor, context) {
+    return this.#call(context, () => this.#storage.scanSubmissions(query, limit2, cursor, context));
+  }
+  submissionByRequest(conversationId, requestId, context) {
+    return this.#call(context, () => this.#storage.submissionByRequest(conversationId, requestId, context));
+  }
+  findDocument(address, at, context) {
+    return this.#call(context, () => this.#storage.findDocument(address, at, context));
+  }
+  document(id, at, context) {
+    return this.#call(context, () => this.#storage.document(id, at, context));
+  }
+  scanDocuments(query, limit2, cursor, context) {
+    return this.#call(context, () => this.#storage.scanDocuments(query, limit2, cursor, context));
+  }
+  /**
+   * Close the backend once every call underway has settled, so none outlives it or fails after `closed` settles. New
+   * calls are refused from here on: a paged read must not start its next page while the backend closes.
+   */
+  async close(context) {
+    this.#closing = true;
+    await Promise.allSettled([...this.#underway]);
+    return this.#storage.close(context);
+  }
+  /**
+   * Run one backend call under the guard. `read` is a read's context; `commit()` and `mintId()` pass none, so nothing
+   * exempts their errors: once a batch is admitted, whether it committed is unknown. A call still underway when another
+   * fails the Session ends with `SessionFailed` too, whatever it returns: nothing it read or wrote is used.
+   */
+  async #call(read2, run2) {
+    this.#assertHealthy();
+    if (this.#closing)
+      throw new Error("Session is closed");
+    let result;
+    const call = (async () => run2())();
+    this.#underway.add(call);
+    try {
+      result = await call;
+    } catch (error) {
+      this.#assertHealthy();
+      const exempt = read2 !== void 0 && (error instanceof StorageRequestError || read2.abortSignal?.aborted === true);
+      if (!exempt)
+        this.#latch.fail(error);
+      throw error;
+    } finally {
+      this.#underway.delete(call);
+    }
+    this.#assertHealthy();
+    return result;
+  }
+  #assertHealthy() {
+    const failure = this.#latch.failure;
+    if (failure !== void 0)
+      throw new SessionFailed(failure.error);
+  }
+};
+
+// node_modules/@earendil-works/pi-durable/dist/harness/agent.js
+var DEFAULT_RETRY_POLICY = {
+  enabled: true,
+  maxRetries: 3,
+  baseDelayMs: 2e3,
+  maxAgentDelayMs: 6e4
+};
+var DEFAULT_COMPACTION_POLICY = {
+  enabled: true,
+  reserveTokens: 16384,
+  keepRecentTokens: 2e4,
+  backgroundTokens: 32768
+};
+var DEFAULT_PROGRESS_POLICY = {
+  partialIntervalMs: 100,
+  outputIntervalMs: 100
+};
+var INSTRUCTIONS_KEY = "instructions";
+var AgentDoc = defineDoc({
+  kind: "pi.agent",
+  version: 1,
+  scope: "conversation",
+  history: "rewindable",
+  fork: "asOf",
+  initial: () => ({}),
+  checkpointWhen: () => true
+});
+var DEFAULT_CONTEXT_RETENTION_MS = 6e5;
+function resolveSettings(settings2) {
+  const extensions = settings2?.extensions;
+  return {
+    ...extensions === void 0 ? {} : { extensions },
+    stream: { ...settings2?.stream },
+    retry: { ...DEFAULT_RETRY_POLICY, ...settings2?.retry },
+    compaction: { ...DEFAULT_COMPACTION_POLICY, ...settings2?.compaction },
+    // Field by field, so an explicitly undefined interval keeps its default.
+    progress: {
+      partialIntervalMs: settings2?.progress?.partialIntervalMs ?? DEFAULT_PROGRESS_POLICY.partialIntervalMs,
+      outputIntervalMs: settings2?.progress?.outputIntervalMs ?? DEFAULT_PROGRESS_POLICY.outputIntervalMs
+    },
+    toolExecution: settings2?.toolExecution ?? "parallel",
+    steeringMode: settings2?.steeringMode ?? "one-at-a-time",
+    followUpMode: settings2?.followUpMode ?? "one-at-a-time",
+    contextRetentionMs: settings2?.contextRetentionMs ?? DEFAULT_CONTEXT_RETENTION_MS,
+    documentRetentionMs: documentRetention(settings2?.documentRetentionMs)
+  };
+}
+async function configure(tx, conversationId, change) {
+  const state3 = await tx.doc(AgentDoc, conversationId);
+  applyChange(state3, change);
+}
+async function addTools(tx, conversationId, added) {
+  const state3 = await tx.doc(AgentDoc, conversationId);
+  const tools = state3.tools;
+  if (Array.isArray(tools)) {
+    for (const name of added)
+      if (!tools.includes(name))
+        tools.push(name);
+  } else if (tools?.remove.some((name) => added.includes(name))) {
+    state3.tools = { remove: tools.remove.filter((name) => !added.includes(name)) };
+  }
+  const modelTools = state3.modelTools;
+  if (Array.isArray(modelTools)) {
+    for (const name of added)
+      if (!modelTools.includes(name))
+        modelTools.push(name);
+    return;
+  }
+  const remove = (modelTools?.remove ?? []).filter((name) => !added.includes(name));
+  const add = [...modelTools?.add ?? []];
+  for (const name of added)
+    if (!add.includes(name))
+      add.push(name);
+  state3.modelTools = { ...remove.length === 0 ? {} : { remove }, add };
+}
+function applyChange(state3, change) {
+  const set = (key, value) => {
+    if (value === void 0)
+      return;
+    if (value === null)
+      delete state3[key];
+    else
+      state3[key] = value;
+  };
+  set("model", change.model === void 0 || change.model === null ? change.model : { ...change.model });
+  set("thinkingLevel", change.thinkingLevel);
+  const extensions = change.extensions;
+  set("extensions", extensions === void 0 || extensions === null ? extensions : isList(extensions) ? names2(extensions) : {
+    ...extensions.add === void 0 ? {} : { add: names2(extensions.add) },
+    ...extensions.remove === void 0 ? {} : { remove: names2(extensions.remove) }
+  });
+  const tools = change.tools;
+  set("tools", tools === void 0 || tools === null ? tools : isList(tools) ? names2(tools) : { remove: names2(tools.remove) });
+  const modelTools = change.modelTools;
+  set("modelTools", modelTools === void 0 || modelTools === null ? modelTools : isList(modelTools) ? names2(modelTools) : {
+    ...modelTools.remove === void 0 ? {} : { remove: names2(modelTools.remove) },
+    ...modelTools.add === void 0 ? {} : { add: names2(modelTools.add) }
+  });
+  set("instructions", change.instructions);
+  set("cwd", change.cwd);
+}
+function isList(value) {
+  return Array.isArray(value);
+}
+function names2(items) {
+  return items.map((item) => item.name);
+}
+async function createAgent(tx, conversation) {
+  if (conversation.parent !== void 0)
+    return;
+  const agent = await tx.doc(AgentDoc, conversation.id);
+  if (conversation.owner === void 0)
+    return;
+  const owner = await tx.doc(AgentDoc, conversation.owner.conversationId);
+  Object.assign(agent, copyJson(owner));
+}
+function agentHooks(agent, taskName) {
+  const handlers = [];
+  for (const extension of agent.extensions) {
+    for (const hook2 of extension.hooks ?? [])
+      if (hook2.task === taskName)
+        handlers.push(hook2.handlers);
+  }
+  return handlers;
+}
+function resolveAgent(state3, snapshot, settings2, report) {
+  const extensions = selectExtensions(state3?.extensions, snapshot, settings2);
+  const composed = /* @__PURE__ */ new Map();
+  for (const extension of extensions)
+    for (const tool of extension.tools ?? [])
+      composed.set(tool.name, tool);
+  const sections = /* @__PURE__ */ new Map();
+  for (const extension of extensions) {
+    for (const section2 of extension.sections ?? [])
+      sections.set(section2.key, section2);
+  }
+  for (const extension of extensions) {
+    for (const wrap of extension.wraps ?? []) {
+      if ("tool" in wrap)
+        applyWrap(composed, wrap.tool, (tool) => wrap.wrap(tool), (tool) => tool.name, report);
+      else
+        applyWrap(sections, wrap.section, (section2) => wrap.wrap(section2), (section2) => section2.key, report);
+    }
+  }
+  const enabled = filterTools([...composed.values()], state3?.tools);
+  const callableBy = (caller) => (tool) => tool.callers === void 0 || tool.callers.includes(caller);
+  const modelCallable = enabled.filter(callableBy("model"));
+  const tools = offeredTools(modelCallable, state3?.modelTools);
+  const offered = new Set(tools);
+  const deferred = modelCallable.filter((tool) => tool.deferred === true && !offered.has(tool));
+  const callable = enabled.filter(callableBy("tools"));
+  const instructions2 = state3?.instructions;
+  const agentSections = [...sections.values()];
+  if (instructions2 !== void 0)
+    agentSections.push({ key: INSTRUCTIONS_KEY, render: () => instructions2 });
+  const agent = {
+    ...state3?.model === void 0 ? {} : { model: state3.model },
+    thinkingLevel: state3?.thinkingLevel ?? "off",
+    extensions,
+    tools,
+    callable,
+    deferred,
+    sections: agentSections,
+    ...instructions2 === void 0 ? {} : { instructions: instructions2 },
+    ...state3?.cwd === void 0 ? {} : { cwd: state3.cwd }
+  };
+  return agent;
+}
+function offeredTools(tools, filter) {
+  if (Array.isArray(filter))
+    return filterTools(tools, filter);
+  const removed = new Set(filter?.remove ?? []);
+  const kept = tools.filter((tool) => tool.deferred !== true && !removed.has(tool.name));
+  const byName = new Map(tools.map((tool) => [tool.name, tool]));
+  const loaded = [...new Set(filter?.add ?? [])].flatMap((name) => {
+    const tool = byName.get(name);
+    return tool?.deferred === true && !removed.has(name) ? [tool] : [];
+  });
+  return [...kept, ...loaded];
+}
+function filterTools(tools, filter) {
+  if (filter === void 0)
+    return tools;
+  if (Array.isArray(filter)) {
+    const byName = new Map(tools.map((tool) => [tool.name, tool]));
+    return [...new Set(filter)].flatMap((name) => {
+      const tool = byName.get(name);
+      return tool === void 0 ? [] : [tool];
+    });
+  }
+  const removed = new Set(filter.remove);
+  return tools.filter((tool) => !removed.has(tool.name));
+}
+function selectExtensions(stored, snapshot, settings2) {
+  let selected;
+  if (Array.isArray(stored))
+    selected = stored;
+  else {
+    const base = settings2.extensions?.map((extension) => extension.name) ?? snapshot.installed().map((e) => e.name);
+    const edit = stored;
+    const removed = new Set(edit?.remove ?? []);
+    selected = [...base, ...edit?.add ?? []].filter((name) => !removed.has(name));
+  }
+  const extensions = [];
+  for (const name of new Set(selected)) {
+    const extension = snapshot.extension(name);
+    if (extension !== void 0)
+      extensions.push(extension);
+  }
+  return extensions;
+}
+function applyWrap(items, target, wrap, nameOf, report) {
+  const item = items.get(target);
+  if (item === void 0)
+    return;
+  try {
+    const wrapped = wrap(item);
+    if (nameOf(wrapped) !== target)
+      throw new Error(`Wrapper renamed ${target} to ${nameOf(wrapped)}`);
+    items.set(target, wrapped);
+  } catch (error) {
+    items.delete(target);
+    report(error);
+  }
+}
+
+// node_modules/@earendil-works/pi-durable/dist/harness/compaction.js
+init_estimate();
+
+// node_modules/@earendil-works/pi-ai/dist/utils/retry.js
+function buildProviderErrorPattern(patterns) {
+  return new RegExp(patterns.join("|"), "i");
+}
+var NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN = buildProviderErrorPattern([
+  // OpenCode Go/free-tier limits returned as 429 JSON error types by OpenCode's
+  // Zen API. These are subscription/account limits, not transient throttles.
+  "GoUsageLimitError",
+  "FreeUsageLimitError",
+  // OpenCode Go subscription-limit text asks users to enable available-balance
+  // usage after rolling/weekly/monthly limits are reached.
+  "Monthly usage limit reached",
+  "available balance",
+  // Generic quota/budget/billing exhaustion. `insufficient_quota` is OpenAI's
+  // quota/billing error code; the other strings cover common gateway wording.
+  "insufficient_quota",
+  "out of budget",
+  "quota exceeded",
+  "billing",
+  // Sign in with ChatGPT: the subscription's shared usage limit, which resets
+  // after hours rather than seconds.
+  "subscription_sharing_usage_limit_exceeded"
+]);
+var RETRYABLE_PROVIDER_ERROR_PATTERN = buildProviderErrorPattern([
+  // Generic provider load, HTTP status, and server-side transient failures.
+  "overloaded",
+  "server_busy",
+  "servers are currently busy",
+  "currently experiencing high demand",
+  "model is at capacity",
+  "rate.?limit",
+  "too many requests",
+  "429",
+  "500",
+  "502",
+  "503",
+  "504",
+  "520",
+  "524",
+  "service.?unavailable",
+  "server.?error",
+  "internal.?error",
+  // Wrapper/provider text for transient upstream failures, including OpenRouter
+  // "Provider returned error" responses (#2264) and gateway wording such as
+  // "The upstream provider returned an error" (#10842).
+  "provider.?returned.?(?:an.?)?error",
+  "exceeded request buffer limit while retrying upstream",
+  // Network, proxy, and fetch transport failures. This includes OpenAI Codex
+  // raw-fetch failures such as "upstream connect", "connection refused", and
+  // "reset before headers" (#733), plus OpenRouter connection drops (#3317).
+  "network.?error",
+  "connection.?error",
+  "connection.?refused",
+  "connection.?lost",
+  "other side closed",
+  "fetch failed",
+  "getaddrinfo",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "upstream.?connect",
+  "reset before headers",
+  "socket hang up",
+  "socket connection was closed",
+  "timed? out",
+  "timeout",
+  "terminated",
+  // WebSocket transports can report close/error text instead of HTTP/fetch text.
+  "websocket.?closed",
+  "websocket.?error",
+  // Premature stream endings from SDKs and transports. Anthropic can throw
+  // "stream ended without ..." and "Anthropic stream ended before message_stop"
+  // (#4433); Bedrock/Smithy can throw an HTTP/2 no-response error (#3594).
+  "ended without",
+  "stream ended before message_stop",
+  "stream ended before a terminal response event",
+  "http2 request did not get a response",
+  // Node ERR_HTTP2_STREAM_CANCEL: the HTTP/2 session died before the request was
+  // sent, e.g. after the Bedrock SDK's 5-minute session timeout (#10379).
+  "pending stream has been canceled",
+  // Provider-requested retry delay cap failures should flow through the outer
+  // retry policy so callers can surface/abort the backoff (#1123).
+  "retry delay",
+  // Explicit retry guidance emitted mid-stream by OpenAI Responses and Bedrock
+  // stream exceptions (#6019).
+  "you can retry your request",
+  "try your request again",
+  "please retry your request",
+  // gRPC based providers (e.g. NVIDIA NIM)
+  "ResourceExhausted",
+  // Sign in with ChatGPT: usage or user data temporarily unavailable. Usage
+  // failures can arrive mid-stream without an HTTP 503 in the message.
+  "subscription_sharing_usage_unavailable",
+  "subscription_sharing_user_unavailable"
+]);
+var DEFAULT_MAX_AGENT_RETRY_DELAY_MS = 6e4;
+function retryDelayMs(policy, attempt) {
+  const delay2 = policy.baseDelayMs * 2 ** Math.max(0, attempt - 1);
+  const safeDelay = Number.isSafeInteger(delay2) ? delay2 : Number.MAX_SAFE_INTEGER;
+  return Math.min(safeDelay, policy.maxAgentDelayMs ?? DEFAULT_MAX_AGENT_RETRY_DELAY_MS);
+}
+function isRetryableAssistantError(message) {
+  if (message.stopReason !== "error" || !message.errorMessage)
+    return false;
+  const errorMessage2 = message.errorMessage;
+  if (NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN.test(errorMessage2))
+    return false;
+  return RETRYABLE_PROVIDER_ERROR_PATTERN.test(errorMessage2);
+}
+
+// node_modules/@earendil-works/pi-durable/dist/tasks.js
+function defineTask(definition) {
+  return { definition };
+}
+
+// node_modules/@earendil-works/pi-durable/dist/harness/context.js
+var SCAN_PAGE_SIZE2 = 256;
+var EXCLUDED_STOP_REASONS = /* @__PURE__ */ new Set(["aborted", "error", "deferred"]);
+var MISSING_RESULT_TEXT = "Tool result unavailable: history ends before this call completed.";
+async function captureContextBounds(storage, conversationId, context, at) {
+  let tail;
+  if (at === void 0) {
+    tail = (await storage.scanEntries({ conversationId }, 1, void 0, context)).items[0]?.id;
+    if (tail === void 0)
+      return void 0;
+  } else {
+    if (await storage.entry(conversationId, at, context) === void 0) {
+      throw new Error(`Entry ${at} is not visible from conversation ${conversationId}`);
+    }
+    tail = at;
+  }
+  return { head: await storage.findLatestHeadMarker(conversationId, tail, context), tail };
+}
+async function readContextFrom(session, storage, conversationId, context, at, previous) {
+  const bounds = await session.readOnLine(() => captureContextBounds(storage, conversationId, context, at));
+  if (bounds === void 0)
+    return { view: emptyView(), range: void 0 };
+  freezeJson(bounds.head);
+  let range;
+  if (previous === void 0 || previous.bounds.head?.id !== bounds.head?.id) {
+    range = deriveRange(bounds, freezeJson(await scanRange(storage, conversationId, rangeQuery(bounds), context)));
+  } else if (bounds.tail === previous.bounds.tail) {
+    range = previous;
+  } else if (bounds.tail < previous.bounds.tail) {
+    range = deriveRange(bounds, previous.entries.filter((entry) => entry.id <= bounds.tail));
+  } else {
+    const minEntryId = idFromNumber(previous.bounds.tail + 1);
+    const added = await scanRange(storage, conversationId, { minEntryId, maxEntryId: bounds.tail }, context);
+    range = extendRange(previous, bounds, freezeJson(added));
+  }
+  const { view } = range;
+  return {
+    view: {
+      ...view,
+      entries: [...view.entries],
+      contributions: [...view.contributions],
+      messages: [...view.messages]
+    },
+    range
+  };
+}
+async function readContext(session, storage, conversationId, context, at) {
+  const bounds = await session.readOnLine(() => captureContextBounds(storage, conversationId, context, at));
+  return deriveContext(storage, conversationId, bounds, context);
+}
+async function deriveContext(storage, conversationId, bounds, context) {
+  if (bounds === void 0)
+    return emptyView();
+  return deriveRange(bounds, await scanRange(storage, conversationId, rangeQuery(bounds), context)).view;
+}
+function emptyView() {
+  return { head: void 0, entries: [], contributions: [], messages: [] };
+}
+function deriveRange(bounds, entries) {
+  const edits = /* @__PURE__ */ new Map();
+  for (const entry of entries)
+    for (const edit of entry.edits ?? [])
+      edits.set(edit.target, edit);
+  const active = selectActive(bounds.head, entries);
+  const contributions = active.map((entry) => contribute(entry, edits.get(entry.id)));
+  const { settled, open: open2 } = settle([], contributions.flat());
+  const messages = leadWithSystem([...settled, ...orderToolResults(open2)]);
+  const view = { head: bounds.head, entries: active, contributions, messages };
+  return { bounds, entries, view, edited: new Set(edits.keys()), settled, open: open2 };
+}
+function extendRange(previous, bounds, added) {
+  const entries = [...previous.entries, ...added];
+  if (added.some((entry) => entry.edits !== void 0 || entry.head !== void 0 || previous.edited.has(entry.id))) {
+    return deriveRange(bounds, entries);
+  }
+  const contributions = added.map((entry) => contribute(entry, void 0));
+  const { settled, open: open2 } = settle(previous.settled, [...previous.open, ...contributions.flat()]);
+  const view = {
+    head: bounds.head,
+    entries: [...previous.view.entries, ...added],
+    contributions: [...previous.view.contributions, ...contributions],
+    messages: leadWithSystem([...settled, ...orderToolResults(open2)])
+  };
+  return { bounds, entries, view, edited: previous.edited, settled, open: open2 };
+}
+function leadWithSystem(messages) {
+  const index3 = messages.findIndex((message) => message.role !== "user");
+  if (index3 <= 0 || messages[index3].role !== "system")
+    return messages;
+  return [messages[index3], ...messages.slice(0, index3), ...messages.slice(index3 + 1)];
+}
+function contribute(entry, edit) {
+  if (edit?.action === "omit")
+    return Object.freeze([]);
+  const contributed = edit?.action === "replace" ? edit.messages : entry.model ?? [];
+  return Object.freeze(contributed.filter((message) => message.role !== "assistant" || !EXCLUDED_STOP_REASONS.has(message.stopReason)));
+}
+var deeplyFrozen = /* @__PURE__ */ new WeakSet();
+function freezeJson(value) {
+  if (value === null || typeof value !== "object" || deeplyFrozen.has(value))
+    return value;
+  for (const child of Object.values(value))
+    freezeJson(child);
+  Object.freeze(value);
+  deeplyFrozen.add(value);
+  return value;
+}
+function settle(settled, open2) {
+  const last = open2.findLastIndex((message) => message.role === "assistant");
+  if (last <= 0)
+    return { settled, open: open2 };
+  return { settled: [...settled, ...orderToolResults(open2.slice(0, last))], open: open2.slice(last) };
+}
+async function activeEntries(storage, conversationId, bounds, context) {
+  if (bounds === void 0)
+    return [];
+  return selectActive(bounds.head, await scanRange(storage, conversationId, rangeQuery(bounds), context));
+}
+function rangeQuery(bounds) {
+  const head = bounds.head;
+  return head === void 0 ? { maxEntryId: bounds.tail } : { minEntryId: head.head, maxEntryId: bounds.tail };
+}
+async function scanRange(storage, conversationId, range, context) {
+  const entries = [];
+  let cursor;
+  do {
+    const page2 = await storage.scanEntries({ conversationId, ...range }, SCAN_PAGE_SIZE2, cursor, context);
+    entries.push(...page2.items);
+    cursor = page2.next;
+  } while (cursor !== void 0);
+  return entries.reverse();
+}
+function selectActive(head, range) {
+  return head === void 0 ? range : [head, ...range.filter((entry) => entry.head === void 0)];
+}
+function orderToolResults(messages) {
+  const ordered = [];
+  for (let index3 = 0; index3 < messages.length; index3++) {
+    const message = messages[index3];
+    if (message.role === "toolResult")
+      continue;
+    ordered.push(message);
+    if (message.role !== "assistant")
+      continue;
+    const calls = message.content.filter((content) => content.type === "toolCall");
+    if (calls.length === 0)
+      continue;
+    const results = /* @__PURE__ */ new Map();
+    for (let next = index3 + 1; next < messages.length && messages[next].role !== "assistant"; next++) {
+      const candidate = messages[next];
+      if (candidate.role === "toolResult" && !results.has(candidate.toolCallId)) {
+        results.set(candidate.toolCallId, next);
+      }
+    }
+    for (const call of calls) {
+      const resultIndex = results.get(call.id);
+      ordered.push(resultIndex === void 0 ? missingResult(call, message.timestamp) : messages[resultIndex]);
+    }
+  }
+  return ordered;
+}
+function missingResult(call, timestamp) {
+  return freezeJson({
+    role: "toolResult",
+    toolCallId: call.id,
+    toolName: call.name,
+    content: [{ type: "text", text: MISSING_RESULT_TEXT }],
+    isError: true,
+    details: { reason: "missing_result" },
+    timestamp
+  });
+}
+
+// node_modules/@earendil-works/pi-ai/dist/utils/overflow.js
+var OVERFLOW_PATTERNS = [
+  /prompt (?:is )?too long/i,
+  // Anthropic and z.ai token overflow
+  /prompt exceeds max length/i,
+  // z.ai CN endpoint token overflow
+  /request_too_large/i,
+  // Anthropic request byte-size overflow (HTTP 413)
+  /input is too long for requested model/i,
+  // Amazon Bedrock
+  /exceeds the context window/i,
+  // OpenAI (Completions & Responses API)
+  /exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\))/i,
+  // OpenAI-compatible proxies (LiteLLM)
+  /input token count.*exceeds the maximum/i,
+  // Google (Gemini)
+  /maximum prompt length is \d+/i,
+  // xAI (Grok)
+  /reduce the length of the messages/i,
+  // Groq
+  /maximum context length is \d+ tokens/i,
+  // OpenRouter (most backends)
+  /exceeds (?:the )?maximum allowed input length of [\d,]+ tokens?/i,
+  // OpenRouter/Poolside
+  /input \(\d+ tokens\) is longer than the model'?s context length \(\d+ tokens\)/i,
+  // Together AI
+  /exceeds the limit of \d+/i,
+  // GitHub Copilot
+  /exceeds the available context size/i,
+  // llama.cpp server
+  /greater than the context length/i,
+  // LM Studio
+  /context window exceeds limit/i,
+  // MiniMax
+  /exceeded model token limit/i,
+  // Kimi For Coding
+  /too large for model with \d+ maximum context length/i,
+  // Mistral
+  /prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?/i,
+  // DS4 server
+  /model_context_window_exceeded/i,
+  // z.ai non-standard finish_reason surfaced as error text
+  /prompt too long; exceeded (?:max )?context length/i,
+  // Ollama explicit overflow error
+  /range of input length should be/i,
+  // DashScope / Qwen Token Plan
+  /context[_ ]length[_ ]exceeded/i,
+  // Generic fallback
+  /too many tokens/i,
+  // Generic fallback
+  /token limit exceeded/i
+  // Generic fallback
+];
+var CEREBRAS_BODYLESS_OVERFLOW_PATTERN = /^4(?:00|13)\s*(?:status code)?\s*\(no body\)/i;
+var NON_OVERFLOW_PATTERNS = [
+  /^(Throttling error|Service unavailable):/i,
+  // AWS Bedrock non-overflow errors (human-readable prefixes from formatBedrockError)
+  /rate limit/i,
+  // Generic rate limiting
+  /too many requests/i
+  // Generic HTTP 429 style
+];
+function isContextOverflow(message, contextWindow) {
+  if (message.stopReason === "error" && message.errorMessage) {
+    const isNonOverflow = NON_OVERFLOW_PATTERNS.some((p) => p.test(message.errorMessage));
+    if (!isNonOverflow) {
+      if (OVERFLOW_PATTERNS.some((p) => p.test(message.errorMessage))) {
+        return true;
+      }
+      if (message.provider === "cerebras" && CEREBRAS_BODYLESS_OVERFLOW_PATTERN.test(message.errorMessage)) {
+        return true;
+      }
+    }
+  }
+  if (contextWindow && message.stopReason === "stop") {
+    const inputTokens = message.usage.input + message.usage.cacheRead;
+    if (inputTokens > contextWindow) {
+      return true;
+    }
+  }
+  if (contextWindow && message.stopReason === "length" && message.usage.output === 0) {
+    const inputTokens = message.usage.input + message.usage.cacheRead;
+    if (inputTokens >= contextWindow * 0.99) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// node_modules/@earendil-works/pi-durable/dist/harness/generation.js
+init_transcript();
+
+// node_modules/@earendil-works/pi-durable/dist/harness/inbox.js
+var InboxDoc = defineDoc({
+  kind: "pi.inbox",
+  version: 1,
+  scope: "conversation",
+  history: "latest",
+  fork: "initial",
+  initial: () => ({ items: [] }),
+  checkpointWhen: (value) => value.items.length === 0
+});
+async function prepareBoundary(tx, conversationId, modes) {
+  const head = (await tx.latestHeadMarker(conversationId))?.head;
+  const inbox = await tx.doc(InboxDoc, conversationId);
+  return {
+    conversationId,
+    inbox,
+    steeringMode: modes.steeringMode,
+    followUpMode: modes.followUpMode,
+    head
+  };
+}
+async function applyBoundary(tx, boundary, at, now) {
+  const { conversationId, inbox } = boundary;
+  const items = inbox.items;
+  const reset = hasQueuedReset(items);
+  const final = at === "final" || reset;
+  const pick = (mode, queueMode) => {
+    const indexes = items.flatMap((item, index3) => item.mode === mode ? [index3] : []);
+    return queueMode === "all" ? indexes : indexes.slice(0, 1);
+  };
+  const writes = items.flatMap((item, index3) => item.mode === "write" ? [index3] : []);
+  const users = [...pick("steer", boundary.steeringMode), ...final ? pick("followUp", boundary.followUpMode) : []];
+  users.sort((a, b) => a - b);
+  for (const index3 of writes) {
+    const item = items[index3];
+    const draft = item.entry;
+    if (isStale(boundary, draft)) {
+      tx.settleSubmission(item.id, { status: "unanswered", reason: "stale" });
+      continue;
+    }
+    const entry = await tx.appendEntry(conversationId, draft);
+    if (draft.head !== void 0)
+      boundary.head = draft.head === "self" ? entry.id : draft.head;
+    tx.placeSubmission(item.id, entry.id);
+  }
+  const placed = [];
+  for (const index3 of users) {
+    const item = items[index3];
+    const entry = await appendInput(tx, conversationId, item.content, item.entry, now);
+    tx.placeSubmission(item.id, entry.id);
+    placed.push(item.id);
+  }
+  const removed = [...writes, ...users].sort((a, b) => b - a);
+  for (const index3 of removed)
+    items.splice(index3, 1);
+  return { users: placed, reset };
+}
+function appendInput(tx, conversationId, content, entry, now) {
+  const message = { role: "user", content, timestamp: now };
+  if (entry === void 0)
+    return tx.appendEntry(UserEntry, conversationId, { model: [message] });
+  return tx.appendEntry(conversationId, { ...pickInputEntry(entry), model: [message] });
+}
+function pickInputEntry({ kind, data }) {
+  const picked = data === void 0 ? { kind } : { kind, data };
+  return copyJson(picked, { omitUndefinedProperties: true });
+}
+function isDisplayOnly(entry) {
+  return entry.model === void 0 && entry.head === void 0 && entry.edits === void 0;
+}
+function hasQueuedReset(items) {
+  return items.some((item) => item.mode === "write" && item.entry.head === "self");
+}
+function isStale(boundary, entry) {
+  return typeof entry.head === "number" && boundary.head !== void 0 && entry.head < boundary.head;
+}
+async function removeInboxItem(tx, conversationId, id) {
+  const items = (await tx.doc(InboxDoc, conversationId)).items;
+  const index3 = items.findIndex((item) => item.id === id);
+  if (index3 >= 0)
+    items.splice(index3, 1);
+}
+async function withdrawQueuedInputs(tx, conversationId) {
+  const items = (await tx.doc(InboxDoc, conversationId)).items;
+  for (let index3 = items.length - 1; index3 >= 0; index3--) {
+    const item = items[index3];
+    if (item.mode === "write")
+      continue;
+    tx.settleSubmission(item.id, { status: "unanswered", reason: "aborted" });
+    items.splice(index3, 1);
+  }
+}
+
+// node_modules/@earendil-works/pi-durable/dist/harness/json.js
+function assignJson(target, key, value) {
+  const slots = target;
+  const current = slots[key];
+  if (isRecord(current) && isRecord(value)) {
+    for (const name of Object.keys(current))
+      if (!Object.hasOwn(value, name))
+        delete current[name];
+    for (const [name, child] of Object.entries(value))
+      assignJson(current, name, child);
+    return;
+  }
+  if (Array.isArray(current) && Array.isArray(value) && current.length <= value.length) {
+    const items = current;
+    for (let index3 = 0; index3 < value.length; index3++) {
+      if (index3 < items.length)
+        assignJson(items, index3, value[index3]);
+      else
+        items.push(value[index3]);
+    }
+    return;
+  }
+  if (current !== value)
+    slots[key] = value;
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// node_modules/@earendil-works/pi-durable/dist/harness/prompt.js
+init_transcript();
+function replaySections(messages) {
+  const shown = /* @__PURE__ */ new Map();
+  for (const message of messages) {
+    if (message.role !== "system" || message.sections === void 0)
+      continue;
+    for (const [key, value] of Object.entries(message.sections)) {
+      if (value === null)
+        shown.delete(key);
+      else
+        shown.set(key, value);
+    }
+  }
+  return shown;
+}
+async function renderSections(sections, input, shown, report, context) {
+  const desired = /* @__PURE__ */ new Map();
+  for (const section2 of sections) {
+    let text;
+    try {
+      text = await section2.render(input, context);
+    } catch (error) {
+      if (context.abortSignal?.aborted)
+        throw error;
+      report(error);
+      const kept = shown.get(section2.key);
+      if (kept !== void 0)
+        desired.set(section2.key, kept);
+      continue;
+    }
+    if (text === void 0)
+      continue;
+    desired.set(section2.key, section2.tag === false ? text : `<${section2.key}>
+${text}
+</${section2.key}>`);
+  }
+  return desired;
+}
+function planSystemEntries(view, desired, tools, timestamp) {
+  const head = view.head;
+  if (head !== void 0 && !view.entries.some((entry) => SystemEntry.is(entry) && entry.id > head.id)) {
+    const edits = view.entries.filter((entry) => SystemEntry.is(entry)).map((entry) => ({ target: entry.id, action: "omit" }));
+    const baseline = systemEntry(Object.fromEntries(desired), { toolsRemoved: [], toolsAdded: tools.map(toToolDeclaration) }, timestamp);
+    return [edits.length === 0 ? baseline : { ...baseline, edits }];
+  }
+  const sections = planSections(replaySections(view.messages), desired);
+  const changes = planTools(getCurrentTools(view.messages), tools);
+  if (changes.toolsRemoved.length === 0 && changes.toolsAdded.length === 0) {
+    return sections.map((patch) => systemEntry(patch, void 0, timestamp));
+  }
+  if (sections.length === 0)
+    return [systemEntry(void 0, changes, timestamp)];
+  return sections.map((patch, index3) => systemEntry(patch, index3 === sections.length - 1 ? changes : void 0, timestamp));
+}
+function planTools(offered, desired) {
+  const wanted = new Map(desired.map((tool) => [tool.name, tool]));
+  const kept = offered.filter((tool) => {
+    const next = wanted.get(tool.name);
+    return next !== void 0 && declarationsEqual(tool, next);
+  });
+  const keptNames = new Set(kept.map((tool) => tool.name));
+  const added = desired.filter((tool) => !keptNames.has(tool.name));
+  const replayed = [...kept, ...added];
+  if (replayed.some((tool, index3) => tool.name !== desired[index3].name)) {
+    return {
+      toolsRemoved: offered.map((tool) => ({ name: tool.name })),
+      toolsAdded: desired.map(toToolDeclaration)
+    };
+  }
+  return {
+    toolsRemoved: offered.filter((tool) => !keptNames.has(tool.name)).map((tool) => ({ name: tool.name })),
+    toolsAdded: added.map(toToolDeclaration)
+  };
+}
+function planSections(shown, desired) {
+  const patchedOrder = [
+    ...[...shown.keys()].filter((key) => desired.has(key)),
+    ...[...desired.keys()].filter((key) => !shown.has(key))
+  ];
+  const desiredOrder = [...desired.keys()];
+  if (patchedOrder.some((key, index3) => key !== desiredOrder[index3])) {
+    return [Object.fromEntries([...shown.keys()].map((key) => [key, null])), Object.fromEntries(desired)];
+  }
+  const patch = {};
+  for (const [key, value] of shown) {
+    const next = desired.get(key);
+    if (next !== value)
+      patch[key] = next ?? null;
+  }
+  for (const [key, value] of desired)
+    if (!shown.has(key))
+      patch[key] = value;
+  return Object.keys(patch).length === 0 ? [] : [patch];
+}
+function systemEntry(sections, tools, timestamp) {
+  const message = {
+    role: "system",
+    content: "",
+    ...sections === void 0 ? {} : { sections },
+    ...tools === void 0 || tools.toolsRemoved.length === 0 ? {} : { toolsRemoved: tools.toolsRemoved },
+    ...tools === void 0 || tools.toolsAdded.length === 0 ? {} : { toolsAdded: tools.toolsAdded },
+    timestamp
+  };
+  return { model: [message] };
+}
+
+// node_modules/@earendil-works/pi-ai/dist/utils/uuid.js
+var MAX_UUID_V7_TIMESTAMP = 281474976710655;
+var MAX_SEQUENCE = (1n << 41n) - 1n;
+var lastOrdinaryTimestamp = -1;
+var sequence;
+function uuidv7(timestampMs) {
+  const requestedTimestamp = timestampMs ?? Date.now();
+  if (!Number.isInteger(requestedTimestamp) || requestedTimestamp < 0 || requestedTimestamp > MAX_UUID_V7_TIMESTAMP) {
+    throw new RangeError(`UUIDv7 timestamp must be an integer between 0 and ${MAX_UUID_V7_TIMESTAMP}`);
+  }
+  const effectiveTimestamp = timestampMs === void 0 ? Math.max(requestedTimestamp, lastOrdinaryTimestamp) : timestampMs;
+  if (timestampMs === void 0)
+    lastOrdinaryTimestamp = effectiveTimestamp;
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  if (sequence === void 0) {
+    sequence = BigInt(bytes[1]) << 32n | BigInt(bytes[2]) << 24n | BigInt(bytes[3]) << 16n | BigInt(bytes[4]) << 8n | BigInt(bytes[5]);
+  } else {
+    if (sequence === MAX_SEQUENCE)
+      throw new RangeError("UUIDv7 generator sequence exhausted");
+    sequence++;
+  }
+  const timestamp = BigInt(effectiveTimestamp);
+  for (let index3 = 5; index3 >= 0; index3--) {
+    bytes[index3] = Number(timestamp >> BigInt((5 - index3) * 8)) & 255;
+  }
+  bytes[6] = 112 | Number(sequence >> 37n & 0x0fn);
+  bytes[7] = Number(sequence >> 29n & 0xffn);
+  bytes[8] = 128 | Number(sequence >> 23n & 0x3fn);
+  bytes[9] = Number(sequence >> 15n & 0xffn);
+  bytes[10] = Number(sequence >> 7n & 0xffn);
+  bytes[11] = Number((sequence & 0x7fn) << 1n) | bytes[11] & 1;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
+}
+
+// node_modules/@earendil-works/pi-durable/dist/harness/provider.js
+var ProviderDoc = defineDoc({
+  kind: "pi.provider",
+  version: 1,
+  scope: "conversation",
+  history: "latest",
+  fork: "initial",
+  initial: () => ({ sessionId: uuidv7() }),
+  checkpointWhen: () => true
+});
+async function ensureProviderSessionId(runtime, context) {
+  const existing = await runtime.snapshot(ProviderDoc, runtime.conversationId, context);
+  if (existing !== void 0)
+    return existing.sessionId;
+  let created;
+  await runtime.commit(async (tx) => {
+    created = (await tx.doc(ProviderDoc, runtime.conversationId)).sessionId;
+    return void 0;
+  }, context);
+  if (created === void 0)
+    throw new Error(`Conversation ${runtime.conversationId} has no provider session ID`);
+  return created;
+}
+
 // node_modules/typebox/build/compile/validator.mjs
 var Validator = class {
   /** Constructs a Validator. */
@@ -38172,12 +40247,12 @@ function validateToolArguments(tool, toolCall) {
     return args;
   }
   const errors = validator.Errors(args).map((error) => `  - ${formatValidationPath(error)}: ${error.message}`).join("\n") || "Unknown validation error";
-  const errorMessage = `Validation failed for tool "${toolCall.name}":
+  const errorMessage2 = `Validation failed for tool "${toolCall.name}":
 ${errors}
 
 Received arguments:
 ${JSON.stringify(toolCall.arguments, null, 2)}`;
-  throw new Error(errorMessage);
+  throw new Error(errorMessage2);
 }
 
 // node_modules/@earendil-works/pi-durable/dist/truncate.js
@@ -38632,22 +40707,35 @@ function addUsageState(sum, state3) {
 }
 
 // node_modules/@earendil-works/pi-durable/dist/harness/tool.js
+var MADE_NESTED_CALLS = "pi.tool.madeNestedCalls";
+var NestedCallDoc = defineDocFamily({
+  kind: "pi.tool.nested-call",
+  version: 1,
+  scope: "task",
+  family: true,
+  initial: () => ({})
+});
 var ToolTask = defineTask({
   name: "pi.tool",
-  version: 1,
+  version: 2,
   initial: () => ({ phase: "call" }),
+  // Version 1 had only model-issued calls.
+  migrate: (input, checkpoint) => ({
+    input: { kind: "model", ...input },
+    checkpoint
+  }),
   phases: {
     call: async (task, runtime, context) => {
       const call = await readCall(runtime, task.input, context);
-      const tool = (await runtime.agent(context)).tools.find((each) => each.name === call.name);
+      const tool = await resolveTool(runtime, task.input, call.name, context);
       if (tool === void 0) {
         const error = harnessError("tool_unavailable", `Tool ${call.name} is not available`);
-        return settle(runtime, call, COMPLETED, () => error, context);
+        return settle2(runtime, task.input, call, COMPLETED, () => error, context);
       }
       const prepared = prepare(tool, call.arguments);
       const checked = "error" in prepared ? prepared : validate(tool, call, prepared.args);
       if ("error" in checked)
-        return settle(runtime, call, COMPLETED, () => invalid(checked.error), context);
+        return settle2(runtime, task.input, call, COMPLETED, () => invalid(checked.error), context);
       let args = checked.args;
       let block;
       await runtime.hooks.each("beforeTool", async (hook2) => {
@@ -38662,31 +40750,34 @@ var ToolTask = defineTask({
         } catch (error) {
           if (runtime.signal.aborted)
             throw error;
-          block = errorText(error);
+          block = errorMessage(error);
         }
       });
       if (block !== void 0) {
         const blocked = harnessError("blocked", `Tool call blocked: ${block}`);
-        return settle(runtime, call, COMPLETED, () => blocked, context);
+        return settle2(runtime, task.input, call, COMPLETED, () => blocked, context);
       }
       const validated = validate(tool, call, args);
       if ("error" in validated)
-        return settle(runtime, call, COMPLETED, () => invalid(validated.error), context);
-      const final = validated.args;
+        return settle2(runtime, task.input, call, COMPLETED, () => invalid(validated.error), context);
+      const final = copyJson(validated.args, { omitUndefinedProperties: true });
       await runtime.commit(async (tx) => {
         const slot = toolSlot(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
         if (slot !== void 0)
           slot.status = "running";
+        const changed = task.input.kind === "nested" && !jsonEqual(task.input.call.arguments, final);
+        if (changed && slot !== void 0 && "parentTaskId" in slot)
+          slot.arguments = final;
         const intent = { phase: "execute", arguments: final, replay: tool.replay ?? "unsafe" };
         return { status: "running", checkpoint: intent };
       }, context);
-      await run(runtime, call, tool, final, context);
+      await run(runtime, task.input, call, tool, final, context);
     },
     /** Recovery after intent: rerun only when the stored and the current policy both say `safe`. */
     execute: async (task, runtime, context) => {
       const { arguments: args, replay } = task.state.checkpoint;
       const call = await readCall(runtime, task.input, context);
-      const tool = (await runtime.agent(context)).tools.find((each) => each.name === call.name);
+      const tool = await resolveTool(runtime, task.input, call.name, context);
       if (replay === "safe" && tool?.replay === "safe") {
         await runtime.commit(async (tx) => {
           const slot = toolSlot(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
@@ -38694,20 +40785,27 @@ var ToolTask = defineTask({
             clearProgress(slot);
           return void 0;
         }, context);
-        return run(runtime, call, tool, args, context);
+        return run(runtime, task.input, call, tool, args, context);
       }
       const message = `Tool ${call.name} was interrupted and may have partially run`;
       const ending = { status: "failed", message };
-      await settle(runtime, call, ending, (slot) => fromSlot(slot, "interrupted", message), context);
+      await settle2(runtime, task.input, call, ending, (slot) => fromSlot(slot, "interrupted", message), context);
     }
   },
   abort: async (task, runtime, context) => {
     const call = await readCall(runtime, task.input, context);
-    const message = `Tool ${call.name} was aborted`;
-    await settle(runtime, call, { status: "aborted" }, (slot) => fromSlot(slot, "aborted", message), context);
+    const [code, message] = task.abortReason !== "restart" ? ["aborted", `Tool ${call.name} was aborted`] : task.state.checkpoint.phase === "execute" ? ["interrupted", `Tool ${call.name} was interrupted by a restart and may have partially run`] : ["abandoned", `Tool ${call.name} was not started: its caller ended with a restart`];
+    const ending = { status: "aborted" };
+    await settle2(runtime, task.input, call, ending, (slot) => fromSlot(slot, code, message), context);
   }
 });
+async function resolveTool(runtime, input, name, context) {
+  const agent = await runtime.agent(context);
+  return (input.kind === "model" ? agent.tools : agent.callable).find((tool) => tool.name === name);
+}
 async function readCall(runtime, input, context) {
+  if (input.kind === "nested")
+    return { ...input.call, parent: { taskId: input.parent, callId: input.parentCallId } };
   const entry = await runtime.entry(AssistantEntry, input.assistant, context);
   const message = entry?.model?.[0];
   const call = message?.role === "assistant" ? message.content.find((content) => content.type === "toolCall" && content.id === input.callId) : void 0;
@@ -38721,27 +40819,32 @@ function prepare(tool, args) {
   try {
     return { args: tool.prepareArguments(args) };
   } catch (error) {
-    return { error: errorText(error) };
+    return { error: errorMessage(error) };
   }
 }
 function validate(tool, call, args) {
   try {
     return { args: validateToolArguments(tool, { ...call, arguments: args }) };
   } catch (error) {
-    return { error: errorText(error) };
+    return { error: errorMessage(error) };
   }
 }
 function invalid(message) {
   return harnessError("invalid_arguments", message);
 }
-async function run(runtime, call, tool, args, context) {
+async function run(runtime, input, call, tool, args, context) {
   const limits = {
     maxBytes: tool.outputLimits?.maxBytes ?? DEFAULT_MAX_BYTES,
     maxLines: tool.outputLimits?.maxLines ?? DEFAULT_MAX_LINES,
     retain: tool.outputLimits?.retain ?? "head"
   };
   const reported = { output: new OutputBuffer(limits), limits, diagnostics: [], details: void 0 };
-  const progress = publishProgress(runtime, reported, context);
+  const streams = input.kind === "model" || input.progress !== false;
+  const progress = publishProgress(runtime, reported, streams, context);
+  const admissions = [];
+  const resumes = tool.replay === "safe";
+  let sequence2 = 0;
+  let madeNestedMemo;
   let ended = false;
   const assertLive = () => {
     if (ended)
@@ -38753,6 +40856,7 @@ async function run(runtime, call, tool, args, context) {
     callId: call.id,
     registry: runtime.registry,
     agent: runtime.agent,
+    models: runtime.models,
     output: (chunk, skipped) => {
       assertLive();
       if (reported.output.push(chunk, skipped))
@@ -38764,6 +40868,11 @@ async function run(runtime, call, tool, args, context) {
       minIntervalMs: runtime.settings.progress.outputIntervalMs,
       bytesPerSecond: PROGRESS_BYTES_PER_SECOND
     } : void 0,
+    retainedOutput: () => {
+      assertLive();
+      const retained = reported.output.snapshot();
+      return { text: retained.text, truncated: retained.droppedBytes > 0 };
+    },
     diagnostic: (diagnostic) => {
       assertLive();
       reported.diagnostics.push(copyJson(diagnostic, { omitUndefinedProperties: true }));
@@ -38787,10 +40896,11 @@ async function run(runtime, call, tool, args, context) {
       return result2;
     },
     memo: runtime.memo,
-    createTask: async (task, input, options, taskContext) => {
+    createTask: async (task, input2, options, taskContext) => {
+      const child = options.ownership.kind === "task" && !resumes ? { abandonOnRestart: true, ...options } : options;
       let id;
       await runtime.commit(async (tx) => {
-        id = await tx.createTask(task, input, options);
+        id = await tx.createTask(task, input2, child);
         return void 0;
       }, taskContext);
       return id;
@@ -38800,13 +40910,35 @@ async function run(runtime, call, tool, args, context) {
     conversation: runtime.conversation,
     snapshot: runtime.snapshot,
     snapshotAsOf: runtime.snapshotAsOf,
-    watchDoc: runtime.watchDoc
+    watchDoc: runtime.watchDoc,
+    executeTool: async (name, toolArgs, callContext, options = {}) => {
+      assertLive();
+      const key = options.key ?? String(++sequence2);
+      if (options.key !== void 0)
+        checkKey(options.key);
+      madeNestedMemo ??= runtime.memo(MADE_NESTED_CALLS, true, callContext).catch((error) => {
+        madeNestedMemo = void 0;
+        throw error;
+      });
+      const admission = madeNestedMemo.then(() => startNestedCall(runtime, call.id, name, toolArgs, { key, progress: options.progress, abandonOnRestart: !resumes }, callContext));
+      admissions.push(admission);
+      const id = await admission;
+      const settled = await runtime.waitForTask(id, callContext);
+      const stored = (await runtime.snapshot(NestedCallDoc, runtime.taskId, key, callContext))?.result;
+      return stored === void 0 ? fallbackResult(id, name, settled.state.outcome) : copyJson(stored);
+    }
   };
   let result;
   let ending = COMPLETED;
+  let durationMs;
   try {
     const env = await runtime.env(context);
-    result = await tool.execute(args, { ...api, env }, context);
+    const startedAt = performance.now();
+    try {
+      result = await tool.execute(args, { ...api, env }, context);
+    } finally {
+      durationMs = Math.round(performance.now() - startedAt);
+    }
   } catch (error) {
     if (runtime.signal.aborted) {
       ended = true;
@@ -38814,15 +40946,16 @@ async function run(runtime, call, tool, args, context) {
         waiter.reject(error);
       throw error;
     }
-    result = { isError: true, diagnostics: [toolDiagnostic("tool_error", errorText(error))] };
+    result = { isError: true, diagnostics: [toolDiagnostic("tool_error", errorMessage(error))] };
     ending = { status: "failed", message: `Tool ${call.name} threw` };
   }
   ended = true;
+  await Promise.allSettled(admissions);
   reported.output.end();
   const pending = await progress.stop();
   try {
-    const settled = await finalResult(runtime, call, result, reported, context);
-    await settle(runtime, call, ending, () => settled, context);
+    const settled = await finalResult(runtime, input, call, tool, result, reported, context);
+    await settle2(runtime, input, call, ending, () => settled, context, durationMs);
   } catch (error) {
     for (const waiter of pending)
       waiter.reject(error);
@@ -38831,9 +40964,11 @@ async function run(runtime, call, tool, args, context) {
   for (const waiter of pending)
     waiter.resolve();
 }
-function publishProgress(runtime, reported, context) {
+function publishProgress(runtime, reported, enabled, context) {
   let written = { text: "", details: void 0, diagnostics: 0 };
   return new Progress(async () => {
+    if (!enabled)
+      return 0;
     const snapshot = reported.output.snapshot();
     const current = { text: snapshot.text, details: reported.details, diagnostics: reported.diagnostics.length };
     const added = reported.diagnostics.slice(written.diagnostics, current.diagnostics);
@@ -38875,44 +41010,187 @@ function publishProgress(runtime, reported, context) {
       runtime.report(error);
   }, runtime.settings.progress.outputIntervalMs);
 }
-async function finalResult(runtime, call, result, reported, context) {
+async function finalResult(runtime, input, call, tool, result, reported, context) {
   const harness = [];
-  const retained = result.content === void 0 ? reported.output.snapshot() : void 0;
-  const content = retained === void 0 ? result.content : retained.text === "" ? [] : [{ type: "text", text: retained.text }];
+  const retained = result.output === void 0 ? reported.output.snapshot() : void 0;
+  const output = retained === void 0 ? result.output : retained.text === "" ? [] : [{ type: "text", text: retained.text }];
   let final = {
     ...result,
-    content,
+    output,
     details: result.details === void 0 ? reported.details : result.details,
     diagnostics: [...reported.diagnostics, ...result.diagnostics ?? []]
   };
   await runtime.hooks.each("afterTool", async (hook2) => {
     final = await hook2(call, final, runtime, context) ?? final;
   });
-  if (retained !== void 0 && retained.droppedBytes > 0 && final.content === content) {
+  if (retained !== void 0 && retained.droppedBytes > 0 && final.output === output) {
     harness.push(truncated(retained, reported.limits.retain));
   }
-  const bounded = boundContent(final.content ?? [], reported.limits);
+  const bounded = boundContent(final.output ?? [], reported.limits);
   if (bounded.droppedBytes > 0)
     harness.push(truncated(bounded, reported.limits.retain));
-  return { ...final, content: bounded.content, diagnostics: [...final.diagnostics ?? [], ...harness] };
+  const broken = structuredOutputError(tool, final);
+  if (broken !== void 0) {
+    const { structuredOutput: _dropped, ...rest } = final;
+    if (input.kind === "nested") {
+      final = { ...rest, isError: true };
+      harness.push(toolDiagnostic("invalid_structured_output", broken));
+    } else {
+      final = rest;
+      runtime.report(new Error(broken));
+    }
+  }
+  if (input.kind === "nested" && tool.structuredOutputSchema === void 0) {
+    final = { ...final, structuredOutput: outputValue(bounded.content) };
+  }
+  if (input.kind === "nested" && tool.structuredOutputSchema !== void 0 && final.isError === true && final.structuredOutput === void 0 && ![...final.diagnostics ?? [], ...harness].some((diagnostic) => diagnostic.severity === "error")) {
+    const text = bounded.content.flatMap((item) => item.type === "text" ? [item.text] : []).join("\n");
+    if (text !== "")
+      harness.push(toolDiagnostic("tool_error", text));
+  }
+  return { ...final, output: bounded.content, diagnostics: [...final.diagnostics ?? [], ...harness] };
 }
-async function settle(runtime, call, ending, build, context) {
+var structuredValidators = /* @__PURE__ */ new WeakMap();
+function structuredOutputError(tool, result) {
+  const schema = tool.structuredOutputSchema;
+  const value = result.structuredOutput;
+  if (schema === void 0) {
+    return value === void 0 ? void 0 : `Tool ${tool.name} returned structuredOutput but declares no structuredOutputSchema`;
+  }
+  if (value === void 0) {
+    return result.isError === true ? void 0 : `Tool ${tool.name} returned no structuredOutput`;
+  }
+  let validator = structuredValidators.get(schema);
+  if (validator === void 0) {
+    validator = Compile(schema);
+    structuredValidators.set(schema, validator);
+  }
+  if (validator.Check(value))
+    return void 0;
+  const [first] = validator.Errors(value);
+  const path5 = first?.instancePath.replace(/^\//, "").replace(/\//g, ".") || "root";
+  return `Tool ${tool.name} returned structuredOutput that does not match its schema: ${path5}: ${first?.message ?? "invalid"}`;
+}
+async function settle2(runtime, input, call, ending, build, context, durationMs) {
+  const nestedIds = (await runtime.ownedTasks(context)).filter((record) => record.kind === ToolTask.definition.name && record.input.kind === "nested").map((record) => record.id);
+  const madeNested = await runtime.memo(MADE_NESTED_CALLS, context) === true;
+  await Promise.all(nestedIds.map((id) => runtime.abortOwned(id, context)));
   await runtime.commit(async (tx) => {
-    const slot = toolSlot(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
+    const conversationId = runtime.conversationId;
+    const live = await tx.doc(LiveDoc, conversationId);
+    const slot = toolSlot(live, runtime.taskId);
     const result = build(slot);
-    const entry = await appendToolResult(tx, runtime.conversationId, call, result, runtime.now());
-    if (slot !== void 0)
-      finishSlot(slot, entry.id);
-    const entryId = entry.id;
+    let settled;
+    if (input.kind === "nested") {
+      const nested = nestedResult(runtime.taskId, result, durationMs);
+      if (nested.usage !== void 0)
+        await recordUsage(tx, conversationId, "tools", call.name, nested.usage);
+      const state3 = await tx.doc(NestedCallDoc, input.parent, input.key, null);
+      if (state3.taskId !== runtime.taskId)
+        throw new Error(`Nested call ${call.id} is not in its caller's index`);
+      state3.result = nested;
+      if (slot !== void 0 && "parentTaskId" in slot) {
+        finishSlot(slot);
+        slot.summary = summaryOf(nested, result.output ?? []);
+      }
+      settled = { kind: "nested" };
+    } else {
+      const timing = { timestamp: runtime.now(), durationMs };
+      const entry = await appendToolResult(tx, conversationId, call, result, timing);
+      if (slot !== void 0 && !("parentTaskId" in slot)) {
+        finishSlot(slot);
+        slot.entry = entry.id;
+      }
+      const control = result.control === void 0 || ending.status !== "completed" ? {} : { control: copyJson(result.control, { omitUndefinedProperties: true }) };
+      settled = { kind: "model", entryId: entry.id, ...control };
+    }
+    if (madeNested)
+      removeNestedSlots(live, runtime.taskId);
     if (ending.status === "aborted")
-      return { status: "terminal", outcome: { status: "aborted", result: { entryId } } };
+      return { status: "terminal", outcome: { status: "aborted", result: settled } };
     if (ending.status === "failed") {
       const error = { message: ending.message };
-      return { status: "terminal", outcome: { status: "failed", error, result: { entryId } } };
+      return { status: "terminal", outcome: { status: "failed", error, result: settled } };
     }
-    const control = result.control === void 0 ? {} : { control: copyJson(result.control, { omitUndefinedProperties: true }) };
-    return { status: "terminal", outcome: { status: "completed", result: { entryId, ...control } } };
+    return { status: "terminal", outcome: { status: "completed", result: settled } };
   }, context);
+}
+function nestedResult(taskId, result, durationMs) {
+  const nested = {
+    taskId,
+    structuredOutput: result.structuredOutput,
+    isError: result.isError ?? false,
+    details: result.details,
+    diagnostics: result.diagnostics ?? [],
+    usage: result.usage,
+    durationMs
+  };
+  return copyJson(nested, {
+    omitUndefinedProperties: true
+  });
+}
+async function startNestedCall(runtime, parentCallId, name, args, options, context) {
+  const key = options.key;
+  const call = {
+    type: "toolCall",
+    id: `${parentCallId}/${key}`,
+    name,
+    arguments: copyJson(args, { omitUndefinedProperties: true })
+  };
+  let id;
+  await runtime.commit(async (tx) => {
+    const state3 = await tx.doc(NestedCallDoc, runtime.taskId, key, null);
+    const existing = state3.taskId;
+    if (existing !== void 0) {
+      const input2 = (await tx.task(existing))?.input;
+      const same = input2?.kind === "nested" && input2.call.name === name && jsonEqual(input2.call.arguments, call.arguments);
+      if (!same)
+        throw new Error(`Nested call ${call.id} was already made with another tool or other arguments`);
+      id = existing;
+      return void 0;
+    }
+    const input = {
+      kind: "nested",
+      parent: runtime.taskId,
+      parentCallId,
+      key,
+      call,
+      ...options.progress === false ? { progress: false } : {}
+    };
+    const created = await tx.createTask(ToolTask, input, {
+      ownership: { kind: "task", taskId: runtime.taskId },
+      abandonOnRestart: options.abandonOnRestart
+    });
+    state3.taskId = created;
+    const live = await tx.doc(LiveDoc, runtime.conversationId);
+    live.nestedTools ??= [];
+    const slot = {
+      callId: call.id,
+      parentCallId,
+      parentTaskId: runtime.taskId,
+      name,
+      taskId: created,
+      arguments: call.arguments,
+      status: "pending"
+    };
+    live.nestedTools.push(slot);
+    id = created;
+    return void 0;
+  }, context);
+  return id;
+}
+function outputValue(output) {
+  if (output.length === 0)
+    return "";
+  if (output.length > 1)
+    return output;
+  const [only] = output;
+  return only.type === "text" ? only.text : only;
+}
+function fallbackResult(taskId, name, outcome) {
+  const message = outcome.status === "faulted" ? `Tool ${name} failed: ${outcome.error.message}` : outcome.status === "orphaned" ? `Tool ${name} could not resume: ${outcome.reason}` : `Tool ${name} ended without a result`;
+  const error = harnessError(outcome.status, message);
+  return { taskId, isError: true, diagnostics: error.diagnostics ?? [] };
 }
 var COMPLETED = { status: "completed" };
 function fromSlot(slot, code, message) {
@@ -38922,14 +41200,14 @@ function fromSlot(slot, code, message) {
     diagnostics.push(truncated({ droppedBytes, droppedLines: slot?.droppedLines ?? 0 }));
   diagnostics.push(toolDiagnostic(code, message));
   return {
-    content: slot?.output === void 0 || slot.output === "" ? [] : [{ type: "text", text: slot.output }],
+    output: slot?.output === void 0 || slot.output === "" ? [] : [{ type: "text", text: slot.output }],
     isError: true,
     ...slot?.details === void 0 ? {} : { details: slot.details },
     diagnostics
   };
 }
 function harnessError(code, message) {
-  return { content: [], isError: true, diagnostics: [toolDiagnostic(code, message)] };
+  return { output: [], isError: true, diagnostics: [toolDiagnostic(code, message)] };
 }
 function toolDiagnostic(code, message) {
   return { severity: "error", code, message };
@@ -38942,9 +41220,26 @@ function truncated(dropped, retain) {
     message: `Output truncated${kept}: ${dropped.droppedLines} lines, ${dropped.droppedBytes} bytes dropped`
   };
 }
-async function appendToolResult(tx, conversationId, call, result, timestamp) {
+var MAX_SUMMARY_ERROR_CHARS = 500;
+function summaryOf(result, output) {
+  const error = result.isError ? errorTextOf(result, output).slice(0, MAX_SUMMARY_ERROR_CHARS) : "";
+  return {
+    isError: result.isError,
+    ...result.durationMs === void 0 ? {} : { durationMs: result.durationMs },
+    ...result.usage === void 0 ? {} : { usage: result.usage },
+    ...error === "" ? {} : { error }
+  };
+}
+function errorTextOf(result, output) {
+  const errors = result.diagnostics.filter((diagnostic) => diagnostic.severity === "error");
+  if (errors.length > 0)
+    return errors.map((diagnostic) => diagnostic.message).join("\n");
+  return output.flatMap((item) => item.type === "text" ? [item.text] : []).join("\n");
+}
+async function appendToolResult(tx, conversationId, call, result, meta) {
+  const { timestamp, durationMs } = meta;
   const diagnostics = [...result.diagnostics ?? []];
-  const content = [...result.content ?? []];
+  const content = [...result.output ?? []];
   if (diagnostics.length > 0)
     content.push({ type: "text", text: renderDiagnostics(diagnostics) });
   const message = {
@@ -38955,6 +41250,7 @@ async function appendToolResult(tx, conversationId, call, result, timestamp) {
     ...result.details === void 0 ? {} : { details: result.details },
     ...result.usage === void 0 ? {} : { usage: result.usage },
     isError: result.isError ?? false,
+    ...durationMs === void 0 ? {} : { durationMs },
     timestamp
   };
   if (result.usage !== void 0)
@@ -38981,8 +41277,21 @@ function boundContent(content, limits) {
   }
   return { content: result, droppedBytes: bounded.droppedBytes, droppedLines: bounded.droppedLines };
 }
-function errorText(error) {
-  return error instanceof Error ? error.message : String(error);
+function checkKey(key) {
+  if (key === "" || key.includes("/") || key === "__proto__" || /^[1-9][0-9]*$/.test(key)) {
+    throw new Error(`Nested call key ${JSON.stringify(key)} must be non-empty, without "/", not "__proto__", and not a positive integer`);
+  }
+}
+function jsonEqual(a, b) {
+  if (a === b)
+    return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null)
+    return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, i) => jsonEqual(item, b[i]));
+  }
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => Object.hasOwn(b, key) && jsonEqual(a[key], b[key]));
 }
 
 // node_modules/@earendil-works/pi-durable/dist/harness/generation.js
@@ -38994,8 +41303,9 @@ var GenerationTask = defineTask({
   phases: {
     /**
      * Render the system prompt and tool loadout and append the positional `pi.system` entries they need, then move to
-     * `request`. The agent and settings resolved here are fixed for this request. Only the Harness writes to a busy
-     * conversation, so the transcript read here is still the tail at the commit.
+     * `request`. The agent and settings resolved here are fixed for this request. Only the Harness writes model
+     * context to a busy conversation, so the context read here is still current at the commit; display-only entries
+     * may land meanwhile.
      */
     prepare: async (task, runtime, context) => {
       const { conversationId } = runtime;
@@ -39005,11 +41315,17 @@ var GenerationTask = defineTask({
       const resolved = model === void 0 ? void 0 : runtime.models.getModel(model.provider, model.modelId);
       if (model === void 0 || resolved === void 0)
         return failNoModel(runtime, model, context);
-      const { attempt, compacted, overflow } = task.state.checkpoint;
+      const { attempt, compacted, overflow, threshold: blocked } = task.state.checkpoint;
       if (compacted !== void 0 && overflow !== void 0) {
         const [outcome] = await runtime.outcomes([compacted], context);
         if (outcome?.status !== "completed" || outcome.result.entryId === void 0) {
           return failModelError(runtime, overflow, context);
+        }
+      }
+      if (compacted !== void 0 && blocked === true) {
+        const [outcome] = await runtime.outcomes([compacted], context);
+        if (outcome !== void 0 && outcome.status !== "completed") {
+          return failModelError(runtime, compactionFailure(outcome), context);
         }
       }
       const view = await runtime.context(conversationId, context);
@@ -39030,7 +41346,7 @@ var GenerationTask = defineTask({
       if (threshold === "blocking") {
         await runtime.commit(async (tx) => {
           const child = await createCompaction(tx, conversationId, { reason: "threshold" }, runtime.taskId);
-          const checkpoint = { phase: "prepare", attempt, compacted: child };
+          const checkpoint = { phase: "prepare", attempt, compacted: child, threshold: true };
           return { status: "waiting", checkpoint, on: [child], policy: "allSettled" };
         }, context);
         return;
@@ -39067,7 +41383,7 @@ var GenerationTask = defineTask({
       const model = runtime.models.getModel(ref.provider, ref.modelId);
       if (model === void 0)
         return failNoModel(runtime, ref, context);
-      const view = await runtime.context(conversationId, context, cutoff);
+      const view = await runtime.context(conversationId, context, { at: cutoff });
       let messages = view.messages;
       await runtime.hooks.each("beforeRequest", async (hook2) => {
         const replaced = await hook2({ messages }, runtime, context);
@@ -39147,7 +41463,7 @@ var GenerationTask = defineTask({
       await convertPartial(tx, live, conversationId);
       for (const call of unstarted) {
         const result = harnessError("aborted", `Tool ${call.name} was aborted`);
-        await appendToolResult(tx, conversationId, call, result, runtime.now());
+        await appendToolResult(tx, conversationId, call, result, { timestamp: runtime.now() });
       }
       endRun(tx, live, runtime.taskId, { status: "unanswered", reason: "aborted" });
       return { status: "terminal", outcome: { status: "aborted" } };
@@ -39160,7 +41476,7 @@ async function readCalls(runtime, assistant, callIds, context) {
   return callIds.flatMap((id) => calls.filter((call) => call.id === id).slice(0, 1));
 }
 function createToolTask(tx, runtime, assistant, callId) {
-  return tx.createTask(ToolTask, { assistant, callId }, { ownership: { kind: "task", taskId: runtime.taskId } });
+  return tx.createTask(ToolTask, { kind: "model", assistant, callId }, { ownership: { kind: "task", taskId: runtime.taskId } });
 }
 function thresholdCompaction(view, planned, contextWindow, policy) {
   if (!policy.enabled || contextWindow <= 0)
@@ -39172,6 +41488,17 @@ function thresholdCompaction(view, planned, contextWindow, policy) {
   if (over === void 0 || selectCut(view, policy.keepRecentTokens) === void 0)
     return void 0;
   return over;
+}
+function compactionFailure(outcome) {
+  switch (outcome.status) {
+    case "failed":
+    case "faulted":
+      return `Compaction failed: ${outcome.error.message}`;
+    case "orphaned":
+      return `Compaction failed: ${outcome.reason}`;
+    case "aborted":
+      return "Compaction was aborted";
+  }
 }
 async function failModelError(runtime, text, context) {
   await runtime.commit(async (tx) => {
@@ -39277,7 +41604,7 @@ async function classify(runtime, request, message, context) {
   const overflow = message.stopReason === "error" && isContextOverflow(message);
   if (overflow && compacted === void 0 && settings2.compaction.enabled) {
     const policy2 = settings2.compaction;
-    const view = await runtime.context(conversationId, context, cutoff);
+    const view = await runtime.context(conversationId, context, { at: cutoff });
     if (selectCut(view, policy2.keepRecentTokens) !== void 0) {
       const text = message.errorMessage ?? "Context overflow";
       await runtime.commit(async (tx) => {
@@ -39344,7 +41671,7 @@ async function answer(runtime, message, context) {
 }
 async function startToolRound(runtime, request, message, calls, context) {
   const conversationId = runtime.conversationId;
-  const messages = request.messages ?? (await runtime.context(conversationId, context, request.cutoff)).messages;
+  const messages = request.messages ?? (await runtime.context(conversationId, context, { at: request.cutoff })).messages;
   const offered = new Set(getCurrentTools(messages).map((tool) => tool.name));
   const tools = (await runtime.agent(context)).tools;
   const sequential = runtime.settings.toolExecution === "sequential" || calls.some((call) => offered.has(call.name) && tools.find((tool) => tool.name === call.name)?.executionMode === "sequential");
@@ -39357,7 +41684,7 @@ async function startToolRound(runtime, request, message, calls, context) {
     for (const call of calls) {
       if (!offered.has(call.name)) {
         const unavailable = harnessError("tool_unavailable", `Tool ${call.name} is not available`);
-        const result = await appendToolResult(tx, conversationId, call, unavailable, runtime.now());
+        const result = await appendToolResult(tx, conversationId, call, unavailable, { timestamp: runtime.now() });
         slots.push({ callId: call.id, name: call.name, status: "done", entry: result.id });
         continue;
       }
@@ -39382,7 +41709,7 @@ async function finishToolRound(runtime, assistant, tools, context) {
   const outcomes = await runtime.outcomes(tools, context);
   tools.forEach((id, index3) => {
     const outcome = outcomes[index3];
-    controls.set(id, outcome.status === "completed" ? outcome.result.control : void 0);
+    controls.set(id, outcome.status === "completed" && outcome.result.kind !== "nested" ? outcome.result.control : void 0);
   });
   const slots = (await runtime.snapshot(LiveDoc, conversationId, context))?.tools ?? [];
   const results = slots.flatMap((slot) => slot.entry === void 0 ? [] : [slot.entry]);
@@ -39414,6 +41741,7 @@ async function finishToolRound(runtime, assistant, tools, context) {
           await startRun(tx, conversationId, live, users);
       } else {
         delete live.tools;
+        delete live.nestedTools;
         if (live.run?.taskId === runtime.taskId)
           live.run.inputs.push(...users);
         handOver(live, runtime.taskId, await createGeneration(tx, conversationId));
@@ -39448,8 +41776,9 @@ var LiveDoc = defineDoc({
   // REMINDER: a complete base whenever nothing runs (spec §8.2): no generation and no running tool slot. That holds
   // while idle, in the commit handing a generation over to its tool round, and between tools, so the delta chain
   // spans at most one generation or the overlapping execution of one round's tools. A slot holds output only while
-  // running, so every base is small. Do not add a delta-count bound; the tool output benchmark checks this rule.
-  checkpointWhen: (value) => value.generation === void 0 && !(value.tools ?? []).some((slot) => slot.status === "running")
+  // running, so every base is small; a nested call's result lives in its caller's task documents, never here. Do not
+  // add a delta-count bound; the tool output benchmark checks this rule.
+  checkpointWhen: (value) => value.generation === void 0 && !(value.tools ?? []).some((slot) => slot.status === "running") && !(value.nestedTools ?? []).some((slot) => slot.status === "running")
 });
 var RUN_TASK_KINDS = /* @__PURE__ */ new Set(["pi.generation"]);
 var TOOL_TASK_KIND = "pi.tool";
@@ -39462,6 +41791,7 @@ function endRun(tx, live, taskId, settlement) {
   }
   delete live.generation;
   delete live.tools;
+  delete live.nestedTools;
 }
 function addCompactionStatus(live, status) {
   live.compactions ??= [];
@@ -39480,14 +41810,49 @@ function removeCompactionStatus(live, taskId) {
   if (statuses.length === 0)
     delete live.compactions;
 }
-function toolSlot(live, taskId) {
-  return live.tools?.find((slot) => slot.taskId === taskId);
+function failCompactionStatus(live, taskId, error) {
+  const status = compactionStatus(live, taskId);
+  if (status !== void 0)
+    live.compactionFailure = { taskId: status.taskId, reason: status.reason, error };
+  removeCompactionStatus(live, taskId);
 }
-function finishSlot(slot, entry) {
+function toolSlot(live, taskId) {
+  const slot = live.tools?.find((each) => each.taskId === taskId);
+  if (slot !== void 0 || live.nestedTools === void 0)
+    return slot;
+  const nested = live.nestedTools;
+  let low = 0;
+  let high = nested.length - 1;
+  while (low <= high) {
+    const middle = low + high >>> 1;
+    const candidate = nested[middle];
+    if (candidate.taskId === taskId)
+      return candidate;
+    if (candidate.taskId < taskId)
+      low = middle + 1;
+    else
+      high = middle - 1;
+  }
+  return void 0;
+}
+function finishSlot(slot) {
   slot.status = "done";
-  if (entry !== void 0)
-    slot.entry = entry;
   clearProgress(slot);
+}
+function removeNestedSlots(live, taskId) {
+  const nested = live.nestedTools;
+  if (nested === void 0)
+    return;
+  const removed = /* @__PURE__ */ new Set([taskId]);
+  for (const slot of nested)
+    if (removed.has(slot.parentTaskId))
+      removed.add(slot.taskId);
+  for (let index3 = nested.length - 1; index3 >= 0; index3--) {
+    if (removed.has(nested[index3].parentTaskId))
+      nested.splice(index3, 1);
+  }
+  if (nested.length === 0)
+    delete live.nestedTools;
 }
 function clearProgress(slot) {
   delete slot.output;
@@ -39498,13 +41863,16 @@ function clearProgress(slot) {
 }
 async function settleSchedulerOutcome(tx, record, outcome) {
   if (record.kind === TOOL_TASK_KIND) {
-    const slot = toolSlot(await tx.doc(LiveDoc, record.conversationId), record.id);
+    const live2 = await tx.doc(LiveDoc, record.conversationId);
+    const slot = toolSlot(live2, record.id);
     if (slot !== void 0)
-      finishSlot(slot, void 0);
+      finishSlot(slot);
+    removeNestedSlots(live2, record.id);
     return;
   }
   if (record.kind === COMPACTION_TASK_KIND) {
-    removeCompactionStatus(await tx.doc(LiveDoc, record.conversationId), record.id);
+    const error = outcome.status === "faulted" ? outcome.error.message : outcome.reason;
+    failCompactionStatus(await tx.doc(LiveDoc, record.conversationId), record.id, error);
     return;
   }
   if (!RUN_TASK_KINDS.has(record.kind))
@@ -39566,8 +41934,9 @@ async function scanAll(scan) {
   } while (cursor !== void 0);
   return items;
 }
-function closedError() {
-  return new Error("Harness is closed");
+function closedError(session) {
+  const failure = session.failure;
+  return failure === void 0 ? new Error("Harness is closed") : new SessionFailed(failure.error);
 }
 
 // node_modules/@earendil-works/pi-durable/dist/harness/submissions.js
@@ -39587,10 +41956,10 @@ var Submissions = class {
     this.#now = now;
     this.#queueModes = queueModes;
     this.#resume = resume;
-    session.subscribeCommits((publication) => this.#observe(publication));
+    session.observeCommits((publication) => this.#observe(publication));
     session.subscribeClose(() => {
       this.#closed = true;
-      this.#waiters.rejectAll(closedError());
+      this.#waiters.rejectAll(closedError(this.#session));
     });
   }
   /** Admit a submission in one commit; see `admitSubmission()`. */
@@ -39619,7 +41988,7 @@ var Submissions = class {
       if (isSettled(record))
         return { promise: Promise.resolve(record) };
       if (this.#closed)
-        throw closedError();
+        throw closedError(this.#session);
       return { promise: this.#waiters.add(id, context) };
     });
     return found.promise;
@@ -39670,7 +42039,15 @@ var SubmissionHandle = class {
 function isSettled(record) {
   return record.status === "done" || record.status === "unanswered";
 }
+function checkInputEntry(entry) {
+  const { kind } = entry;
+  if (typeof kind !== "string" || kind.length === 0 || kind.startsWith("pi.")) {
+    throw new TypeError(`An input entry's kind must be a non-empty string not starting with "pi.", got ${String(kind)}`);
+  }
+}
 async function admitSubmission(tx, conversationId, draft, now, queueModes) {
+  if (draft.type === "input" && draft.entry !== void 0)
+    checkInputEntry(draft.entry);
   if (draft.requestId !== void 0) {
     const existing = await tx.submissionByRequest(conversationId, draft.requestId);
     if (existing !== void 0) {
@@ -39680,11 +42057,16 @@ async function admitSubmission(tx, conversationId, draft, now, queueModes) {
       return existing.id;
     }
   }
+  const requestId = draft.requestId === void 0 ? {} : { requestId: draft.requestId };
+  if (draft.type === "write" && isDisplayOnly(draft.entry) && !hasQueuedReset((await tx.doc(InboxDoc, conversationId)).items)) {
+    const entry2 = await tx.appendEntry(conversationId, draft.entry);
+    const write = { conversationId, ...requestId, type: "write", status: "done", entry: entry2.id };
+    return (await tx.createSubmission(write)).id;
+  }
   const live = await tx.doc(LiveDoc, conversationId);
   const busy = live.run !== void 0;
   if (busy && draft.type === "input" && draft.whenBusy === "reject")
     throw new ConversationBusy(conversationId);
-  const requestId = draft.requestId === void 0 ? {} : { requestId: draft.requestId };
   const boundary = busy ? void 0 : await prepareBoundary(tx, conversationId, queueModes);
   if (boundary === void 0 || boundary.inbox.items.length > 0) {
     const { id: id2 } = await tx.createSubmission({
@@ -39701,7 +42083,9 @@ async function admitSubmission(tx, conversationId, draft, now, queueModes) {
       items.push({ id: id2, mode: "write", entry: value });
     else {
       const mode = draft.whenBusy === "steer" ? "steer" : "followUp";
-      items.push({ id: id2, mode, content: value });
+      const content = value;
+      const entry2 = draft.entry === void 0 ? {} : { entry: pickInputEntry(draft.entry) };
+      items.push({ id: id2, mode, content, ...entry2 });
     }
     if (boundary === void 0)
       return id2;
@@ -39719,8 +42103,7 @@ async function admitSubmission(tx, conversationId, draft, now, queueModes) {
     const write = { conversationId, ...requestId, type: "write", status: "done", entry: entry2.id };
     return (await tx.createSubmission(write)).id;
   }
-  const message = { role: "user", content: draft.content, timestamp: now };
-  const entry = await tx.appendEntry(UserEntry, conversationId, { model: [message] });
+  const entry = await appendInput(tx, conversationId, draft.content, draft.entry, now);
   const input = { conversationId, ...requestId, type: "input", status: "placed", entry: entry.id };
   const { id } = await tx.createSubmission(input);
   await startRun(tx, conversationId, live, [id]);
@@ -39819,7 +42202,7 @@ var CompactionTask = defineTask({
       const model = runtime.models.getModel(ref.provider, ref.modelId);
       if (model === void 0)
         return failNoModel2(runtime, ref, context);
-      const view = await runtime.context(runtime.conversationId, context, tail);
+      const view = await runtime.context(runtime.conversationId, context, { at: tail });
       const cut = view.entries.findIndex((entry) => entry.id === firstKept);
       const now = runtime.now();
       const messages = [
@@ -39856,8 +42239,8 @@ var CompactionTask = defineTask({
             status.retry = { at: until, error: message.errorMessage ?? "" };
           return { status: "running", checkpoint: { phase: "retry", ...request, until } };
         }
-        removeCompactionStatus(live, runtime.taskId);
         const text = summaryFailure(message);
+        failCompactionStatus(live, runtime.taskId, text);
         return {
           status: "terminal",
           outcome: { status: "failed", error: { message: text, detail: { reason: "model_error" } } }
@@ -39997,13 +42380,10 @@ function serializeConversation(messages) {
       if (text.length > 0)
         parts2.push(`[User]: ${text}`);
     } else if (message.role === "assistant") {
-      const thinking = message.content.flatMap((content) => content.type === "thinking" ? [content.thinking] : []);
       const text = message.content.flatMap((content) => content.type === "text" ? [content.text] : []);
       const calls = message.content.flatMap((content) => content.type === "toolCall" ? [
         `${content.name}(${Object.entries(content.arguments).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(", ")})`
       ] : []);
-      if (thinking.length > 0)
-        parts2.push(`[Assistant thinking]: ${thinking.join("\n")}`);
       if (text.length > 0)
         parts2.push(`[Assistant]: ${text.join("\n")}`);
       if (calls.length > 0)
@@ -40033,6 +42413,7 @@ async function place(runtime, firstKept, summary, context) {
 }
 async function placeSummary(tx, runtime, current, live, firstKept, summary) {
   removeCompactionStatus(live, runtime.taskId);
+  delete live.compactionFailure;
   const text = `${SUMMARY_PREFIX}${summary}${SUMMARY_SUFFIX}`;
   const entry = {
     kind: CompactionEntry.kind,
@@ -40054,7 +42435,7 @@ async function complete(runtime, context) {
 async function failNoModel2(runtime, ref, context) {
   const message = ref === void 0 ? "No model is configured" : `Model ${ref.provider}/${ref.modelId} is not available`;
   await runtime.commit(async (tx) => {
-    removeCompactionStatus(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId);
+    failCompactionStatus(await tx.doc(LiveDoc, runtime.conversationId), runtime.taskId, message);
     return { status: "terminal", outcome: { status: "failed", error: { message, detail: { reason: "no_model" } } } };
   }, context);
 }
@@ -40068,280 +42449,6 @@ function defineTool(tool) {
 }
 function section(key, render, options) {
   return options?.tag === void 0 ? { key, render } : { key, render, tag: options.tag };
-}
-
-// node_modules/@earendil-works/pi-durable/dist/session/observation.js
-var MAX_PENDING_WATCH_FRAMES = 100;
-var RETIREMENT_OPERATIONS = [["r", null]];
-var CommittedStateSource = class {
-  #attachments = /* @__PURE__ */ new Set();
-  #release;
-  /** Released on disposal. */
-  #value;
-  #cursor = 0;
-  #retired = false;
-  #closed = false;
-  constructor(value, release) {
-    this.#value = value;
-    this.#release = release;
-  }
-  attach() {
-    if (this.#closed)
-      throw new Error("State source is closed");
-    const attachment = new SessionSourceAttachment({ value: this.#value, cursor: this.#cursor }, () => {
-      this.#attachments.delete(attachment);
-      if (this.#attachments.size === 0)
-        this.#finishDisposal();
-    });
-    this.#attachments.add(attachment);
-    return attachment;
-  }
-  advance(value, ops, context) {
-    if (this.#closed || this.#retired)
-      return;
-    this.#value = value;
-    this.#cursor += 1;
-    if (value === null)
-      this.#retired = true;
-    const frame = {
-      cursor: this.#cursor,
-      value,
-      ops,
-      context
-    };
-    for (const attachment of [...this.#attachments])
-      attachment.publish(frame);
-  }
-  closeSession() {
-    if (this.#closed)
-      return;
-    for (const attachment of [...this.#attachments])
-      attachment.dispose();
-    this.#finishDisposal();
-  }
-  #finishDisposal() {
-    if (this.#closed)
-      return;
-    this.#closed = true;
-    this.#value = void 0;
-    const release = this.#release;
-    this.#release = void 0;
-    release?.();
-  }
-};
-var SessionSourceAttachment = class {
-  snapshot;
-  #release;
-  #frames = [];
-  #listener;
-  #activated = false;
-  #disposed = false;
-  #scheduled = false;
-  #delivering = false;
-  constructor(snapshot, release) {
-    this.snapshot = snapshot;
-    this.#release = release;
-  }
-  activate(listener) {
-    if (this.#activated)
-      throw new Error("State attachment is already active");
-    if (this.#disposed)
-      throw new Error("State attachment is disposed");
-    this.#activated = true;
-    this.#listener = listener;
-    this.#drain();
-  }
-  publish(frame) {
-    if (this.#disposed)
-      return;
-    this.#frames.push(frame);
-    if (!this.#activated || this.#delivering || this.#scheduled)
-      return;
-    this.#scheduled = true;
-    queueMicrotask(() => {
-      this.#scheduled = false;
-      if (this.#disposed)
-        return;
-      try {
-        this.#drain();
-      } catch {
-        this.dispose();
-      }
-    });
-  }
-  dispose() {
-    if (this.#disposed)
-      return;
-    this.#disposed = true;
-    this.#frames.length = 0;
-    this.#listener = void 0;
-    const release = this.#release;
-    this.#release = void 0;
-    release?.();
-  }
-  #drain() {
-    const listener = this.#listener;
-    if (listener === void 0 || this.#delivering || this.#disposed)
-      return;
-    this.#delivering = true;
-    try {
-      while (!this.#disposed) {
-        const frame = this.#frames.shift();
-        if (frame === void 0)
-          break;
-        listener(frame);
-      }
-    } finally {
-      this.#delivering = false;
-    }
-  }
-};
-var CommittedWatch = class {
-  #detach;
-  #replace;
-  #closedPromise;
-  #pending = [];
-  #resolveClosed;
-  #value;
-  #listener;
-  #started = false;
-  #scheduled = false;
-  #running = false;
-  #detached = false;
-  #retired = false;
-  #end;
-  #resolved = false;
-  #cancellationSignal;
-  #cancellationListener;
-  /** `replace` gives the value an overflow delivers; by default the newest value. */
-  constructor(value, detach, replace) {
-    this.#value = value;
-    this.#detach = detach;
-    this.#replace = replace;
-    this.#closedPromise = new Promise((resolve3) => {
-      this.#resolveClosed = resolve3;
-    });
-  }
-  get value() {
-    return this.#value;
-  }
-  get closed() {
-    return this.#closedPromise;
-  }
-  start(listener) {
-    if (this.#started)
-      throw new Error("Watch is already started");
-    if (this.#end !== void 0)
-      throw new Error("Watch is stopped");
-    this.#started = true;
-    this.#listener = listener;
-    if (this.#pending.length > 0)
-      this.#schedule();
-  }
-  stop() {
-    this.#terminate({ reason: "stopped" });
-    return this.#closedPromise;
-  }
-  observeCancellation(signal) {
-    if (this.#cancellationSignal !== void 0)
-      throw new Error("Watch cancellation is already installed");
-    if (this.#end !== void 0)
-      return;
-    this.#cancellationSignal = signal;
-    this.#cancellationListener = () => this.cancel();
-    signal.addEventListener("abort", this.#cancellationListener, { once: true });
-    if (signal.aborted)
-      this.cancel();
-  }
-  cancel() {
-    this.#terminate({ reason: "cancelled" });
-  }
-  closeSession() {
-    this.#terminate({ reason: "session_closed" });
-  }
-  advance(value, ops, context) {
-    if (this.#end !== void 0 || this.#retired)
-      return;
-    if (value === null)
-      this.#retired = true;
-    if (this.#pending.length >= MAX_PENDING_WATCH_FRAMES) {
-      this.#pending.length = 0;
-      const replacement = this.#replace?.() ?? value;
-      this.#pending.push({ value: replacement, ops: [["r", replacement]], context });
-    } else {
-      this.#pending.push({ value, ops, context });
-    }
-    if (this.#started)
-      this.#schedule();
-  }
-  #schedule() {
-    if (this.#scheduled || this.#running || this.#end !== void 0)
-      return;
-    this.#scheduled = true;
-    queueMicrotask(() => {
-      this.#scheduled = false;
-      void this.#drain();
-    });
-  }
-  async #drain() {
-    if (this.#running || this.#end !== void 0 || !this.#started) {
-      this.#finishIfReady();
-      return;
-    }
-    this.#running = true;
-    try {
-      while (this.#end === void 0) {
-        const frame = this.#pending.shift();
-        if (frame === void 0)
-          break;
-        this.#value = frame.value;
-        const deliveryContext = withoutAbortSignal(frame.context);
-        try {
-          await this.#listener(frame.value, frame.ops, deliveryContext);
-        } catch (error) {
-          if (this.#end === void 0) {
-            this.#terminate({ reason: "listener_error", error: toError2(error) });
-          }
-          break;
-        }
-        if (frame.value === null) {
-          this.#terminate({ reason: "retired" });
-          break;
-        }
-      }
-    } finally {
-      this.#running = false;
-      if (this.#end === void 0 && this.#pending.length > 0)
-        this.#schedule();
-      this.#finishIfReady();
-    }
-  }
-  #terminate(end) {
-    if (this.#end !== void 0)
-      return;
-    this.#end = end;
-    this.#detachNow();
-    this.#pending.length = 0;
-    this.#finishIfReady();
-  }
-  #detachNow() {
-    if (this.#detached)
-      return;
-    this.#detached = true;
-    this.#detach();
-  }
-  #finishIfReady() {
-    if (this.#resolved || this.#end === void 0)
-      return;
-    this.#resolved = true;
-    if (this.#cancellationSignal !== void 0 && this.#cancellationListener !== void 0) {
-      this.#cancellationSignal.removeEventListener("abort", this.#cancellationListener);
-    }
-    this.#resolveClosed(this.#end);
-  }
-};
-function toError2(error) {
-  return error instanceof Error ? error : new Error(String(error));
 }
 
 // node_modules/@earendil-works/pi-durable/dist/harness/view.js
@@ -40369,23 +42476,28 @@ var ConversationViews = class {
     this.#session = session;
     this.#storage = storage;
     VIEWS.set(session, this);
-    session.subscribeCommits((publication, context) => {
+    session.observeCommits((publication, context) => {
       for (const [id, mount] of this.#mounts)
-        advance(id, mount, publication, context);
+        advance(id, mount, publication, context, (error) => this.report(error));
     });
     session.subscribeClose(() => {
       this.#closed = true;
       for (const mount of this.#mounts.values())
-        for (const observer of [...mount.observers])
-          observer.closeSession();
+        for (const observer of [...mount.observers]) {
+          contained(() => observer.closeSession(this.#session.failure), (error) => this.report(error));
+        }
       this.#mounts.clear();
     });
+  }
+  /** Report an observer's listener error through the Harness. */
+  report(error) {
+    this.#session.report(error);
   }
   /** A disposable read-only Chord state of the view. */
   async state(id, context) {
     const { observer, detach } = await this.attach(id, (value, release) => new CommittedStateSource(value, release), context);
     try {
-      return replicatedState(observer);
+      return replicatedState(observer, { onError: (error) => this.#session.report(error) });
     } catch (error) {
       detach();
       throw error;
@@ -40393,7 +42505,7 @@ var ConversationViews = class {
   }
   /** A serialized exact-frame watch of the view; cancelling `context` stops it. */
   async watch(id, context) {
-    const { observer } = await this.attach(id, (value, release) => new CommittedWatch(value, release), context);
+    const { observer } = await this.attach(id, (value, release) => new CommittedWatch(value, release, (error) => this.#session.report(error)), context);
     const signal = context.abortSignal;
     if (signal?.aborted) {
       observer.cancel();
@@ -40418,7 +42530,7 @@ var ConversationViews = class {
       };
       const observer = await create(mount.value, detach, this.#storage);
       if (this.#closed)
-        throw closedError();
+        throw closedError(this.#session);
       context.abortSignal?.throwIfAborted();
       this.#mounts.set(id, mount);
       mount.observers.add(observer);
@@ -40443,7 +42555,7 @@ var ConversationViews = class {
     return { value: { conversation, entries, docs }, docs: incarnations, observers: /* @__PURE__ */ new Set() };
   }
 };
-function advance(id, mount, publication, context) {
+function advance(id, mount, publication, context, report) {
   const docOps = [];
   const entryOps = [];
   let entries = mount.value.entries;
@@ -40490,11 +42602,12 @@ function advance(id, mount, publication, context) {
   if (ops.length > 0) {
     const value = docOps.length === 0 ? mount.value : applyImmutable(mount.value, docOps);
     mount.value = entries === value.entries ? value : { ...value, entries };
-    for (const observer of [...mount.observers])
-      observer.advance?.(mount.value, ops, frameContext);
+    for (const observer of [...mount.observers]) {
+      contained(() => observer.advance?.(mount.value, ops, frameContext), report);
+    }
   }
   for (const observer of [...mount.observers]) {
-    observer.publication?.(before, mount.value, ops, publication, frameContext);
+    contained(() => observer.publication?.(before, mount.value, ops, publication, frameContext), report);
   }
 }
 function prefixed(op, prefix) {
@@ -40534,7 +42647,9 @@ function snapshotOf(view) {
     ...live.run === void 0 ? {} : { run: { inputs: live.run.inputs } },
     ...live.generation === void 0 ? {} : { generation: live.generation },
     tools: live.tools ?? [],
+    nestedTools: live.nestedTools ?? [],
     compactions: live.compactions ?? [],
+    ...live.compactionFailure === void 0 ? {} : { compactionFailure: live.compactionFailure },
     inbox: queued(inbox),
     agent: agent ?? AgentDoc.definition.initial(),
     usage: usage ?? UsageDoc.definition.initial()
@@ -40544,15 +42659,16 @@ function queued(inbox) {
   return (inbox?.items ?? []).map((item) => ({ id: item.id, mode: item.mode }));
 }
 async function watchEvents(harness, conversationId, context) {
+  const views = conversationViews(harness);
   let watch;
   let snapshot;
-  await conversationViews(harness).attach(conversationId, async (initial, release, storage) => {
+  await views.attach(conversationId, async (initial, release, storage) => {
     const query = { conversationId, kind: "pi.generation", status: "completing" };
     const completing = await scanAll((cursor) => storage.scanTasks(query, 100, cursor, context));
     const held = new Set(completing.map((record) => record.id));
     let current = initial;
     snapshot = snapshotOf(initial);
-    watch = new CommittedWatch([], release, () => [snapshotOf(current)]);
+    watch = new CommittedWatch([], release, (error) => views.report(error), () => [snapshotOf(current)]);
     return {
       publication: (before, after, ops, publication, commitContext) => {
         current = after;
@@ -40560,7 +42676,7 @@ async function watchEvents(harness, conversationId, context) {
         if (events.length > 0)
           watch.advance(events, [], commitContext);
       },
-      closeSession: () => watch.closeSession()
+      closeSession: (failure) => watch.closeSession(failure)
     };
   }, context);
   const signal = context.abortSignal;
@@ -40587,7 +42703,14 @@ function translate(conversationId, before, after, viewOps, publication, held) {
   const entries = [];
   const tasks = /* @__PURE__ */ new Map();
   const submissions = [];
+  const nestedResults = /* @__PURE__ */ new Map();
   for (const change of publication.changes) {
+    if (change.type === "document" && change.record.kind === NestedCallDoc.definition.kind && change.value !== null && change.conversationId === conversationId) {
+      const state3 = change.value;
+      if (state3.taskId !== void 0 && state3.result !== void 0) {
+        nestedResults.set(state3.taskId, state3.result);
+      }
+    }
     if (change.type === "entry" && change.value.conversationId === conversationId)
       entries.push(change.value);
     if (change.type === "task" && change.value.conversationId === conversationId)
@@ -40604,12 +42727,15 @@ function translate(conversationId, before, after, viewOps, publication, held) {
   const events = [];
   const slotsBefore = new Map((was.live.tools ?? []).map((slot) => [slot.callId, slot]));
   const slots = now.live.tools ?? [];
-  for (const slot of slots) {
-    if (slot.status !== "running" || slotsBefore.get(slot.callId)?.status === "running")
+  const nestedBefore = new Map((was.live.nestedTools ?? []).map((slot) => [slot.taskId, slot]));
+  const nested = now.live.nestedTools ?? [];
+  for (const slot of [...slots, ...nested]) {
+    const previous = "parentCallId" in slot ? nestedBefore.get(slot.taskId) : slotsBefore.get(slot.callId);
+    if (slot.status !== "running" || previous?.status === "running")
       continue;
     const checkpoint = slot.taskId === void 0 ? void 0 : tasks.get(slot.taskId)?.state.checkpoint;
-    const args = checkpoint?.arguments ?? {};
-    events.push({ type: "tool_execution_start", toolCallId: slot.callId, toolName: slot.name, args });
+    const args = "parentCallId" in slot ? slot.arguments : checkpoint?.arguments ?? {};
+    events.push({ type: "tool_execution_start", ...callOf(slot), args });
   }
   const partialBefore = was.live.generation?.message;
   const partial = now.live.generation?.message;
@@ -40622,10 +42748,19 @@ function translate(conversationId, before, after, viewOps, publication, held) {
     const previous = slotsBefore.get(slot.callId);
     if (slot.status !== "running" || previous?.status !== "running")
       continue;
-    const update = toolUpdate(viewOps, index3, slot, previous);
+    const update = toolUpdate(viewOps, ["tools", index3], slot, previous);
     if (update === void 0)
       continue;
-    events.push({ type: "tool_execution_update", toolCallId: slot.callId, toolName: slot.name, ...update });
+    events.push({ type: "tool_execution_update", ...callOf(slot), ...update });
+  }
+  for (const [index3, slot] of nested.entries()) {
+    const previous = nestedBefore.get(slot.taskId);
+    if (slot.status !== "running" || previous?.status !== "running")
+      continue;
+    const update = toolUpdate(viewOps, ["nestedTools", index3], slot, previous);
+    if (update === void 0)
+      continue;
+    events.push({ type: "tool_execution_update", ...callOf(slot), ...update });
   }
   const generation = now.live.generation;
   const generationBefore = was.live.generation;
@@ -40640,27 +42775,38 @@ function translate(conversationId, before, after, viewOps, publication, held) {
     events.push({ type: "deferred_poll", pollAt: generation.deferred.pollAt });
   }
   const toolEnds = [];
-  const endTool = (callId, name, entryId) => {
+  const endTool = (slot, entryId) => {
     const entry = entries.find((candidate) => candidate.id === entryId);
-    toolEnds.push({
-      type: "tool_execution_end",
-      toolCallId: callId,
-      toolName: name,
-      ...entry === void 0 ? {} : { entry }
-    });
+    toolEnds.push({ type: "tool_execution_end", ...callOf(slot), ...entry === void 0 ? {} : { entry } });
   };
   for (const previous of slotsBefore.values()) {
     if (previous.status === "done")
       continue;
     const slot = slots.find((candidate) => candidate.callId === previous.callId);
     if (slot?.status === "done")
-      endTool(previous.callId, previous.name, slot.entry);
+      endTool(slot, slot.entry);
     else if (slot === void 0)
-      endTool(previous.callId, previous.name, resultOf(entries, previous.callId)?.id);
+      endTool(previous, resultOf(entries, previous.callId)?.id);
   }
   for (const slot of slots) {
     if (slot.status === "done" && !slotsBefore.has(slot.callId))
-      endTool(slot.callId, slot.name, slot.entry);
+      endTool(slot, slot.entry);
+  }
+  const endNested = (slot) => {
+    const result = nestedResults.get(slot.taskId);
+    events.push({ type: "tool_execution_end", ...callOf(slot), ...result === void 0 ? {} : { result } });
+  };
+  const nestedNow = new Map(nested.map((slot) => [slot.taskId, slot]));
+  for (const previous of [...nestedBefore.values()].reverse()) {
+    if (previous.status === "done")
+      continue;
+    const slot = nestedNow.get(previous.taskId);
+    if (slot?.status === "done" || slot === void 0)
+      endNested(slot ?? previous);
+  }
+  for (const slot of [...nested].reverse()) {
+    if (slot.status === "done" && !nestedBefore.has(slot.taskId))
+      endNested(slot);
   }
   let assistantAppended = false;
   for (const entry of entries) {
@@ -40680,9 +42826,11 @@ function translate(conversationId, before, after, viewOps, publication, held) {
   events.push(...toolEnds.filter((end) => end.entry === void 0));
   const compactionsBefore = was.live.compactions ?? [];
   const compactions = now.live.compactions ?? [];
+  const failure = now.live.compactionFailure;
   for (const { taskId, reason } of compactionsBefore) {
     if (!compactions.some((status) => status.taskId === taskId)) {
-      events.push({ type: "compaction_end", taskId, reason });
+      const error = failure?.taskId === taskId ? failure.error : void 0;
+      events.push({ type: "compaction_end", taskId, reason, ...error === void 0 ? {} : { error } });
     }
   }
   let turnEnded = false;
@@ -40770,8 +42918,16 @@ function messageChanges(viewOps, message) {
   }
   return changes;
 }
-function toolUpdate(viewOps, index3, slot, previous) {
-  const outputPath = ["docs", "pi.live", "tools", index3, "output"];
+function callOf(slot) {
+  return {
+    toolCallId: slot.callId,
+    toolName: slot.name,
+    ...slot.taskId === void 0 ? {} : { taskId: slot.taskId },
+    ..."parentCallId" in slot ? { parentToolCallId: slot.parentCallId, parentTaskId: slot.parentTaskId } : {}
+  };
+}
+function toolUpdate(viewOps, at, slot, previous) {
+  const outputPath = ["docs", "pi.live", ...at, "output"];
   let trimStart = 0;
   let append = "";
   let set = false;
@@ -40800,1130 +42956,6 @@ function toolUpdate(viewOps, index3, slot, previous) {
 }
 function startsWith(path5, prefix) {
   return prefix.length <= path5.length && prefix.every((segment, index3) => path5[index3] === segment);
-}
-
-// node_modules/@earendil-works/pi-durable/dist/types.js
-var ROOT_CONVERSATION_ID = 1;
-
-// node_modules/@earendil-works/pi-durable/dist/session/forks.js
-var SCAN_PAGE_SIZE2 = 256;
-async function prepareForkDocumentCopies(storage, parentConversationId, at, childConversationId, context) {
-  const entry = await storage.entry(parentConversationId, at, context);
-  if (entry === void 0)
-    throw new Error(`Entry ${at} is not visible from conversation ${parentConversationId}`);
-  const copies = [];
-  const copiedAddresses = /* @__PURE__ */ new Set();
-  await collectCopies(storage, { kind: "conversation", conversationId: entry.entry.conversationId }, entry.commitSeq, "asOf", childConversationId, copies, copiedAddresses, context);
-  await collectCopies(storage, { kind: "conversation", conversationId: parentConversationId }, "current", "current", childConversationId, copies, copiedAddresses, context);
-  return copies;
-}
-async function collectCopies(storage, scope, at, policy, childConversationId, copies, copiedAddresses, context) {
-  let cursor;
-  do {
-    const page2 = await storage.scanDocuments({ scope, at }, SCAN_PAGE_SIZE2, cursor, context);
-    for (const source of page2.items) {
-      if (source.scope.kind !== "conversation" || source.fork !== policy)
-        continue;
-      const id = await storage.mintId();
-      const identity = {
-        id,
-        kind: source.kind,
-        ...source.key === void 0 ? {} : { key: source.key },
-        scope: { kind: "conversation", conversationId: childConversationId }
-      };
-      const record = source.history === "latest" ? { ...identity, history: "latest", fork: source.fork } : { ...identity, history: "rewindable", fork: source.fork };
-      const copyAddress = addressId(record);
-      if (copiedAddresses.has(copyAddress)) {
-        const member = record.key === void 0 ? record.kind : `${record.kind}/${record.key}`;
-        throw new Error(`Fork selects multiple source documents for ${member}`);
-      }
-      copiedAddresses.add(copyAddress);
-      copies.push({ record, source: { id: source.id, at } });
-    }
-    cursor = page2.next;
-  } while (cursor !== void 0);
-}
-
-// node_modules/@earendil-works/pi-durable/dist/session/transaction.js
-function applySubmissionChange(current, change) {
-  if (current.status === "done" || current.status === "unanswered")
-    return current;
-  if (change.status === "placed") {
-    if (current.status !== "queued")
-      throw new Error(`Submission ${current.id} is not queued`);
-    const status = current.type === "input" ? "placed" : "done";
-    return { ...current, status, entry: change.entry };
-  }
-  if (change.status === "done" && current.status !== "placed") {
-    throw new Error(`Submission ${current.id} is not a placed input`);
-  }
-  return { ...current, ...change };
-}
-var INTERNAL_SCAN_PAGE_SIZE = 256;
-var EMPTY_OPERATIONS = [];
-var TABLE_JSON_COPY_OPTIONS = { omitUndefinedProperties: true };
-var Transaction = class {
-  #host;
-  #context;
-  #scope;
-  #pendingOperations = /* @__PURE__ */ new Set();
-  #sealed = false;
-  #hasTableWrite = false;
-  /** Atomic batch; conversation and entry writes stage eagerly, while task and document writes assemble later. */
-  #writes = [];
-  #createdConversationIds = /* @__PURE__ */ new Set();
-  #forkSourceConversationIds = /* @__PURE__ */ new Set();
-  #forkSourceDocumentIds = /* @__PURE__ */ new Set();
-  /** One entry per task touched by a public read, candidate write, or document-owner lookup. */
-  #tasksById = /* @__PURE__ */ new Map();
-  /** Submissions created by this transaction, by ID. */
-  #submissions = /* @__PURE__ */ new Map();
-  /** Submission settlements and placements in staging order; resolved against the latest candidate record during assembly. */
-  #submissionChanges = [];
-  /** Write and publication plans of every staged incarnation, built during assembly. */
-  #plans = [];
-  /** Every document acquisition or retirement marker in staging order. */
-  #documents = [];
-  /** Latest transaction-local incarnation or retirement marker at each logical address. */
-  #latestDocumentByAddress = /* @__PURE__ */ new Map();
-  constructor(host, context, scope = {}) {
-    this.#host = host;
-    this.#context = context;
-    this.#scope = scope;
-  }
-  // ─── Table reads ────────────────────────────────────────────────────────
-  conversation(id) {
-    return this.#read("conversation", () => this.#host.storage.conversation(id, this.#context));
-  }
-  entry(first, second) {
-    const kind = typeof first === "number" ? void 0 : first.kind;
-    const id = typeof first === "number" ? first : second;
-    return this.#read("entry", async () => {
-      const entry = (await this.#host.storage.entry(id, this.#context))?.entry;
-      return kind === void 0 || entry?.kind === kind ? entry : void 0;
-    });
-  }
-  task(id) {
-    return this.#read("task", () => this.#committedTask(id));
-  }
-  scanConversations(query, limit2, cursor) {
-    return this.#read("scanConversations", () => this.#host.storage.scanConversations(query, limit2, cursor, this.#context));
-  }
-  scanEntries(query, limit2, cursor) {
-    return this.#read("scanEntries", () => this.#host.storage.scanEntries(query, limit2, cursor, this.#context));
-  }
-  latestHeadMarker(conversationId) {
-    return this.#read("latestHeadMarker", () => this.#host.storage.findLatestHeadMarker(conversationId, void 0, this.#context));
-  }
-  scanTasks(query, limit2, cursor) {
-    return this.#read("scanTasks", () => this.#host.storage.scanTasks(query, limit2, cursor, this.#context));
-  }
-  /** Internal: committed submission record. */
-  submission(id) {
-    return this.#read("submission", () => this.#host.storage.submission(id, this.#context));
-  }
-  /** Committed submission with a conversation-scoped request ID. */
-  submissionByRequest(conversationId, requestId) {
-    return this.#read("submissionByRequest", () => this.#host.storage.submissionByRequest(conversationId, requestId, this.#context));
-  }
-  // ─── Table writes ───────────────────────────────────────────────────────
-  createConversation(options) {
-    return this.#write(() => this.#stageConversation(void 0, options.ownership));
-  }
-  /** Internal final-form bootstrap path for the reserved root identity. */
-  createRootConversation() {
-    return this.#write(() => this.#stageConversation(void 0, { kind: "ownerless" }, ROOT_CONVERSATION_ID));
-  }
-  forkConversation(parentConversationId, at, options) {
-    return this.#write(() => this.#stageConversation({ conversationId: parentConversationId, at }, options.ownership));
-  }
-  async #stageConversation(parent, ownership, reservedId) {
-    const ownerTaskId = ownership.kind === "task" ? ownership.taskId : void 0;
-    const id = reservedId ?? await this.#host.storage.mintId();
-    this.#assertOpen();
-    let owner;
-    if (ownerTaskId !== void 0) {
-      const task = await this.#currentTask(ownerTaskId);
-      this.#assertOpen();
-      if (task === void 0)
-        throw new Error(`Conversation owner task ${ownerTaskId} does not exist`);
-      owner = { conversationId: task.conversationId, taskId: ownerTaskId };
-    }
-    const record = {
-      id,
-      ...parent === void 0 ? {} : { parent },
-      ...owner === void 0 ? {} : { owner }
-    };
-    const copies = parent === void 0 ? [] : await prepareForkDocumentCopies(this.#host.storage, parent.conversationId, parent.at, id, this.#context);
-    this.#assertOpen();
-    for (const copy2 of copies) {
-      this.#forkSourceDocumentIds.add(copy2.source.id);
-      const entry = {
-        addressId: addressId(copy2.record),
-        address: copy2.record,
-        target: { kind: "fork-copy", ...copy2 },
-        retireOnCommit: false
-      };
-      this.#documents.push(entry);
-      this.#latestDocumentByAddress.set(entry.addressId, entry);
-    }
-    if (parent !== void 0)
-      this.#forkSourceConversationIds.add(parent.conversationId);
-    this.#createdConversationIds.add(id);
-    this.#writes.push({ type: "conversation", value: record });
-    await this.#host.conversationCreated(this, record);
-    this.#assertOpen();
-    return record;
-  }
-  appendEntry(first, second, third) {
-    if (typeof first === "number")
-      return this.#appendEntry(first, second);
-    return this.#appendEntry(second, { ...third, kind: first.kind });
-  }
-  #appendEntry(conversationId, value) {
-    return this.#write(async () => {
-      await this.#requireConversation(conversationId);
-      this.#assertOpen();
-      const id = await this.#host.storage.mintId();
-      this.#assertOpen();
-      const { head, ...rest } = value;
-      const record = copyJson({
-        ...rest,
-        id,
-        conversationId,
-        head: head === "self" ? id : head,
-        byTaskId: this.#scope.taskId
-      }, TABLE_JSON_COPY_OPTIONS);
-      this.#writes.push({ type: "entry", value: record });
-      return record;
-    });
-  }
-  createTask(task, input, options) {
-    return this.#write(async () => {
-      const ownership = options.ownership;
-      let owner;
-      if (ownership.kind === "task") {
-        owner = await this.#currentTask(ownership.taskId);
-        this.#assertOpen();
-        if (owner === void 0)
-          throw new Error(`Task owner ${ownership.taskId} does not exist`);
-        if (options.background === true)
-          throw new TypeError("A child task cannot be background");
-        if (options.conversationId !== void 0 && options.conversationId !== owner.conversationId) {
-          throw new Error(`A child task lives in its owner's conversation ${owner.conversationId}`);
-        }
-      }
-      const conversationId = owner?.conversationId ?? options.conversationId ?? this.#scope.conversationId;
-      if (conversationId === void 0)
-        throw new TypeError("Tx.createTask() requires options.conversationId");
-      await this.#requireConversation(conversationId);
-      this.#assertOpen();
-      const definition = task.definition;
-      const checkpoint = definition.initial(input);
-      const id = await this.#host.storage.mintId();
-      this.#assertOpen();
-      const record = copyJson({
-        id,
-        conversationId,
-        kind: definition.name,
-        version: definition.version,
-        input,
-        ...owner === void 0 ? {} : { owner: owner.id },
-        background: options.background ?? false,
-        abortRequested: false,
-        state: { status: "pending", checkpoint }
-      }, TABLE_JSON_COPY_OPTIONS);
-      this.#tasksById.set(id, { write: { kind: "create", record } });
-      return id;
-    });
-  }
-  /** Create a raw submission record with a fresh ID; no admission rules apply. */
-  createSubmission(create) {
-    return this.#write(async () => {
-      await this.#requireConversation(create.conversationId);
-      this.#assertOpen();
-      const id = await this.#host.storage.mintId();
-      this.#assertOpen();
-      const record = copyJson({ ...create, id }, TABLE_JSON_COPY_OPTIONS);
-      this.#submissions.set(id, record);
-      return record;
-    });
-  }
-  /**
-   * Settle a submission. Resolved during assembly against the transaction's latest candidate record, falling back to
-   * committed state, so it is not a caller table read and works after the first table write.
-   */
-  settleSubmission(id, settlement) {
-    this.#assertOpen();
-    this.#hasTableWrite = true;
-    this.#submissionChanges.push({ id, change: copyJson(settlement) });
-  }
-  /** Place a queued submission at `entry`; resolved during assembly like `settleSubmission()`. */
-  placeSubmission(id, entry) {
-    this.#assertOpen();
-    this.#hasTableWrite = true;
-    this.#submissionChanges.push({ id, change: { status: "placed", entry } });
-  }
-  /** Internal: replace one task record completely. Tasks change their own state through their runtime. */
-  setTask(value) {
-    this.#assertOpen();
-    this.#hasTableWrite = true;
-    const task = this.#taskEntry(value.id);
-    const candidate = task.write?.record;
-    if (candidate?.state.status === "terminal") {
-      throw new Error(`Task ${value.id} already has a terminal candidate`);
-    }
-    if (candidate !== void 0 && candidate.conversationId !== value.conversationId) {
-      throw new Error(`Task ${value.id} cannot change conversations`);
-    }
-    task.write = {
-      kind: task.write?.kind === "create" ? "create" : "replace",
-      record: copyJson(value, TABLE_JSON_COPY_OPTIONS)
-    };
-  }
-  /** Internal: candidate records of the tasks this transaction created or replaced so far. */
-  stagedTasks() {
-    const records = [];
-    for (const task of this.#tasksById.values())
-      if (task.write !== void 0)
-        records.push(task.write.record);
-    return records;
-  }
-  /** Internal: conversations this transaction created or forked so far. */
-  stagedConversations() {
-    const records = [];
-    for (const write of this.#writes)
-      if (write.type === "conversation")
-        records.push(write.value);
-    return records;
-  }
-  doc(token, ...args) {
-    try {
-      this.#assertOpen();
-      const definition = token.definition;
-      const resolved = resolveAddress(definition, args);
-      this.#assertTaskDocumentsOpen(resolved);
-      const latest = this.#latestDocumentByAddress.get(resolved.id);
-      if (latest !== void 0 && !latest.retireOnCommit) {
-        if (latest.draftPromise !== void 0)
-          return latest.draftPromise;
-        if (latest.target?.kind === "fork-copy") {
-          latest.draftPromise = this.#track(this.#acquireForkCopy(latest, definition, latest.target));
-          return latest.draftPromise;
-        }
-      }
-      const seed = definition.family === true ? copyJson(args[resolved.nextArgument]) : void 0;
-      const docEntry = {
-        addressId: resolved.id,
-        address: resolved.address,
-        definition,
-        retireOnCommit: false
-      };
-      this.#documents.push(docEntry);
-      this.#latestDocumentByAddress.set(docEntry.addressId, docEntry);
-      docEntry.draftPromise = this.#track(this.#acquire(docEntry, seed, latest?.retireOnCommit === true));
-      return docEntry.draftPromise;
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-  retireDoc(token, ...args) {
-    try {
-      this.#assertOpen();
-      const definition = token.definition;
-      const resolved = resolveAddress(definition, args);
-      const latest = this.#latestDocumentByAddress.get(resolved.id);
-      if (latest?.retireOnCommit)
-        return Promise.resolve();
-      if (latest?.target?.kind === "fork-copy") {
-        checkRecordScope(definition, latest.target.record);
-        latest.retireOnCommit = true;
-        return Promise.resolve();
-      }
-      if (latest?.draftPromise !== void 0) {
-        latest.retireOnCommit = true;
-        return this.#track(latest.draftPromise.then(() => void 0));
-      }
-      const entry = {
-        addressId: resolved.id,
-        address: resolved.address,
-        definition,
-        retireOnCommit: true
-      };
-      this.#documents.push(entry);
-      this.#latestDocumentByAddress.set(entry.addressId, entry);
-      return this.#track(this.#findRetirement(entry));
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-  async #acquire(entry, seed, skipLoad) {
-    const definition = entry.definition;
-    const loaded = skipLoad ? void 0 : await this.#host.load(definition, entry.addressId, entry.address, this.#context);
-    this.#assertOpen();
-    if (loaded !== void 0) {
-      checkRecordScope(definition, loaded.record);
-      checkRecordVersion(definition, loaded.record, loaded.storedVersion);
-      entry.target = { kind: "loaded", document: loaded };
-      entry.change = loaded.tracker.beginChange();
-      return entry.change.state;
-    }
-    const scope = entry.address.scope;
-    if (scope.kind === "conversation")
-      await this.#requireConversation(scope.conversationId);
-    if (scope.kind === "task") {
-      const task = await this.#currentTask(scope.taskId);
-      if (task === void 0)
-        throw new Error(`Task ${scope.taskId} does not exist`);
-      if (task.state.status === "terminal")
-        throw new Error(`Task ${scope.taskId} is terminal`);
-    }
-    this.#assertOpen();
-    const value = copyJson(definition.family === true ? definition.initial(seed) : definition.initial());
-    const id = await this.#host.storage.mintId();
-    this.#assertOpen();
-    const tracker = track(value);
-    entry.target = {
-      kind: "created",
-      record: documentCreate(definition, entry.address, id),
-      version: definition.version,
-      tracker
-    };
-    entry.change = tracker.beginChange();
-    return entry.change.state;
-  }
-  async #acquireForkCopy(entry, definition, target) {
-    const stored = await this.#host.storage.document(target.source.id, target.source.at, this.#context);
-    this.#assertOpen();
-    if (stored === void 0) {
-      throw new Error(`Fork source document ${target.source.id} cannot be read`);
-    }
-    if (stored.record.scope.kind !== "conversation" || stored.record.kind !== target.record.kind || stored.record.key !== target.record.key || stored.record.history !== target.record.history || stored.record.fork !== target.record.fork) {
-      throw new Error(`Fork source document ${target.source.id} does not match the copied record`);
-    }
-    const value = materializeDocumentValue(definition, target.record, stored.version, stored.value);
-    const tracker = track(value);
-    entry.definition = definition;
-    entry.target = { kind: "created", record: target.record, version: definition.version, tracker };
-    entry.change = tracker.beginChange();
-    return entry.change.state;
-  }
-  async #findRetirement(entry) {
-    const record = this.#host.cached(entry.addressId)?.record ?? await this.#host.storage.findDocument(entry.address, "current", this.#context);
-    this.#assertOpen();
-    if (record === void 0)
-      return;
-    checkRecordScope(entry.definition, record);
-    entry.target = { kind: "retire-only", record };
-  }
-  // ─── Settlement ─────────────────────────────────────────────────────────
-  /** Seal after callback failure: abort every change and observe every pending operation. */
-  async settleFailure() {
-    this.#sealed = true;
-    this.#abortChanges();
-    await Promise.allSettled(this.#pendingOperations);
-  }
-  /**
-   * Seal after callback success, prepare every open change, and assemble the atomic batch.
-   * Any failure aborts every change before Storage admission.
-   */
-  async settleSuccess() {
-    this.#sealed = true;
-    if (this.#pendingOperations.size > 0) {
-      this.#abortChanges();
-      await Promise.allSettled(this.#pendingOperations);
-      throw new Error("Session commit callback settled before its pending Tx operations");
-    }
-    try {
-      for (const document of this.#documents) {
-        if (document.change !== void 0)
-          document.prepared = document.change.prepare();
-      }
-      return await this.#assemble();
-    } catch (error) {
-      this.#abortChanges();
-      throw error;
-    }
-  }
-  /** Abort every prepared change after Storage failure or when no write is required. */
-  discard() {
-    this.#abortChanges();
-  }
-  /** Adopt every prepared change by pointer swap after Storage success and describe the publication. */
-  adopt(seq) {
-    const publications = [];
-    for (const plan of this.#plans) {
-      const committed = "createdAt" in plan.record;
-      let record = committed ? plan.record : { ...plan.record, createdAt: seq };
-      if (plan.retire)
-        record = { ...record, retiredAt: seq };
-      const change = plan.change;
-      if (change !== void 0) {
-        const { tracker, prepared, loaded, version } = change;
-        if (loaded === void 0 ? !plan.retire : prepared.ops.length > 0)
-          tracker.adopt(prepared);
-        else
-          prepared.abort();
-        if (loaded !== void 0) {
-          if (loaded.storedVersion < version)
-            loaded.storedVersion = version;
-          if (plan.content?.type === "document.change") {
-            if (plan.content.content.kind === "base")
-              loaded.deltasSinceBase = 0;
-            else
-              loaded.deltasSinceBase++;
-          }
-        } else if (!plan.retire) {
-          this.#host.install({
-            addressId: plan.addressId,
-            record,
-            storedVersion: version,
-            valueVersion: version,
-            deltasSinceBase: 0,
-            tracker
-          });
-        }
-      }
-      const conversationId = plan.conversationId;
-      if (plan.retire) {
-        if (committed)
-          this.#host.evict(plan.addressId, record.id);
-        const retired = { version: void 0, value: null, ops: EMPTY_OPERATIONS };
-        publications.push({ type: "document", record, conversationId, ...retired });
-      } else if (plan.content?.type === "document.copy") {
-        publications.push({
-          type: "document.copy",
-          record,
-          conversationId,
-          source: plan.content.source
-        });
-      } else if (change !== void 0 && publishes(plan)) {
-        const ops = change.loaded === void 0 ? EMPTY_OPERATIONS : change.prepared.ops;
-        publications.push({
-          type: "document",
-          record,
-          conversationId,
-          version: change.version,
-          value: change.prepared.value,
-          ops
-        });
-      }
-    }
-    return publications;
-  }
-  async #assemble() {
-    const storage = this.#host.storage;
-    const plans = this.#plans;
-    for (const document of this.#documents) {
-      const plan = planDocument(document);
-      if (plan !== void 0)
-        plans.push(plan);
-    }
-    this.#rejectForkSourceWrites(plans);
-    await this.#validateOwners();
-    for (const [id, task] of this.#tasksById) {
-      if (task.write?.kind !== "replace")
-        continue;
-      const committed = await this.#committedTask(id);
-      if (committed === void 0)
-        throw new Error(`Task ${id} does not exist`);
-      if (committed.state.status === "terminal")
-        throw new Error(`Task ${id} is already terminal`);
-      if (committed.conversationId !== task.write.record.conversationId) {
-        throw new Error(`Task ${id} cannot change conversations`);
-      }
-    }
-    const terminalTaskIds = /* @__PURE__ */ new Set();
-    for (const task of this.#tasksById.values()) {
-      if (task.write?.record.state.status === "terminal")
-        terminalTaskIds.add(task.write.record.id);
-    }
-    if (terminalTaskIds.size > 0) {
-      const retiring = /* @__PURE__ */ new Set();
-      for (const plan of plans) {
-        const scope = plan.record.scope;
-        if (scope.kind !== "task" || !terminalTaskIds.has(scope.taskId))
-          continue;
-        plan.retire = true;
-        retiring.add(plan.record.id);
-      }
-      for (const taskId of terminalTaskIds) {
-        if (this.#tasksById.get(taskId)?.write?.kind === "create")
-          continue;
-        let cursor;
-        do {
-          const page2 = await storage.scanDocuments({ scope: { kind: "task", taskId }, at: "current" }, INTERNAL_SCAN_PAGE_SIZE, cursor, this.#context);
-          for (const record of page2.items) {
-            if (retiring.has(record.id))
-              continue;
-            plans.push({ addressId: addressId(record), record, retire: true });
-            retiring.add(record.id);
-          }
-          cursor = page2.next;
-        } while (cursor !== void 0);
-      }
-    }
-    for (const plan of plans) {
-      if (!publishes(plan))
-        continue;
-      const scope = plan.record.scope;
-      if (scope.kind === "conversation")
-        plan.conversationId = scope.conversationId;
-      if (scope.kind !== "task")
-        continue;
-      const task = this.#taskEntry(scope.taskId);
-      if (task.publicationConversationId === void 0) {
-        const current = await this.#currentTask(scope.taskId);
-        if (current !== void 0)
-          task.publicationConversationId = current.conversationId;
-      }
-      plan.conversationId = task.publicationConversationId;
-    }
-    for (const { id, change } of this.#submissionChanges) {
-      const current = this.#submissions.get(id) ?? await storage.submission(id, this.#context);
-      if (current === void 0)
-        throw new Error(`Submission ${id} does not exist`);
-      const next = applySubmissionChange(current, change);
-      if (next !== current)
-        this.#submissions.set(id, next);
-    }
-    const writes = this.#writes;
-    for (const value of this.#submissions.values())
-      writes.push({ type: "submission", value });
-    for (const task of this.#tasksById.values()) {
-      if (task.write !== void 0)
-        writes.push({ type: "task", value: task.write.record });
-    }
-    for (const plan of plans) {
-      const change = plan.change;
-      if (plan.content?.type === "document.change" && plan.content.content.kind === "delta" && change?.loaded) {
-        const { prepared, version } = change;
-        const info = { deltasSinceBase: change.loaded.deltasSinceBase };
-        if (change.definition?.checkpointWhen?.(prepared.value, prepared.ops, info)) {
-          plan.content = { ...plan.content, content: { version, kind: "base", value: prepared.value } };
-        }
-      }
-      if (plan.content !== void 0)
-        writes.push(plan.content);
-      if (plan.retire)
-        writes.push({ type: "document.retire", id: plan.record.id });
-    }
-    return writes;
-  }
-  // ─── Helpers ────────────────────────────────────────────────────────────
-  /**
-   * New owned work needs a live owner, judged on the owner's final candidate: not `completing`, terminal, or
-   * abort-marked. A task therefore cannot create owned work in the commit that finishes it (spec §5.5).
-   */
-  async #validateOwners() {
-    const owners = [];
-    for (const write of this.#writes) {
-      if (write.type !== "conversation" || write.value.owner === void 0)
-        continue;
-      owners.push({ what: "Conversation owner task", taskId: write.value.owner.taskId });
-    }
-    for (const task of this.#tasksById.values()) {
-      const record = task.write?.kind === "create" ? task.write.record : void 0;
-      if (record?.owner !== void 0)
-        owners.push({ what: "Task owner", taskId: record.owner });
-    }
-    for (const { what, taskId } of owners) {
-      const task = await this.#currentTask(taskId);
-      if (task === void 0)
-        throw new Error(`${what} ${taskId} does not exist`);
-      if (task.state.status === "terminal" || task.state.status === "completing") {
-        throw new Error(`${what} ${taskId} is ${task.state.status}`);
-      }
-      if (task.abortRequested)
-        throw new Error(`${what} ${taskId} is abort-marked`);
-    }
-  }
-  #rejectForkSourceWrites(plans) {
-    for (const plan of plans) {
-      if (plan.content === void 0 && !plan.retire)
-        continue;
-      const record = plan.record;
-      if (this.#forkSourceDocumentIds.has(record.id)) {
-        throw new Error(`Cannot change fork source document ${record.id} in the fork transaction`);
-      }
-      const scope = plan.record.scope;
-      if (scope.kind === "conversation" && this.#forkSourceConversationIds.has(scope.conversationId) && record.scope.kind === "conversation" && record.fork === "current") {
-        throw new Error(`Cannot fork conversation ${scope.conversationId} while changing its current-policy documents`);
-      }
-    }
-  }
-  #abortChanges() {
-    for (const document of this.#documents)
-      document.change?.abort();
-  }
-  #assertOpen() {
-    if (this.#sealed)
-      throw new Error("Transaction has settled");
-  }
-  #assertTaskDocumentsOpen(resolved) {
-    const scope = resolved.address.scope;
-    if (scope.kind === "task" && this.#tasksById.get(scope.taskId)?.write?.record.state.status === "terminal") {
-      throw new Error(`Task ${scope.taskId} is terminal`);
-    }
-  }
-  /** Register an operation so callback settlement can reject and drain it. */
-  #track(operation) {
-    this.#pendingOperations.add(operation);
-    const settle2 = () => {
-      this.#pendingOperations.delete(operation);
-    };
-    operation.then(settle2, settle2);
-    return operation;
-  }
-  #read(method, read2) {
-    try {
-      this.#assertOpen();
-      if (this.#hasTableWrite)
-        throw new ReadAfterWrite(method);
-      return this.#track(read2());
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-  #write(write) {
-    try {
-      this.#assertOpen();
-      this.#hasTableWrite = true;
-      return this.#track(write());
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-  async #requireConversation(id) {
-    if (this.#createdConversationIds.has(id))
-      return;
-    if (await this.#host.storage.conversation(id, this.#context) === void 0) {
-      throw new Error(`Conversation ${id} does not exist`);
-    }
-  }
-  #taskEntry(id) {
-    let task = this.#tasksById.get(id);
-    if (task === void 0) {
-      task = {};
-      this.#tasksById.set(id, task);
-    }
-    return task;
-  }
-  /** Latest candidate task record, falling back to committed state; not a caller table read. */
-  async #currentTask(id) {
-    return this.#tasksById.get(id)?.write?.record ?? await this.#committedTask(id);
-  }
-  #committedTask(id) {
-    const task = this.#taskEntry(id);
-    task.committedRead ??= this.#host.storage.task(id, this.#context);
-    return task.committedRead;
-  }
-};
-function planDocument(document) {
-  const target = document.target;
-  if (target === void 0)
-    return void 0;
-  const plan = { addressId: document.addressId, retire: document.retireOnCommit };
-  switch (target.kind) {
-    case "created": {
-      const prepared = document.prepared;
-      const { record, version, tracker } = target;
-      const content = { version, kind: "base", value: prepared.value };
-      return {
-        ...plan,
-        record,
-        content: { type: "document.create", record, content },
-        change: { tracker, prepared, version }
-      };
-    }
-    case "fork-copy":
-      return {
-        ...plan,
-        record: target.record,
-        content: { type: "document.copy", record: target.record, source: target.source }
-      };
-    case "retire-only":
-      return { ...plan, record: target.record };
-    case "loaded": {
-      const loaded = target.document;
-      const definition = document.definition;
-      const prepared = document.prepared;
-      const version = definition.version;
-      const id = loaded.record.id;
-      const content = loaded.storedVersion < version ? { type: "document.change", id, content: { version, kind: "base", value: prepared.value } } : prepared.ops.length > 0 ? { type: "document.change", id, content: { version, kind: "delta", ops: prepared.ops } } : void 0;
-      const change = {
-        tracker: loaded.tracker,
-        prepared,
-        version,
-        loaded,
-        definition
-      };
-      return { ...plan, record: loaded.record, change, ...content === void 0 ? {} : { content } };
-    }
-  }
-}
-function publishes(plan) {
-  return plan.retire || plan.change?.loaded === void 0 || plan.content !== void 0;
-}
-
-// node_modules/@earendil-works/pi-durable/dist/session/session.js
-var SessionImpl = class {
-  #storage;
-  #documents = /* @__PURE__ */ new Map();
-  #commitListeners = /* @__PURE__ */ new Set();
-  #closeListeners = /* @__PURE__ */ new Set();
-  #host;
-  #tail = Promise.resolve();
-  #closing;
-  #poison;
-  constructor(storage) {
-    this.#storage = storage;
-    this.#host = {
-      storage,
-      cached: (id) => this.#documents.get(id),
-      load: (definition, addressId2, address, context) => this.#loadDocument(definition, addressId2, address, context),
-      install: (document) => {
-        this.#documents.set(document.addressId, document);
-      },
-      evict: (id, recordId) => {
-        if (this.#documents.get(id)?.record.id === recordId)
-          this.#documents.delete(id);
-      },
-      conversationCreated: (tx, record) => this.conversationCreated(tx, record)
-    };
-  }
-  commit(change, context) {
-    return this.commitWith(change, context);
-  }
-  /**
-   * Internal commit exposing the concrete transaction and its internal operations, such as the reserved-ID root
-   * bootstrap and task replacement. `scope` sets the default `tx.createTask()` conversation and the task attributed to
-   * appended entries.
-   */
-  commitWith(change, context, scope) {
-    try {
-      this.#assertUsable();
-    } catch (error) {
-      return Promise.reject(error);
-    }
-    return this.#enqueue(() => this.#runCommit(change, context, scope));
-  }
-  /** Internal: run a read-only job on the mutation line so multi-read derivations observe one committed state. */
-  readOnLine(job) {
-    try {
-      this.#assertUsable();
-    } catch (error) {
-      return Promise.reject(error);
-    }
-    return this.#enqueue(async () => {
-      this.#assertHealthy();
-      return job();
-    });
-  }
-  /**
-   * Internal: a conversation document's current incarnation and value, for a job already running on the line (see
-   * `readOnLine()`). Absent documents are `undefined`.
-   */
-  async conversationDocumentOnLine(token, conversationId, context) {
-    const definition = token.definition;
-    const resolved = resolveAddress(definition, [conversationId, context]);
-    const loaded = await this.#loadDocument(definition, resolved.id, resolved.address, context);
-    if (loaded === void 0)
-      return void 0;
-    checkRecordScope(definition, loaded.record);
-    checkRecordVersion(definition, loaded.record, loaded.storedVersion);
-    return { record: loaded.record, version: loaded.valueVersion, value: loaded.tracker.value };
-  }
-  async snapshot(token, ...args) {
-    this.#assertUsable();
-    const definition = token.definition;
-    const resolved = resolveAddress(definition, args);
-    const context = args[resolved.nextArgument];
-    const cached = this.#documents.get(resolved.id);
-    const loaded = cached?.valueVersion === definition.version ? cached : await this.#enqueue(async () => {
-      this.#assertHealthy();
-      return this.#loadDocument(definition, resolved.id, resolved.address, context);
-    });
-    if (loaded === void 0)
-      return void 0;
-    checkRecordScope(definition, loaded.record);
-    checkRecordVersion(definition, loaded.record, loaded.storedVersion);
-    return loaded.tracker.value;
-  }
-  documentState(token, ...args) {
-    try {
-      this.#assertUsable();
-      const definition = token.definition;
-      const resolved = resolveAddress(definition, args);
-      const context = args[resolved.nextArgument];
-      return this.#enqueue(async () => {
-        this.#assertHealthy();
-        const loaded = await this.#loadDocument(definition, resolved.id, resolved.address, context);
-        if (loaded === void 0)
-          return void 0;
-        const { observer: source, detach } = this.#attachDocument(definition, loaded, (value, release) => new CommittedStateSource(value, release));
-        try {
-          return replicatedState(source);
-        } catch (error) {
-          detach();
-          throw error;
-        }
-      });
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }
-  async watchDoc(token, ...args) {
-    this.#assertUsable();
-    const definition = token.definition;
-    const resolved = resolveAddress(definition, args);
-    const context = args[resolved.nextArgument];
-    const signal = context.abortSignal;
-    let cancelled = signal?.aborted ?? false;
-    const markCancelled = () => {
-      cancelled = true;
-    };
-    signal?.addEventListener("abort", markCancelled, { once: true });
-    try {
-      const watch = await this.#enqueue(async () => {
-        this.#assertHealthy();
-        if (cancelled)
-          throw cancellationError(signal);
-        const loaded = await this.#loadDocument(definition, resolved.id, resolved.address, context);
-        if (cancelled)
-          throw cancellationError(signal);
-        if (loaded === void 0)
-          return void 0;
-        return this.#attachDocument(definition, loaded, (value, release) => new CommittedWatch(value, release)).observer;
-      });
-      if (watch === void 0)
-        return void 0;
-      if (cancelled) {
-        watch.cancel();
-        throw cancellationError(signal);
-      }
-      if (signal !== void 0)
-        watch.observeCancellation(signal);
-      return watch;
-    } finally {
-      signal?.removeEventListener("abort", markCancelled);
-    }
-  }
-  async snapshotAsOf(token, ...args) {
-    this.#assertUsable();
-    const definition = token.definition;
-    const resolved = resolveAddress(definition, args);
-    if (resolved.address.scope.kind !== "conversation") {
-      throw new TypeError("Session.snapshotAsOf() requires a conversation document");
-    }
-    const conversationId = resolved.address.scope.conversationId;
-    const atValue = args[resolved.nextArgument];
-    if (typeof atValue !== "number" || !Number.isSafeInteger(atValue)) {
-      throw new TypeError("Session.snapshotAsOf() requires an entry ID");
-    }
-    const at = idFromNumber(atValue);
-    const context = args[resolved.nextArgument + 1];
-    return this.#enqueue(async () => {
-      this.#assertHealthy();
-      const storedEntry = await this.#storage.entry(conversationId, at, context);
-      if (storedEntry === void 0) {
-        throw new Error(`Entry ${at} is not visible from conversation ${conversationId}`);
-      }
-      const address = {
-        ...resolved.address,
-        scope: { kind: "conversation", conversationId: storedEntry.entry.conversationId }
-      };
-      const record = await this.#storage.findDocument(address, storedEntry.commitSeq, context);
-      if (record === void 0)
-        return void 0;
-      const stored = await this.#storage.document(record.id, storedEntry.commitSeq, context);
-      if (stored === void 0) {
-        throw new Error(`Historical document ${record.id} (${record.kind}) cannot be read`);
-      }
-      return materializeDocument(definition, stored);
-    });
-  }
-  close(context) {
-    if (this.#closing === void 0) {
-      const cleanup = withoutAbortSignal(context);
-      this.#closing = Promise.resolve().then(() => this.beforeClose()).then(() => this.#enqueue(async () => {
-        this.#commitListeners.clear();
-        this.#documents.clear();
-        await this.#storage.close(cleanup);
-      }));
-      const listeners = [...this.#closeListeners];
-      this.#closeListeners.clear();
-      for (const listener of listeners)
-        listener();
-    }
-    return awaitWithContext(this.#closing, context);
-  }
-  /**
-   * Runs inside every transaction that creates or forks a conversation, after the conversation record is staged. A
-   * plain Session stages nothing; a Harness stages its built-in documents.
-   */
-  conversationCreated(_tx, _record) {
-    return Promise.resolve();
-  }
-  /** Runs after close seals admission and before the line closes Storage; must not reject. */
-  beforeClose() {
-    return Promise.resolve();
-  }
-  /** Register a synchronous post-adoption listener. It must not throw, block, or call Session operations. */
-  subscribeCommits(listener) {
-    this.#assertUsable();
-    this.#commitListeners.add(listener);
-    return () => this.#commitListeners.delete(listener);
-  }
-  /** Register a listener called synchronously when close begins. It must not throw, block, or call Session operations. */
-  subscribeClose(listener) {
-    this.#assertUsable();
-    this.#closeListeners.add(listener);
-    return () => this.#closeListeners.delete(listener);
-  }
-  /** Drop every loaded tracker on the mutation line; later access cold-loads from Storage. */
-  unloadDocuments() {
-    return this.#enqueue(async () => {
-      this.#documents.clear();
-    });
-  }
-  async #runCommit(change, context, scope) {
-    this.#assertHealthy();
-    context.abortSignal?.throwIfAborted();
-    const tx = new Transaction(this.#host, context, scope);
-    let result;
-    try {
-      result = await change(tx);
-    } catch (error) {
-      await tx.settleFailure();
-      throw error;
-    }
-    const writes = await tx.settleSuccess();
-    if (writes.length === 0) {
-      tx.discard();
-      return result;
-    }
-    let seq;
-    try {
-      seq = await this.#storage.commit(writes, withoutAbortSignal(context));
-    } catch (error) {
-      tx.discard();
-      if (!(error instanceof StorageRejected))
-        this.#poison = { error };
-      throw error;
-    }
-    let documents;
-    try {
-      documents = tx.adopt(seq);
-    } catch (error) {
-      this.#poison = { error };
-      throw error;
-    }
-    this.#publish(seq, writes, documents, context);
-    return result;
-  }
-  #publish(seq, writes, documents, context) {
-    if (this.#commitListeners.size === 0)
-      return;
-    const changes = [];
-    for (const write of writes) {
-      switch (write.type) {
-        case "conversation":
-        case "entry":
-        case "task":
-        case "submission":
-          changes.push(write);
-      }
-    }
-    for (const document of documents)
-      changes.push(document);
-    const publication = { seq, changes };
-    for (const listener of [...this.#commitListeners])
-      listener(publication, context);
-  }
-  /**
-   * Attach an observer to one committed incarnation: check the definition, then forward this incarnation's committed
-   * changes and close. `detach` removes both subscriptions.
-   */
-  #attachDocument(definition, loaded, create) {
-    checkRecordScope(definition, loaded.record);
-    checkRecordVersion(definition, loaded.record, loaded.storedVersion);
-    let unsubscribeCommit = () => {
-    };
-    let unsubscribeClose = () => {
-    };
-    const detach = () => {
-      unsubscribeCommit();
-      unsubscribeClose();
-    };
-    const observer = create(loaded.tracker.value, detach);
-    const observed = { version: loaded.valueVersion };
-    unsubscribeCommit = this.subscribeCommits((publication, context) => {
-      for (const change of publication.changes) {
-        if (change.type !== "document" || change.record.id !== loaded.record.id)
-          continue;
-        const frameContext = observer instanceof CommittedStateSource ? withoutAbortSignal(context) : context;
-        const ops = observedOperations(observed, change);
-        if (ops.length === 0)
-          continue;
-        observer.advance(change.value, ops, frameContext);
-      }
-    });
-    unsubscribeClose = this.subscribeClose(() => observer.closeSession());
-    return { observer, detach };
-  }
-  async #loadDocument(definition, addressId2, address, context) {
-    const cached = this.#documents.get(addressId2);
-    if (cached?.valueVersion === definition.version)
-      return cached;
-    if (cached !== void 0)
-      this.#documents.delete(addressId2);
-    const record = await this.#storage.findDocument(address, "current", context);
-    if (record === void 0)
-      return void 0;
-    const stored = await this.#storage.document(record.id, "current", context);
-    if (stored === void 0)
-      throw new Error(`Current document ${record.id} (${record.kind}) cannot be read`);
-    const value = materializeDocument(definition, stored);
-    const loaded = {
-      addressId: addressId2,
-      record: stored.record,
-      storedVersion: stored.version,
-      valueVersion: definition.version,
-      deltasSinceBase: stored.deltasSinceBase,
-      tracker: track(value)
-    };
-    this.#documents.set(addressId2, loaded);
-    return loaded;
-  }
-  #enqueue(job) {
-    const run2 = this.#tail.then(job);
-    this.#tail = run2.then(() => void 0, () => void 0);
-    return run2;
-  }
-  #assertUsable() {
-    if (this.#closing !== void 0)
-      throw new Error("Session is closed");
-    this.#assertHealthy();
-  }
-  #assertHealthy() {
-    if (this.#poison !== void 0) {
-      throw new Error("Session is poisoned by a failed commit after storage admission; reopen it", {
-        cause: this.#poison.error
-      });
-    }
-  }
-};
-function observedOperations(observed, change) {
-  if (change.value === null)
-    return RETIREMENT_OPERATIONS;
-  if (change.version === observed.version)
-    return change.ops;
-  observed.version = change.version;
-  return [["r", change.value]];
-}
-function cancellationError(signal) {
-  return signal.reason instanceof Error ? signal.reason : new DOMException("The operation was aborted", "AbortError");
 }
 
 // node_modules/@earendil-works/pi-durable/dist/harness/registry.js
@@ -42022,8 +43054,17 @@ function createRegistry() {
 
 // node_modules/@earendil-works/pi-durable/dist/harness/scheduler.js
 var SCAN_PAGE_SIZE3 = 256;
-var MAX_TIMER_DELAY = 2147483647;
+var MAX_TIMER_DELAY2 = 2147483647;
 var LIVE_STATUSES = ["pending", "running", "waiting", "completing"];
+function conversationNode(id) {
+  return `c${id}`;
+}
+function conversationOf(node) {
+  return Number(node.slice(1));
+}
+function parentNode(node) {
+  return node.owner ?? conversationNode(node.conversationId);
+}
 var TaskScheduler = class {
   #session;
   #storage;
@@ -42039,24 +43080,57 @@ var TaskScheduler = class {
   #conversation;
   #context;
   #live = /* @__PURE__ */ new Map();
+  /**
+   * Context range last read through a task runtime, per conversation: a later read, by any of its tasks, scans only
+   * newer entries. `idleSince` is the Harness time it was first seen idle. Derived and never persisted; dropped at the
+   * first idle check after `settings.contextRetentionMs` of idleness, and at close.
+   */
+  #contexts = /* @__PURE__ */ new Map();
+  /** Timer for the earliest expiry of an idle context, only where timers can be unreferenced (see `#scheduleExpiry`). */
+  #expiry;
   #invocations = /* @__PURE__ */ new Map();
   #taskWaiters = new Waiters();
   /** Idle waiters by conversation; `undefined` waits for the whole Harness. */
   #idleWaiters = new Waiters();
   /** Definition whose migration failed per task; retried only once the registry resolves another definition. */
   #failedMigrations = /* @__PURE__ */ new Map();
-  /** Owner task of each loaded conversation, `null` when ownerless. */
+  /** Owner task of each known conversation, `null` when ownerless. */
   #edges = /* @__PURE__ */ new Map();
-  /** Tasks that own a loaded conversation; their nodes stay in `#settled` once terminal. */
-  #conversationOwners = /* @__PURE__ */ new Set();
-  /** Ownership fields of terminal tasks that walks pass through. */
+  /** Ownership fields of the known terminal tasks, which walks pass through. */
   #settled = /* @__PURE__ */ new Map();
+  /**
+   * Ended tasks and conversations found unneeded, dropped by `#sweep()` at the end of the commit's publication unless
+   * needed again by then: a chain load installs nodes before the work below them is listed.
+   */
+  #dropQueue = /* @__PURE__ */ new Set();
+  /**
+   * The tree downward around live work: each node's child nodes that are live tasks or have nodes listed below them.
+   * A conversation's parent is its owner task; ownerless ones with work are in `#roots`.
+   */
+  #below = /* @__PURE__ */ new Map();
+  #roots = /* @__PURE__ */ new Set();
+  /** Known tasks whose chain may not be loaded; every other known task's chain is, and stays, loaded. */
+  #unloaded = /* @__PURE__ */ new Set();
+  /** Live tasks with cancellation intent, the sources of abort cascades (spec §5.4). */
+  #intent = /* @__PURE__ */ new Set();
+  /** Live tasks that are not `completing`, the candidates of a reservation pass; ones found waiting leave it. */
+  #runnable = /* @__PURE__ */ new Set();
+  /** `completing` tasks the next finalize pass checks: those that started holding, and holders of ended work. */
+  #finalizeChecks = /* @__PURE__ */ new Set();
+  /** Live waiting tasks by each task in their `on`. */
+  #waiters = /* @__PURE__ */ new Map();
   /**
    * `failFast` waiters the next reconcile checks for a failed task in `on`: at open, when they start waiting, and when
    * one of their tasks fails.
    */
   #failFastChecks = /* @__PURE__ */ new Set();
+  /**
+   * Live tasks with `abandonOnRestart` found at open, from an earlier Harness. The first reservation pass abort-marks
+   * them with reason `restart`, so nothing of them or below them runs a phase again.
+   */
+  #abandoned = /* @__PURE__ */ new Set();
   #reconcileScheduled = false;
+  #sweepScheduled = false;
   #cascadePending = false;
   #unsubscribeRegistry = () => {
   };
@@ -42081,7 +43155,7 @@ var TaskScheduler = class {
   }
   /** Load live tasks and change surviving `running` tasks back to `pending`. Dispatches nothing. */
   async open(context) {
-    this.#session.subscribeCommits((publication) => this.#observe(publication));
+    this.#session.observeCommits((publication) => this.#observe(publication));
     this.#session.subscribeClose(() => this.#seal());
     this.#unsubscribeRegistry = this.#registry.subscribe(() => this.#kick());
     await this.#session.commitWith(async (tx) => {
@@ -42091,7 +43165,9 @@ var TaskScheduler = class {
       }
       for (const records of scans) {
         for (const record of records) {
-          this.#live.set(record.id, record);
+          this.#track(void 0, record);
+          if (record.abandonOnRestart === true)
+            this.#abandoned.add(record.id);
           if (record.state.status === "running") {
             tx.setTask(withState(record, { status: "pending", checkpoint: record.state.checkpoint }));
           }
@@ -42109,16 +43185,23 @@ var TaskScheduler = class {
     this.#enabled = true;
     this.#kick();
   }
-  /** Wait for every invocation signalled by `#seal()`. Writes nothing. */
+  /**
+   * Signal every invocation and wait for them; writes nothing. Close calls this after every close listener has run, so
+   * waits, watches, and streams a task holds end with the Session's reason, not as cancelled by its signal.
+   */
   async join() {
+    for (const invocation of this.#invocations.values())
+      invocation.controller.abort();
     await Promise.allSettled([...this.#invocations.values()].map((invocation) => invocation.done));
   }
   /**
    * Commit the abort mark, or settle a task that no registered definition can take as `orphaned` when nothing it owns
    * is live, then join the run invocation seen on the line; the commit listener signalled it. The abort invocation
-   * starts once the task's ordinary owned work is gone. A `completing` task is only marked.
+   * starts once the task's ordinary owned work is gone. A `completing` task is only marked. A request replaces a
+   * `restart` mark, so a task abandoned after a restart that waits for its definition is orphaned; with `keepRestart`,
+   * as for an owner's own cleanup, such a task keeps its mark and waits on.
    */
-  async abort(id, context) {
+  async abort(id, context, keepRestart = false) {
     const marked = await this.#session.commitWith(async (tx) => {
       const current = await tx.task(id);
       if (current === void 0)
@@ -42126,9 +43209,11 @@ var TaskScheduler = class {
       if (current.state.status === "terminal")
         return { result: "terminal" };
       const invocation = this.#invocations.get(id);
+      if (keepRestart && current.abortReason === "restart")
+        return { result: "marked" };
       if (invocation === void 0 && current.state.status !== "completing") {
         await this.#loadScopes(false);
-        if (!this.#ownedLive().has(id)) {
+        if (!this.#hasOwnedLive(id)) {
           const resolution = this.#resolve(current, this.#registry.snapshot());
           if (resolution.kind === "blocked") {
             await this.#terminate(tx, current, { status: "orphaned", reason: resolution.reason });
@@ -42136,18 +43221,19 @@ var TaskScheduler = class {
           }
         }
       }
-      if (!current.abortRequested)
-        tx.setTask({ ...current, abortRequested: true });
+      if (!current.abortRequested || current.abortReason !== void 0)
+        tx.setTask(withAbortMark(current));
       return { result: "marked", run: invocation?.mode === "run" ? invocation : void 0 };
     }, context);
-    if (marked.run !== void 0)
-      await awaitWithContext(marked.run.done, context);
+    if (marked.run !== void 0) {
+      await awaitWithContext(Promise.race([marked.run.done, this.#session.failed]), context);
+    }
     return marked.result;
   }
   async waitForTask(id, context) {
     const found = await this.#session.readOnLine(async () => {
       if (this.#closing)
-        throw closedError();
+        throw closedError(this.#session);
       if (this.#live.has(id))
         return { promise: this.#taskWaiters.add(id, context) };
       const record = await this.#storage.task(id, context);
@@ -42163,7 +43249,7 @@ var TaskScheduler = class {
    */
   waitForIdle(conversationId, context) {
     if (this.#closing)
-      return Promise.reject(closedError());
+      return Promise.reject(closedError(this.#session));
     if (this.#idle(conversationId))
       return Promise.resolve();
     this.#scheduleReconcile();
@@ -42179,14 +43265,13 @@ var TaskScheduler = class {
       const queued2 = await this.#loadScopes(true);
       const scope = { conversation: conversationId };
       const reached2 = [];
-      for (const record of this.#live.values()) {
-        if (record.background && !background)
+      const walk = this.#walkDown(conversationNode(conversationId), { crossBackground: background });
+      for (const { node, live } of walk) {
+        if (live === void 0 || node.background && !background)
           continue;
-        if (this.#inScope(parentOf(record), scope, background) !== true)
-          continue;
-        reached2.push(record.id);
-        if (!record.abortRequested)
-          tx.setTask({ ...record, abortRequested: true });
+        reached2.push(live.id);
+        if (!live.abortRequested || live.abortReason !== void 0)
+          tx.setTask(withAbortMark(live));
       }
       for (const id of queued2) {
         if (this.#inScope({ conversation: id }, scope, background) === true)
@@ -42205,6 +43290,11 @@ var TaskScheduler = class {
     const failed = [];
     let changed = false;
     for (const change of publication.changes) {
+      if (change.type === "conversation" && !this.#edges.has(change.value.id)) {
+        this.#setEdge(change.value.id, change.value.owner?.taskId ?? null);
+      }
+    }
+    for (const change of publication.changes) {
       if (change.type !== "task")
         continue;
       changed = true;
@@ -42212,12 +43302,10 @@ var TaskScheduler = class {
       const previous = this.#live.get(record.id);
       if (failedOutcome(record) && (previous === void 0 || !failedOutcome(previous)))
         failed.push(record.id);
+      this.#track(previous, record);
       if (record.state.status === "terminal") {
-        this.#live.delete(record.id);
         this.#failedMigrations.delete(record.id);
         this.#failFastChecks.delete(record.id);
-        if (this.#conversationOwners.has(record.id))
-          this.#settled.set(record.id, nodeOf(record));
         this.#taskWaiters.resolve(record.id, record);
         this.#scheduleReconcile();
         continue;
@@ -42228,6 +43316,8 @@ var TaskScheduler = class {
         if (invocation?.mode === "run")
           invocation.controller.abort();
       }
+      if (previous?.abortReason !== void 0 && record.abortReason === void 0)
+        this.#cascadePending = true;
       const status = record.state.status;
       if (status === "completing" && previous?.state.status !== "completing") {
         if (cancellationIntent(record))
@@ -42238,32 +43328,30 @@ var TaskScheduler = class {
         this.#failFastChecks.add(record.id);
         this.#scheduleReconcile();
       }
-      this.#live.set(record.id, record);
-      updated.push(record);
+      if (previous === void 0)
+        updated.push(record);
     }
     for (const id of failed) {
-      for (const record of this.#live.values()) {
-        const state3 = record.state;
-        if (state3.status === "waiting" && state3.policy === "failFast" && state3.on.includes(id)) {
-          this.#failFastChecks.add(record.id);
+      for (const waiter of this.#waiters.get(id) ?? []) {
+        const state3 = this.#live.get(waiter)?.state;
+        if (state3?.status === "waiting" && state3.policy === "failFast") {
+          this.#failFastChecks.add(waiter);
           this.#scheduleReconcile();
         }
       }
     }
     for (const change of publication.changes) {
-      if (change.type === "conversation" && !this.#edges.has(change.value.id)) {
-        this.#setEdge(change.value.id, change.value.owner?.taskId ?? null);
-      }
-    }
-    for (const change of publication.changes) {
       if (change.type !== "submission" || change.value.status !== "queued" || change.value.type !== "input")
         continue;
-      const up = { conversation: change.value.conversationId };
-      if (!this.#chainKnown(up) || this.#belowCancelled(up))
+      if (this.#intent.size === 0)
+        continue;
+      const conversation = change.value.conversationId;
+      if (!this.#known(conversationNode(conversation)) || this.#belowCancelled({ conversation })) {
         this.#cascadePending = true;
+      }
     }
     for (const record of updated) {
-      if (!this.#chainKnown(parentOf(record)))
+      if (this.#unloaded.has(record.id))
         this.#scheduleReconcile();
       else if (!record.background && !record.abortRequested && this.#belowCancelled(parentOf(record))) {
         this.#cascadePending = true;
@@ -42271,16 +43359,76 @@ var TaskScheduler = class {
     }
     if (this.#cascadePending)
       this.#scheduleReconcile();
+    this.#sweep();
     if (!changed)
       return;
-    this.#resolveIdleWaiters();
+    this.#settleIdle();
     this.#kick();
   }
-  #resolveIdleWaiters() {
+  /**
+   * `settings.contextRetentionMs`, or 0 when the host's settings throw. Kept contexts are only a cache, so dropping them
+   * is safe, while a throw here would escape commit listeners, reconciliation, and the expiry timer.
+   */
+  #contextRetentionMs() {
+    try {
+      return this.#settings().contextRetentionMs;
+    } catch (error) {
+      this.#report(error);
+      return 0;
+    }
+  }
+  /** Resolve idle waiters, and drop each kept context whose conversation has been idle for the retention period. */
+  #settleIdle() {
     for (const conversationId of this.#idleWaiters.keys()) {
       if (this.#idle(conversationId))
         this.#idleWaiters.resolve(conversationId);
     }
+    const now = this.#now();
+    const retention = this.#contextRetentionMs();
+    for (const [conversationId, kept] of this.#contexts) {
+      if (kept.idleSince !== void 0 && now - kept.idleSince >= retention) {
+        this.#contexts.delete(conversationId);
+      } else if (!this.#idle(conversationId)) {
+        kept.idleSince = void 0;
+      } else if (retention > 0) {
+        kept.idleSince ??= now;
+      } else {
+        this.#contexts.delete(conversationId);
+      }
+    }
+    this.#scheduleExpiry();
+  }
+  /**
+   * Run `#settleIdle()` when the earliest idle context expires. The timer is unreferenced, so it never keeps the process
+   * alive. Where timers cannot be unreferenced, as in Cloudflare Workers, none is kept: a pending timer could keep a
+   * Durable Object from being evicted, and eviction frees the contexts. There, task changes alone check expiry.
+   */
+  #scheduleExpiry() {
+    const retention = this.#contextRetentionMs();
+    let at;
+    for (const kept of this.#contexts.values()) {
+      if (kept.idleSince !== void 0 && (at === void 0 || kept.idleSince + retention < at)) {
+        at = kept.idleSince + retention;
+      }
+    }
+    if (this.#expiry !== void 0 && this.#expiry.at === at)
+      return;
+    if (this.#expiry !== void 0)
+      clearTimeout(this.#expiry.timer);
+    this.#expiry = void 0;
+    if (at === void 0 || this.#closing)
+      return;
+    const timer = setTimeout(() => {
+      this.#expiry = void 0;
+      this.#settleIdle();
+    }, Math.min(Math.max(0, at - this.#now()), MAX_TIMER_DELAY2));
+    const unref = timer.unref;
+    if (typeof unref !== "function") {
+      clearTimeout(timer);
+      return;
+    }
+    unref.call(timer);
+    this.#expiry = { at, timer };
   }
   // ─── Ownership ───────────────────────────────────────────────────────────
   #scheduleReconcile() {
@@ -42306,16 +43454,22 @@ var TaskScheduler = class {
         if (this.#closing)
           return;
         const queued2 = await this.#loadScopes(cascade);
-        const marked = /* @__PURE__ */ new Set();
-        const mark = (record) => {
-          if (record.abortRequested || marked.has(record.id))
+        const marks = /* @__PURE__ */ new Map();
+        const mark = (record, reason) => {
+          const staged = marks.get(record.id);
+          if (staged !== void 0 && staged.reason === void 0)
             return;
-          marked.add(record.id);
-          tx.setTask({ ...record, abortRequested: true });
+          if (record.abortRequested && (record.abortReason === void 0 || reason !== void 0))
+            return;
+          marks.set(record.id, { record, reason });
         };
-        for (const record of this.#live.values()) {
-          if (!record.background && this.#belowCancelled(parentOf(record)))
-            mark(record);
+        for (const id of this.#intent) {
+          const owner = this.#live.get(id);
+          const restart = owner.abortReason === "restart" && !failedOutcome(owner);
+          for (const { node, live } of this.#walkDown(id, { enter: (below) => !this.#intent.has(below) })) {
+            if (live !== void 0 && !node.background)
+              mark(live, restart ? "restart" : void 0);
+          }
         }
         for (const id of checks) {
           const waiter = this.#live.get(id);
@@ -42324,22 +43478,20 @@ var TaskScheduler = class {
           for (const member of waiter.state.on) {
             const record = this.#live.get(member);
             if (record !== void 0 && !failedOutcome(record))
-              mark(record);
+              mark(record, void 0);
           }
         }
+        for (const { record, reason } of marks.values())
+          tx.setTask(withAbortMark(record, reason));
         for (const id of queued2)
           if (this.#belowCancelled({ conversation: id }))
             await this.#withdrawInputs(tx, id);
         await this.#finalize(tx);
       }, this.#context);
     } catch (error) {
-      this.#cascadePending = true;
-      for (const id of checks)
-        this.#failFastChecks.add(id);
-      if (!this.#closing)
-        this.#report(error);
+      this.#failSession(error);
     }
-    this.#resolveIdleWaiters();
+    this.#settleIdle();
   }
   /** Whether any of `ids` holds or ended with an outcome other than `completed`. */
   async #anyFailed(ids) {
@@ -42356,52 +43508,77 @@ var TaskScheduler = class {
    * Harness cleanup here.
    */
   async #finalize(tx) {
-    for (; ; ) {
-      const overlay = overlayOf(tx);
-      const owned = this.#ownedLive(overlay);
-      const done = [...this.#liveRecords(overlay)].filter((record) => record.state.status === "completing" && !owned.has(record.id));
-      if (done.length === 0)
-        return;
-      for (const record of done) {
+    let round = [...this.#finalizeChecks];
+    this.#finalizeChecks.clear();
+    const done = /* @__PURE__ */ new Set();
+    const overlay = overlayOf(tx);
+    while (round.length > 0) {
+      const next = /* @__PURE__ */ new Set();
+      for (const id of round) {
+        const record = overlay.tasks.get(id) ?? this.#live.get(id);
+        if (record?.state.status !== "completing" || done.has(id))
+          continue;
+        if (this.#hasOwnedLive(id, overlay, done))
+          continue;
         const outcome = record.state.outcome;
-        tx.setTask(withState(record, { status: "terminal", outcome }));
+        const terminal = withState(record, { status: "terminal", outcome });
+        tx.setTask(terminal);
+        overlay.tasks.set(id, terminal);
+        done.add(id);
         if (outcome.status === "faulted" || outcome.status === "orphaned") {
           await this.#settleOutcome(tx, record, outcome);
         }
+        const above = this.#nearestLiveAbove(record, overlay);
+        if (above?.state.status === "completing")
+          next.add(above.id);
       }
+      round = [...next];
     }
   }
   /**
-   * Load the owner chains of every live task and, with `queued`, of every conversation with queued submissions, on the
-   * Session line; returns the latter. Reads committed Storage directly, so it may run inside a commit callback.
+   * Load the owner chains of the tasks in `#unloaded` and, with `queued`, of every conversation with queued inputs,
+   * on the Session line; returns the latter. Reads committed Storage directly, so it may run inside a commit callback.
    */
   async #loadScopes(queued2) {
-    for (const record of [...this.#live.values()]) {
-      if (!this.#chainKnown(parentOf(record)))
-        await this.#loadChain(parentOf(record));
+    for (const id of [...this.#unloaded]) {
+      if (this.#unloaded.has(id))
+        await this.#loadChain({ task: id });
     }
     if (!queued2)
       return [];
     const submissions = await scanAll((cursor) => this.#storage.scanSubmissions({ status: "queued" }, SCAN_PAGE_SIZE3, cursor, this.#context));
-    const conversations = [...new Set(submissions.map((submission) => submission.conversationId))];
+    const inputs = submissions.filter((submission) => submission.type === "input");
+    const conversations = [...new Set(inputs.map((submission) => submission.conversationId))];
     for (const id of conversations)
       await this.#loadChain({ conversation: id });
     return conversations;
   }
-  /** Load the owner edges and task nodes from `start` up to its ownerless root. */
+  /**
+   * Load the owner edges and task nodes from `start` up to its ownerless root. A known task outside `#unloaded` ends the
+   * walk, as its chain is loaded; the `#unloaded` tasks passed have a loaded chain afterwards. Loading a node can reveal
+   * a cancelled owner, so it makes the next reconcile derive cascade marks.
+   */
   async #loadChain(start, overlay) {
+    const passed = [];
     let at = start;
     while (at !== void 0) {
       if ("task" in at) {
-        let node = this.#node(at.task, overlay);
+        const id = at.task;
+        let node = this.#live.get(id) ?? this.#settled.get(id);
+        if (node === void 0 && overlay?.tasks.has(id) === true)
+          break;
+        if (node !== void 0 && !this.#unloaded.has(id))
+          break;
         if (node === void 0) {
-          const record = await this.#storage.task(at.task, this.#context);
+          const record = await this.#storage.task(id, this.#context);
           if (record === void 0)
             return;
           node = nodeOf(record);
           if (record.state.status === "terminal")
-            this.#settled.set(record.id, node);
+            this.#settle(id, node);
+          this.#scheduleReconcile();
         }
+        passed.push(id);
         at = parentOf(node);
       } else {
         let edge = this.#edge(at.conversation, overlay);
@@ -42409,15 +43586,192 @@ var TaskScheduler = class {
           const record = await this.#storage.conversation(at.conversation, this.#context);
           edge = record?.owner?.taskId ?? null;
           this.#setEdge(at.conversation, edge);
+          this.#scheduleReconcile();
         }
         at = edge === null ? void 0 : { task: edge };
       }
     }
+    for (const id of passed)
+      this.#unloaded.delete(id);
   }
   #setEdge(conversationId, owner) {
     this.#edges.set(conversationId, owner);
-    if (owner !== null)
-      this.#conversationOwners.add(owner);
+    this.#relist(conversationNode(conversationId));
+    this.#dropIfUnneeded(conversationNode(conversationId));
+  }
+  /** Know a terminal task a chain load read, so walks pass through it; its own chain is not loaded yet. */
+  #settle(id, node) {
+    this.#settled.set(id, node);
+    this.#unloaded.add(id);
+    this.#relist(id);
+    this.#dropIfUnneeded(id);
+  }
+  /** Queue an ended task or a conversation for the sweep when nothing is listed below it. */
+  #dropIfUnneeded(node) {
+    if (typeof node !== "string" && this.#live.has(node))
+      return;
+    if (this.#below.has(node))
+      return;
+    this.#dropQueue.add(node);
+    this.#scheduleSweep();
+  }
+  /**
+   * Sweep in a job of its own on the Session line, after the operation underway: a rejected commit, one with nothing to
+   * write, and a read publish nothing, so the sweep at the end of `#observe` would not run for what they loaded.
+   */
+  #scheduleSweep() {
+    if (this.#sweepScheduled || this.#closing)
+      return;
+    this.#sweepScheduled = true;
+    this.#session.readOnLine(async () => {
+      this.#sweepScheduled = false;
+      this.#sweep();
+    }).catch(() => {
+    });
+  }
+  /**
+   * Drop the queued nodes that are still unneeded: not live, nothing listed below. Runs once a publication is fully
+   * tracked, and as a job of its own on the line, never inside an operation: work a commit creates below a chain its
+   * own callback loaded keeps that chain. A flat loop: unlisting already queued every node on the way up that lost its
+   * last listed node.
+   */
+  #sweep() {
+    for (const node of this.#dropQueue) {
+      if (this.#below.has(node))
+        continue;
+      if (typeof node === "string") {
+        this.#edges.delete(conversationOf(node));
+        this.#roots.delete(conversationOf(node));
+      } else if (!this.#live.has(node)) {
+        this.#settled.delete(node);
+        this.#unloaded.delete(node);
+      }
+    }
+    this.#dropQueue.clear();
+  }
+  /**
+   * Bring the scheduler's sets in line with a task's committed record. A task that ended may free the nearest live task
+   * above it: one holding its outcome finalizes, an abort-marked one runs its abort handler; its waiters may run.
+   */
+  #track(previous, record) {
+    const id = record.id;
+    if (previous?.state.status === "waiting")
+      for (const on of previous.state.on)
+        deleteFrom(this.#waiters, on, id);
+    if (record.state.status === "terminal") {
+      const node = nodeOf(record);
+      this.#live.delete(id);
+      this.#intent.delete(id);
+      this.#runnable.delete(id);
+      this.#finalizeChecks.delete(id);
+      this.#settled.set(id, node);
+      this.#release(node);
+      for (const waiter of this.#waiters.get(id) ?? [])
+        this.#runnable.add(waiter);
+      this.#relist(id);
+      this.#dropIfUnneeded(id);
+      return;
+    }
+    this.#live.set(id, record);
+    if (previous === void 0) {
+      if (!this.#known(parentNode(record)))
+        this.#unloaded.add(id);
+      this.#relist(id);
+    }
+    if (cancellationIntent(record))
+      this.#intent.add(id);
+    else
+      this.#intent.delete(id);
+    if (record.state.status === "completing") {
+      this.#runnable.delete(id);
+      this.#finalizeChecks.add(id);
+    } else {
+      this.#runnable.add(id);
+    }
+    if (record.state.status === "waiting")
+      for (const on of record.state.on)
+        addTo(this.#waiters, on, id);
+  }
+  /** The nearest live task above ended ordinary work may be free now: one holding its outcome, or an aborting one. */
+  #release(node, overlay) {
+    const above = this.#nearestLiveAbove(node, overlay);
+    if (above?.state.status === "completing")
+      this.#finalizeChecks.add(above.id);
+    else if (above?.abortRequested === true)
+      this.#runnable.add(above.id);
+    return above;
+  }
+  /**
+   * List `start` under its parent node in `#below` while it is a live task or has nodes listed below it, and unlist it
+   * otherwise; then its parent, as far up as that changes. So `#below` holds exactly the tree around live work; a
+   * parent that loses its last listed node is queued for the sweep. A loop, as ownership chains can be deeper than the
+   * call stack.
+   */
+  #relist(start) {
+    let node = start;
+    for (; ; ) {
+      const needed = typeof node !== "string" && this.#live.has(node) || this.#below.has(node);
+      let parent;
+      if (typeof node === "string") {
+        parent = this.#edges.get(conversationOf(node));
+      } else {
+        const known = this.#live.get(node) ?? this.#settled.get(node);
+        if (known === void 0)
+          return;
+        parent = parentNode(known);
+      }
+      if (parent === void 0)
+        return;
+      if (parent === null) {
+        const root = conversationOf(node);
+        if (needed)
+          this.#roots.add(root);
+        else
+          this.#roots.delete(root);
+        return;
+      }
+      if (this.#below.get(parent)?.has(node) === true === needed)
+        return;
+      if (needed) {
+        const first = !this.#below.has(parent);
+        addTo(this.#below, parent, node);
+        if (!first)
+          return;
+      } else {
+        deleteFrom(this.#below, parent, node);
+        if (this.#below.has(parent))
+          return;
+        this.#dropIfUnneeded(parent);
+      }
+      node = parent;
+    }
+  }
+  /**
+   * The nearest live task above ended ordinary work `node`, in the overlay's view: the one that work held, if any. Work
+   * at or below a background task holds nothing above it.
+   */
+  #nearestLiveAbove(node, overlay) {
+    for (let current = node; !current.background; ) {
+      const owner = current.owner ?? this.#edge(current.conversationId, overlay);
+      if (owner === void 0 || owner === null)
+        return void 0;
+      const record = overlay?.tasks.get(owner) ?? this.#live.get(owner);
+      if (record !== void 0 && record.state.status !== "terminal")
+        return record;
+      const above = record ?? this.#settled.get(owner);
+      if (above === void 0)
+        return void 0;
+      current = above;
+    }
+    return void 0;
+  }
+  /** Whether the chain above `node` is loaded, without walking: known tasks outside `#unloaded` have a loaded chain. */
+  #known(node) {
+    if (typeof node !== "string") {
+      return (this.#live.has(node) || this.#settled.has(node)) && !this.#unloaded.has(node);
+    }
+    const owner = this.#edges.get(conversationOf(node));
+    return owner === null || owner !== void 0 && this.#known(owner);
   }
   /** Owner task of a conversation, `null` when ownerless, `undefined` while not loaded. */
   #edge(id, overlay) {
@@ -42449,51 +43803,95 @@ var TaskScheduler = class {
       }
     }
   }
-  /** Whether every owner above `start` is loaded. */
-  #chainKnown(start, overlay) {
-    for (const step of this.#above(start, overlay))
-      if ("unknown" in step)
-        return false;
-    return true;
-  }
-  /** Live records, with the overlay's candidates replacing committed ones; terminal candidates are gone. */
-  *#liveRecords(overlay) {
-    for (const record of this.#live.values()) {
-      const candidate = overlay?.tasks.get(record.id) ?? record;
-      if (candidate.state.status !== "terminal")
-        yield candidate;
-    }
-    if (overlay === void 0)
-      return;
-    for (const record of overlay.tasks.values()) {
-      if (!this.#live.has(record.id) && record.state.status !== "terminal")
-        yield record;
+  /**
+   * The tasks below `start` that a walk down reaches: those `#below` lists and, under an overlay, the commit's new tasks,
+   * with its candidates in place of committed records. Background tasks are reached but not entered, unless
+   * `crossBackground`, and neither are the tasks `enter` rejects. A loop, as chains can be deeper than the call stack.
+   */
+  *#walkDown(start, options = {}) {
+    const { overlay, crossBackground = false, enter } = options;
+    const links = overlay === void 0 ? void 0 : this.#links(overlay);
+    const pending = [start];
+    for (let at = pending.pop(); at !== void 0; at = pending.pop()) {
+      for (const children of [this.#below.get(at), links?.get(at)]) {
+        for (const child of children ?? []) {
+          if (typeof child === "string") {
+            pending.push(child);
+            continue;
+          }
+          const record = overlay?.tasks.get(child) ?? this.#live.get(child);
+          const node = record ?? this.#settled.get(child);
+          if (node === void 0)
+            continue;
+          const live = record !== void 0 && record.state.status !== "terminal" ? record : void 0;
+          yield { id: child, node, live };
+          if ((crossBackground || !node.background) && (enter === void 0 || enter(child)))
+            pending.push(child);
+        }
+      }
     }
   }
   /**
-   * Every task with live ordinary owned work (spec §5.5), mapped to that work: each live non-background task counts for
-   * every owner task above it up to and including the first background one. Owner chains must be loaded.
+   * The links walks down need for the commit's new tasks: each one under its parent node, then each node above it that
+   * `#below` does not list yet, until one it lists, a live task (always listed), or the chain's end.
    */
-  #ownedLive(overlay) {
-    const owned = /* @__PURE__ */ new Map();
-    for (const record of this.#liveRecords(overlay)) {
-      if (record.background)
+  #links(overlay) {
+    if (overlay.links !== void 0)
+      return overlay.links;
+    const links = /* @__PURE__ */ new Map();
+    for (const record of overlay.tasks.values()) {
+      if (this.#live.has(record.id) || this.#settled.has(record.id))
         continue;
-      for (const step of this.#above(parentOf(record), overlay)) {
-        if ("unknown" in step)
+      let child = record.id;
+      let parent = parentNode(record);
+      while (parent !== void 0 && parent !== null && links.get(parent)?.has(child) !== true) {
+        addTo(links, parent, child);
+        if (typeof parent !== "string" && (this.#live.has(parent) || overlay.tasks.has(parent)))
           break;
-        if (!("task" in step))
-          continue;
-        const below = owned.get(step.task);
-        if (below === void 0)
-          owned.set(step.task, [record.id]);
-        else
-          below.push(record.id);
-        if (step.node.background)
+        let above;
+        if (typeof parent === "string") {
+          above = this.#edge(conversationOf(parent), overlay);
+        } else {
+          const fields = this.#settled.get(parent);
+          above = fields === void 0 ? void 0 : parentNode(fields);
+        }
+        if (above !== void 0 && above !== null && this.#below.get(above)?.has(parent) === true)
           break;
+        child = parent;
+        parent = above;
       }
     }
-    return owned;
+    overlay.links = links;
+    return links;
+  }
+  /**
+   * The live ordinary owned work of `owner` (spec §5.5): the live non-background tasks below it that a walk down reaches
+   * without entering a background task; with `first`, only the first. Candidates in `overlay` replace committed records;
+   * the walk does not enter tasks in `done`, which have none. Owner chains must be loaded.
+   */
+  #ownedLive(owner, options = {}) {
+    const { overlay, first = false, done } = options;
+    const found = [];
+    const walk = this.#walkDown(owner, {
+      ...overlay === void 0 ? {} : { overlay },
+      ...done === void 0 ? {} : { enter: (id) => !done.has(id) }
+    });
+    for (const { id, node, live } of walk) {
+      if (live === void 0 || node.background)
+        continue;
+      found.push(id);
+      if (first)
+        break;
+    }
+    return found;
+  }
+  #hasOwnedLive(owner, overlay, done) {
+    const options = {
+      first: true,
+      ...overlay === void 0 ? {} : { overlay },
+      ...done === void 0 ? {} : { done }
+    };
+    return this.#ownedLive(owner, options).length > 0;
   }
   /**
    * Whether ordinary traversal from `scope` reaches `start`: walking up reaches the scope's conversation, or an
@@ -42518,28 +43916,45 @@ var TaskScheduler = class {
    * background owner without it. Terminal owners never cascade (spec §5.4).
    */
   #belowCancelled(start) {
+    return this.#cancellingOwner(start) !== void 0;
+  }
+  /** The nearest live owner above `start` whose cancellation intent reaches it, if any; see `#belowCancelled`. */
+  #cancellingOwner(start) {
+    if (this.#intent.size === 0)
+      return void 0;
     for (const step of this.#above(start)) {
       if ("unknown" in step)
-        return false;
+        return void 0;
       if (!("task" in step))
         continue;
       const live = this.#live.get(step.task);
       if (live !== void 0 && cancellationIntent(live))
-        return true;
+        return live;
       if (step.node.background)
-        return false;
+        return void 0;
     }
-    return false;
+    return void 0;
   }
-  /** Close listener: runs synchronously once admission is sealed, before `join()`. */
+  /** Fail the Session, which reports it, for a throw in one of the scheduler's own commits; ignored once closing. */
+  #failSession(error) {
+    if (!this.#closing)
+      this.#session.fail(error);
+  }
+  /** Close listener: runs synchronously once admission is sealed, before `join()`, or when the Session fails. */
   #seal() {
     this.#closing = true;
-    this.#unsubscribeRegistry();
-    const error = closedError();
+    try {
+      this.#unsubscribeRegistry();
+    } catch (error2) {
+      this.#report(error2);
+    }
+    const error = closedError(this.#session);
     this.#taskWaiters.rejectAll(error);
     this.#idleWaiters.rejectAll(error);
-    for (const invocation of this.#invocations.values())
-      invocation.controller.abort();
+    this.#contexts.clear();
+    if (this.#expiry !== void 0)
+      clearTimeout(this.#expiry.timer);
+    this.#expiry = void 0;
   }
   #kick() {
     this.#dirty = true;
@@ -42556,35 +43971,56 @@ var TaskScheduler = class {
           this.#start(reservation);
       }
     } catch (error) {
-      if (!this.#closing)
-        this.#report(error);
+      this.#failSession(error);
     } finally {
       this.#draining = false;
       if (this.#dirty)
         this.#kick();
     }
   }
-  /** Reserve every eligible task in one commit; orphan abort-marked tasks no definition can take. */
+  /**
+   * Reserve every eligible task in one commit; orphan abort-marked tasks no definition can take, unless abandoned after
+   * a restart. The first pass after open only abort-marks the abandoned tasks, so later passes see the marks.
+   */
   async #reserve() {
     const reservations = [];
+    let abandoned = [];
     try {
       await this.#session.commitWith(async (tx) => {
         if (!this.#enabled || this.#closing)
           return;
+        for (const id of this.#abandoned) {
+          const record = this.#live.get(id);
+          if (record !== void 0 && !record.abortRequested)
+            tx.setTask(withAbortMark(record, "restart"));
+        }
+        if (this.#abandoned.size > 0) {
+          abandoned = [...this.#abandoned];
+          return;
+        }
         await this.#loadScopes(false);
-        const owned = this.#ownedLive();
         let snapshot;
-        for (const record of [...this.#live.values()]) {
-          if (this.#invocations.has(record.id) || this.#waitingOn(record, owned).length > 0)
+        for (const id of [...this.#runnable]) {
+          const record = this.#live.get(id);
+          if (record === void 0 || record.state.status === "completing" || this.#invocations.has(id)) {
+            this.#runnable.delete(id);
             continue;
-          if (record.state.status === "completing")
+          }
+          if (this.#waitingOn(record, true).length > 0) {
+            this.#runnable.delete(id);
             continue;
+          }
           const runnable = record;
           const mode = record.abortRequested ? "abort" : "run";
+          if (mode === "run" && !record.background && this.#belowCancelled(parentOf(record))) {
+            this.#cascadePending = true;
+            this.#scheduleReconcile();
+            continue;
+          }
           snapshot ??= this.#registry.snapshot();
           const resolution = this.#resolve(runnable, snapshot);
           if (resolution.kind === "blocked") {
-            if (mode === "abort") {
+            if (mode === "abort" && record.abortReason === void 0) {
               await this.#terminate(tx, record, { status: "orphaned", reason: resolution.reason });
             }
             continue;
@@ -42595,6 +44031,7 @@ var TaskScheduler = class {
               checkpoint: resolution.record.state.checkpoint
             }));
           }
+          this.#runnable.delete(id);
           const invocation = this.#createInvocation(record, mode);
           reservations.push({ invocation, task: resolution.task, snapshot });
         }
@@ -42602,22 +44039,30 @@ var TaskScheduler = class {
     } catch (error) {
       for (const { invocation } of reservations) {
         this.#invocations.delete(invocation.taskId);
+        this.#runnable.add(invocation.taskId);
         invocation.finish();
       }
       throw error;
     }
+    for (const id of abandoned)
+      this.#abandoned.delete(id);
+    if (abandoned.length > 0)
+      this.#dirty = true;
     return reservations;
   }
   /**
    * Live tasks a task waits for before its next invocation: its live ordinary owned work when abort-marked, since
    * abort runs bottom-up, otherwise the live part of the `on` of a wait.
    */
-  #waitingOn(record, owned) {
+  #waitingOn(record, first = false) {
     if (record.abortRequested)
-      return owned.get(record.id) ?? [];
+      return this.#ownedLive(record.id, { first });
     if (record.state.status !== "waiting")
       return [];
-    return record.state.on.filter((id) => this.#live.has(id));
+    if (!first)
+      return record.state.on.filter((id) => this.#live.has(id));
+    const live = record.state.on.find((id) => this.#live.has(id));
+    return live === void 0 ? [] : [live];
   }
   /** Resolve the record's definition by kind, migrating an older stored version. */
   #resolve(record, snapshot) {
@@ -42653,6 +44098,21 @@ var TaskScheduler = class {
       return { reason: "migration_failed", error: failed.error };
     return { task, migrates: true };
   }
+  /** Sizes of the ownership indexes, for tests that bound the scheduler's memory. */
+  get indexSizes() {
+    let below = 0;
+    for (const children of this.#below.values())
+      below += children.size;
+    return {
+      live: this.#live.size,
+      settled: this.#settled.size,
+      edges: this.#edges.size,
+      below,
+      roots: this.#roots.size,
+      unloaded: this.#unloaded.size,
+      dropQueue: this.#dropQueue.size
+    };
+  }
   /**
    * Scheduling state and every live task with its derived state, read on the Session line. Runs no task code: a
    * pending migration shows as `ready` with `migrates`, and only a migration the scheduler already tried, or one that
@@ -42660,20 +44120,18 @@ var TaskScheduler = class {
    */
   async inspect(snapshot) {
     await this.#loadScopes(false);
-    const owned = this.#ownedLive();
     const tasks = [];
-    for (const record of this.#live.values()) {
-      tasks.push({ record, state: this.#inspectTask(record, snapshot, owned) });
-    }
+    for (const record of this.#live.values())
+      tasks.push({ record, state: this.#inspectTask(record, snapshot) });
     const scheduling = this.#closing ? "closing" : this.#enabled ? "running" : "paused";
     return { scheduling, tasks };
   }
-  #inspectTask(record, snapshot, owned) {
+  #inspectTask(record, snapshot) {
     if (this.#invocations.has(record.id))
       return { kind: "running" };
     if (record.state.status === "completing")
       return { kind: "completing" };
-    const on = this.#waitingOn(record, owned);
+    const on = this.#waitingOn(record);
     if (on.length > 0)
       return { kind: "waiting", on };
     const fit = this.#fit(record, snapshot.task(record.kind));
@@ -42746,11 +44204,16 @@ var TaskScheduler = class {
   #decide(tx, current, previous, state3) {
     if (current.abortRequested)
       return false;
+    if (!current.background && this.#belowCancelled(parentOf(current))) {
+      this.#cascadePending = true;
+      this.#scheduleReconcile();
+      return false;
+    }
     if (previous === void 0)
       return true;
     if (previous.failure !== void 0)
       return { fault: previous.failure.error };
-    if (jsonEqual(current.state.checkpoint, previous.checkpoint)) {
+    if (jsonEqual2(current.state.checkpoint, previous.checkpoint)) {
       const message = `Task ${current.kind} phase ${previous.checkpoint.phase} returned without durable progress`;
       return { fault: new Error(message) };
     }
@@ -42802,15 +44265,14 @@ var TaskScheduler = class {
           return current;
         this.#end(invocation);
         if (decision !== false) {
-          const message = decision.fault instanceof Error ? decision.fault.message : String(decision.fault);
+          const message = errorMessage(decision.fault);
           await this.#terminate(tx, current, { status: "faulted", error: { message } });
         }
         return void 0;
       }, this.#context);
     } catch (error) {
       this.#end(invocation);
-      if (!this.#closing)
-        this.#report(error);
+      this.#failSession(error);
       return void 0;
     }
   }
@@ -42820,7 +44282,7 @@ var TaskScheduler = class {
    */
   async #terminate(tx, record, outcome) {
     await this.#loadScopes(false);
-    if (this.#ownedLive(overlayOf(tx)).has(record.id)) {
+    if (this.#hasOwnedLive(record.id, overlayOf(tx))) {
       tx.setTask(withState(record, { status: "completing", outcome }));
       return;
     }
@@ -42840,7 +44302,7 @@ var TaskScheduler = class {
       await this.#loadScopes(false);
       for (const record of overlay.tasks.values())
         await this.#loadChain(parentOf(record), overlay);
-      if (this.#ownedLive(overlay).has(current.id)) {
+      if (this.#hasOwnedLive(current.id, overlay)) {
         tx.setTask(withState(current, { status: "completing", outcome: next.outcome }));
         return;
       }
@@ -42848,37 +44310,97 @@ var TaskScheduler = class {
     tx.setTask(withState(current, next));
   }
   /**
-   * A wait names existing tasks other than the waiter and its owners, which could never finish first; `failFast` only
-   * tasks the waiter owns. An abort handler cannot wait.
+   * A wait names existing tasks, and `failFast` only tasks the waiter owns. It may not close a cycle in the wait-for
+   * graph, whose edges run from each task to what it waits on and to its live ordinary owned work (spec §5.5); waiting
+   * on itself or on an owner holding it are the shortest such cycles. An abort handler cannot wait.
+   *
+   * Invariant: the wait-for graph is acyclic. Only a wait adds an edge between existing tasks, as a new task has only
+   * incoming edges, so checking each wait maintains it.
    */
   async #validateWait(tx, invocation, current, on, policy) {
     if (invocation.mode === "abort")
       throw new Error(`Abort handler of task ${current.id} cannot wait`);
     const overlay = overlayOf(tx);
-    await this.#loadChain(parentOf(current));
-    const owners = /* @__PURE__ */ new Set();
-    for (const step of this.#above(parentOf(current)))
-      if ("task" in step)
-        owners.add(step.task);
+    const targets = [];
     for (const id of on) {
-      if (id === current.id || owners.has(id)) {
-        throw new Error(`Task ${current.id} cannot wait on itself or its owner ${id}`);
-      }
       const member = overlay.tasks.get(id) ?? this.#live.get(id) ?? await this.#storage.task(id, this.#context);
       if (member === void 0)
         throw new Error(`Task ${id} does not exist`);
       if (policy === "failFast" && member.owner !== current.id) {
         throw new Error(`Task ${current.id} can wait failFast only on tasks it owns; ${id} is not one`);
       }
+      if (member.state.status !== "terminal" && member.owner !== current.id)
+        targets.push(id);
     }
+    if (targets.length === 0)
+      return;
+    const cycle = await this.#waitCycle(current.id, targets, overlay);
+    if (cycle !== void 0) {
+      throw new Error(`Task ${current.id} cannot wait on ${cycle[0]}: ${[current.id, ...cycle].join(" -> ")} is a wait cycle`);
+    }
+  }
+  /**
+   * The path from a member of `on` back to `task` in the wait-for graph, if the wait would close a cycle (spec §5.1).
+   * An edge X -> Y means X cannot settle before Y: Y is in the `on` of waiting X that is not abort-marked, or Y is live
+   * ordinary owned work of X,
+   * which holds X as `completing`. Each task is visited once and each subtree walked once, so a check is bounded by the
+   * live work it reaches.
+   */
+  async #waitCycle(task, on, overlay) {
+    await this.#loadScopes(false);
+    const from = /* @__PURE__ */ new Map();
+    const walked = /* @__PURE__ */ new Set();
+    const pending = [];
+    const reach = (id, via) => {
+      if (from.has(id))
+        return;
+      from.set(id, via);
+      pending.push(id);
+    };
+    const path5 = (end) => {
+      const steps = [];
+      for (let at = end; at !== void 0; at = from.get(at))
+        steps.unshift(at);
+      return steps;
+    };
+    for (const id of on)
+      reach(id, void 0);
+    for (let id = pending.pop(); id !== void 0; id = pending.pop()) {
+      if (id === task)
+        return path5(id);
+      const record = overlay.tasks.get(id) ?? this.#live.get(id);
+      if (record === void 0 || record.state.status === "terminal")
+        continue;
+      if (record.state.status === "waiting" && !record.abortRequested) {
+        for (const member of record.state.on)
+          reach(member, id);
+      }
+      if (walked.has(id))
+        continue;
+      walked.add(id);
+      const found = [];
+      const walk = this.#walkDown(id, { overlay, enter: (below) => !walked.has(below) });
+      for (const { id: below, node, live } of walk) {
+        if (live === void 0 || node.background)
+          continue;
+        found.push(below);
+        reach(below, id);
+      }
+      for (const below of found)
+        walked.add(below);
+    }
+    return void 0;
   }
   /** End an invocation: its runtime operations reject from now on, its signal aborts, its watches stop, and its task is free. */
   #end(invocation) {
     if (invocation.ended)
       return;
     invocation.ended = true;
-    if (this.#invocations.get(invocation.taskId) === invocation)
+    if (this.#invocations.get(invocation.taskId) === invocation) {
       this.#invocations.delete(invocation.taskId);
+      if (this.#live.has(invocation.taskId))
+        this.#runnable.add(invocation.taskId);
+    }
     for (const watch of invocation.watches)
       void watch.stop();
     invocation.controller.abort(endedError(invocation));
@@ -42886,9 +44408,17 @@ var TaskScheduler = class {
   /** No live non-background task in the scope; a task whose owner edges are not loaded yet counts as inside. */
   #idle(conversationId) {
     const scope = conversationId === void 0 ? { roots: true } : { conversation: conversationId };
-    for (const record of this.#live.values()) {
-      if (!record.background && this.#inScope(parentOf(record), scope) !== false)
+    for (const id of this.#unloaded) {
+      const record = this.#live.get(id);
+      if (record !== void 0 && !record.background && this.#inScope(parentOf(record), scope) !== false)
         return false;
+    }
+    const starts = conversationId === void 0 ? this.#roots : [conversationId];
+    for (const start of starts) {
+      for (const { node, live } of this.#walkDown(conversationNode(start))) {
+        if (live !== void 0 && !node.background)
+          return false;
+      }
     }
     return true;
   }
@@ -42959,6 +44489,29 @@ var TaskScheduler = class {
       snapshotAsOf: ((...args) => this.#read(invocation, () => sessionMethod(this.#session, "snapshotAsOf")(...args))),
       getTask: ((id, context) => this.#read(invocation, () => this.#session.readOnLine(() => this.#storage.task(id, context)))),
       waitForTask: ((id, context) => this.#read(invocation, () => this.waitForTask(id, withAbortSignal(invocation.controller.signal, context)))),
+      ownedTasks: (context) => this.#read(invocation, () => this.#session.readOnLine(async () => {
+        if (invocation.ended)
+          throw endedError(invocation);
+        context.abortSignal?.throwIfAborted();
+        const owned = [];
+        for (const node of this.#below.get(invocation.taskId) ?? []) {
+          const record = typeof node === "string" ? void 0 : this.#live.get(node);
+          if (record?.owner === invocation.taskId)
+            owned.push(record);
+        }
+        return owned.sort((a, b) => a.id - b.id).map((record) => copyJson(record));
+      })),
+      abortOwned: (id, context) => this.#read(invocation, async () => {
+        const bound = withAbortSignal(invocation.controller.signal, context);
+        const record = await this.#session.readOnLine(() => this.#storage.task(id, bound));
+        if (record?.owner !== invocation.taskId) {
+          throw new Error(`Task ${id} is not owned by task ${invocation.taskId}`);
+        }
+        if (record.state.status === "terminal")
+          return;
+        await this.abort(id, bound, true);
+        await this.waitForTask(id, bound);
+      }),
       outcomes: ((ids, context) => this.#read(invocation, () => this.#session.readOnLine(async () => {
         const outcomes = [];
         for (const id of ids) {
@@ -42984,7 +44537,19 @@ var TaskScheduler = class {
           return token === void 0 || entry?.kind === token.kind ? entry : void 0;
         });
       }),
-      context: (conversationId, context, at) => this.#read(invocation, () => readContext(this.#session, this.#storage, conversationId, context, at)),
+      context: (conversationId, context, options) => this.#read(invocation, async () => {
+        const { view, range } = await readContextFrom(this.#session, this.#storage, conversationId, context, options?.at, this.#contexts.get(conversationId)?.range);
+        const kept = this.#contexts.get(conversationId);
+        if (range !== void 0 && !this.#closing && !invocation.ended && (kept === void 0 || kept.range.bounds.tail <= range.bounds.tail)) {
+          if (!this.#idle(conversationId)) {
+            this.#contexts.set(conversationId, { range, idleSince: void 0 });
+          } else if (this.#contextRetentionMs() > 0) {
+            this.#contexts.set(conversationId, { range, idleSince: kept?.idleSince ?? this.#now() });
+            this.#scheduleExpiry();
+          }
+        }
+        return view;
+      }),
       now: () => {
         if (invocation.ended)
           throw endedError(invocation);
@@ -43011,7 +44576,7 @@ var TaskScheduler = class {
       if (invocation.ended)
         throw endedError(invocation);
       if (this.#closing)
-        throw closedError();
+        throw closedError(this.#session);
       const found = this.#live.get(invocation.taskId);
       if (found === void 0)
         throw new Error(`Task ${invocation.taskId} is terminal`);
@@ -43037,7 +44602,7 @@ var TaskScheduler = class {
       const remaining = until - this.#now();
       if (remaining <= 0)
         return;
-      await delay(Math.min(remaining, MAX_TIMER_DELAY), signal);
+      await delay(Math.min(remaining, MAX_TIMER_DELAY2), signal);
     }
   }
   async #watchDoc(invocation, args) {
@@ -43055,6 +44620,10 @@ var TaskScheduler = class {
     return watch;
   }
 };
+function withAbortMark(record, reason) {
+  const { abortReason: _reason, ...rest } = record;
+  return { ...rest, abortRequested: true, ...reason === void 0 ? {} : { abortReason: reason } };
+}
 function cancellationIntent(record) {
   return record.state.status !== "terminal" && (record.abortRequested || failedOutcome(record));
 }
@@ -43076,6 +44645,21 @@ function overlayOf(tx) {
   const tasks = new Map(tx.stagedTasks().map((record) => [record.id, record]));
   const edges = new Map(tx.stagedConversations().map((record) => [record.id, record.owner?.taskId ?? null]));
   return { tasks, edges };
+}
+function addTo(map, key, value) {
+  const values = map.get(key);
+  if (values === void 0)
+    map.set(key, /* @__PURE__ */ new Set([value]));
+  else
+    values.add(value);
+}
+function deleteFrom(map, key, value) {
+  const values = map.get(key);
+  if (values === void 0)
+    return;
+  values.delete(value);
+  if (values.size === 0)
+    map.delete(key);
 }
 function memoOf(record, name) {
   const memos = record?.memos;
@@ -43116,7 +44700,7 @@ function delay(ms, signal) {
     signal.addEventListener("abort", onAbort, { once: true });
   });
 }
-function jsonEqual(left, right) {
+function jsonEqual2(left, right) {
   if (left === right)
     return true;
   if (typeof left !== "object" || typeof right !== "object" || left === null || right === null)
@@ -43124,12 +44708,12 @@ function jsonEqual(left, right) {
   if (Array.isArray(left) || Array.isArray(right)) {
     if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length)
       return false;
-    return left.every((value, index3) => jsonEqual(value, right[index3]));
+    return left.every((value, index3) => jsonEqual2(value, right[index3]));
   }
   const keys = Object.keys(left);
   if (keys.length !== Object.keys(right).length)
     return false;
-  return keys.every((key) => Object.hasOwn(right, key) && jsonEqual(left[key], right[key]));
+  return keys.every((key) => Object.hasOwn(right, key) && jsonEqual2(left[key], right[key]));
 }
 
 // node_modules/@earendil-works/pi-durable/dist/harness/task-graph.js
@@ -43143,14 +44727,15 @@ var TaskGraphView = class {
   constructor(session, storage) {
     this.#session = session;
     this.#storage = storage;
-    session.subscribeCommits((publication, context) => {
+    session.observeCommits((publication, context) => {
       if (this.#mount !== void 0)
-        advance2(this.#mount, publication, context);
+        advance2(this.#mount, publication, context, (error) => session.report(error));
     });
     session.subscribeClose(() => {
       this.#closed = true;
-      for (const observer of [...this.#mount?.observers ?? []])
-        observer.closeSession();
+      for (const observer of [...this.#mount?.observers ?? []]) {
+        contained(() => observer.closeSession(this.#session.failure), (error) => session.report(error));
+      }
       this.#mount = void 0;
     });
   }
@@ -43158,7 +44743,7 @@ var TaskGraphView = class {
   async state(context) {
     const { observer, detach } = await this.#attach((value, release) => new CommittedStateSource(value, release), context);
     try {
-      return replicatedState(observer);
+      return replicatedState(observer, { onError: (error) => this.#session.report(error) });
     } catch (error) {
       detach();
       throw error;
@@ -43166,7 +44751,7 @@ var TaskGraphView = class {
   }
   /** A serialized exact-frame watch of the graph; cancelling `context` stops it. */
   async watch(context) {
-    const { observer } = await this.#attach((value, release) => new CommittedWatch(value, release), context);
+    const { observer } = await this.#attach((value, release) => new CommittedWatch(value, release, (error) => this.#session.report(error)), context);
     const signal = context.abortSignal;
     if (signal?.aborted) {
       observer.cancel();
@@ -43187,7 +44772,7 @@ var TaskGraphView = class {
       };
       const observer = create(mount.value, detach);
       if (this.#closed)
-        throw closedError();
+        throw closedError(this.#session);
       context.abortSignal?.throwIfAborted();
       this.#mount = mount;
       mount.observers.add(observer);
@@ -43209,7 +44794,7 @@ var TaskGraphView = class {
     return { tasks };
   }
 };
-function advance2(mount, publication, context) {
+function advance2(mount, publication, context, report) {
   const ops = [];
   const changed = /* @__PURE__ */ new Map();
   const node = (key) => changed.has(key) ? changed.get(key) : mount.value.tasks[key];
@@ -43249,7 +44834,7 @@ function advance2(mount, publication, context) {
   mount.value = applyImmutable(mount.value, ops);
   const frameContext = withoutAbortSignal(context);
   for (const observer of [...mount.observers])
-    observer.advance(mount.value, ops, frameContext);
+    contained(() => observer.advance(mount.value, ops, frameContext), report);
 }
 function nodeOf2(record, conversations) {
   return {
@@ -43283,6 +44868,7 @@ function phaseOf(checkpoint) {
 
 // node_modules/@earendil-works/pi-durable/dist/harness/harness.js
 var SCAN_PAGE_SIZE5 = 256;
+var SCHEDULER_INDEX_SIZES = /* @__PURE__ */ Symbol.for("pi-durable.schedulerIndexSizes");
 var ConversationImpl = class {
   id;
   #host;
@@ -43312,14 +44898,15 @@ var ConversationImpl = class {
   commit(change, context) {
     return this.#host.harness.commitWith(change, context, { conversationId: this.id });
   }
-  context(context) {
-    return readContext(this.#host.harness, this.#host.storage, this.id, context);
+  context(context, options) {
+    return readContext(this.#host.harness, this.#host.storage, this.id, context, options?.at);
   }
   entries(query, limit2, cursor, context) {
     const bounded = {
       conversationId: this.id,
       ...query.minEntryId === void 0 ? {} : { minEntryId: query.minEntryId },
-      ...query.maxEntryId === void 0 ? {} : { maxEntryId: query.maxEntryId }
+      ...query.maxEntryId === void 0 ? {} : { maxEntryId: query.maxEntryId },
+      ...query.order === void 0 ? {} : { order: query.order }
     };
     return this.#host.harness.readOnLine(() => this.#host.storage.scanEntries(bounded, limit2, cursor, context));
   }
@@ -43342,21 +44929,19 @@ var ConversationImpl = class {
   }
 };
 var HarnessImpl = class extends SessionImpl {
-  #storage;
   #options;
   #report;
   #host;
   #tasks;
   #submissions;
   #taskGraph;
-  #closed = false;
-  constructor(storage, options, context) {
-    super(storage);
-    this.#storage = storage;
+  constructor(rawStorage, options, context) {
+    const report = safeReport(options.onReport);
+    const now = safeNow(options.now, report);
+    super(rawStorage, now, () => options.settings?.documentRetentionMs);
+    const storage = this.storage;
     this.#options = options;
-    this.#report = options.onReport ?? (() => {
-    });
-    const now = options.now ?? Date.now;
+    this.#report = report;
     const settings2 = () => resolveSettings(options.settings);
     this.#tasks = new TaskScheduler({
       session: this,
@@ -43407,16 +44992,20 @@ var HarnessImpl = class extends SessionImpl {
     return this.#tasks.open(context);
   }
   resume() {
-    this.#assertOpen();
+    this.assertUsable();
     this.#tasks.resume();
   }
   getTask(id, context) {
-    return this.readOnLine(() => this.#storage.task(id, context));
+    return this.readOnLine(() => this.storage.task(id, context));
+  }
+  /** Internal, for tests: sizes of the scheduler's ownership indexes. */
+  get [SCHEDULER_INDEX_SIZES]() {
+    return this.#tasks.indexSizes;
   }
   inspect(context) {
     return this.readOnLine(async () => {
       const { scheduling, tasks } = await this.#tasks.inspect(this.#options.registry.snapshot());
-      const scan = (status) => scanAll((cursor) => this.#storage.scanSubmissions({ status }, SCAN_PAGE_SIZE5, cursor, context));
+      const scan = (status) => scanAll((cursor) => this.storage.scanSubmissions({ status }, SCAN_PAGE_SIZE5, cursor, context));
       const submissions = [...await scan("queued"), ...await scan("placed")].sort((a, b) => a.id - b.id);
       return { scheduling, tasks, submissions };
     });
@@ -43440,7 +45029,7 @@ var HarnessImpl = class extends SessionImpl {
   }
   /** Sum every conversation's committed `pi.usage`. Each document is read at its own point; totals only grow. */
   async usage(context) {
-    const conversations = await this.readOnLine(() => scanAll((cursor) => this.#storage.scanConversations({}, SCAN_PAGE_SIZE5, cursor, context)));
+    const conversations = await this.readOnLine(() => scanAll((cursor) => this.storage.scanConversations({}, SCAN_PAGE_SIZE5, cursor, context)));
     const total = UsageDoc.definition.initial();
     for (const { id } of conversations) {
       const state3 = await this.snapshot(UsageDoc, id, context);
@@ -43459,23 +45048,22 @@ var HarnessImpl = class extends SessionImpl {
     return this.#create({ kind: "root" }, options ?? {}, context);
   }
   async conversation(id, context) {
-    this.#assertOpen();
-    const record = await this.readOnLine(() => this.#storage.conversation(id, context));
+    this.assertUsable();
+    const record = await this.readOnLine(() => this.storage.conversation(id, context));
     return record === void 0 ? void 0 : new ConversationImpl(record.id, this.#host);
   }
   createConversation(options, context) {
     return this.#create({ kind: "independent", ownership: options.ownership }, options, context);
   }
-  close(context) {
-    this.#closed = true;
-    return super.close(context);
+  report(error) {
+    this.#report(error);
   }
-  /** Join task invocations after admission is sealed and before Storage closes; writes no task outcome. */
+  /** Signal and join task invocations after the close listeners and before Storage closes; writes no task outcome. */
   beforeClose() {
     return this.#tasks.join();
   }
   async #create(target, options, context) {
-    this.#assertOpen();
+    this.assertUsable();
     const id = await this.commitWith(async (tx) => {
       if (target.kind === "root" && await tx.conversation(ROOT_CONVERSATION_ID) !== void 0) {
         return ROOT_CONVERSATION_ID;
@@ -43502,11 +45090,27 @@ var HarnessImpl = class extends SessionImpl {
     await createAgent(tx, record);
     await this.#options.conversationCreated?.(tx, record);
   }
-  #assertOpen() {
-    if (this.#closed)
-      throw new Error("Harness is closed");
-  }
 };
+function safeReport(onReport) {
+  return (error) => contained(() => onReport?.(error), () => {
+  });
+}
+function safeNow(now, report) {
+  if (now === void 0)
+    return Date.now;
+  let reported = false;
+  return () => {
+    try {
+      return now();
+    } catch (error) {
+      if (!reported) {
+        reported = true;
+        report(error);
+      }
+      return Date.now();
+    }
+  };
+}
 function boundConversation(id, binding, submissions, tasks) {
   const bind = (context) => withAbortSignal(binding.signal, context);
   const bound = (operation) => {
@@ -43548,12 +45152,36 @@ var Harness = {
     try {
       await harness.openTasks(context);
     } catch (error) {
-      await harness.close(withoutAbortSignal(context)).catch((closeError) => options.onReport?.(closeError));
+      await harness.close(withoutAbortSignal(context)).catch(() => {
+      });
       throw error;
     }
     return harness;
   }
 };
+
+// node_modules/@earendil-works/pi-durable/dist/storage/scan.js
+function scanStart(requested, cursor, fallback) {
+  if (requested !== void 0 && requested !== "ascending" && requested !== "descending") {
+    throw new StorageRequestError(`Invalid scan order: ${String(requested)}`);
+  }
+  if (cursor === void 0)
+    return { order: requested ?? fallback, after: void 0 };
+  const { after, order: stored } = cursor;
+  if (typeof after !== "number" || !Number.isSafeInteger(after))
+    throw new StorageRequestError("Invalid storage cursor");
+  if (stored !== void 0 && stored !== "ascending" && stored !== "descending") {
+    throw new StorageRequestError("Invalid storage cursor");
+  }
+  const order = stored ?? fallback;
+  if (requested !== void 0 && requested !== order) {
+    throw new StorageRequestError(`The cursor continues a ${order} scan; the query asks for ${requested}`);
+  }
+  return { order, after };
+}
+function nextCursor(id, order) {
+  return { after: id, order };
+}
 
 // node_modules/@earendil-works/pi-durable/dist/storage/memory.js
 function* documentDeltaBatches(id, version, revisions, start) {
@@ -43600,7 +45228,7 @@ var cursorId = (cursor) => {
   if (after === void 0)
     return void 0;
   if (typeof after !== "number" || !Number.isSafeInteger(after))
-    throw new TypeError("Invalid storage cursor");
+    throw new StorageRequestError("Invalid storage cursor");
   return idFromNumber(after);
 };
 var lowerBound = (ids, target) => {
@@ -43669,12 +45297,23 @@ var isAliveAt = (record, at) => {
 };
 var isCurrentOnly = (record) => record.scope.kind !== "conversation" || record.history === "latest";
 var tableContaining = (state3, id) => state3.recordTypes.get(id);
-var page = (values, limit2) => {
+var page = (values, limit2, order = "ascending") => {
   const items = values.slice(0, limit2);
   if (values.length <= limit2)
     return { items: clone(items) };
-  return { items: clone(items), next: { after: items.at(-1).id } };
+  return { items: clone(items), next: nextCursor(items.at(-1).id, order) };
 };
+function* scanIndexes(ids, start) {
+  if (start.order === "ascending") {
+    const first = start.after === void 0 ? 0 : upperBound(ids, start.after);
+    for (let index3 = first; index3 < ids.length; index3++)
+      yield index3;
+  } else {
+    const end = start.after === void 0 ? ids.length : lowerBound(ids, start.after);
+    for (let index3 = end - 1; index3 >= 0; index3--)
+      yield index3;
+  }
+}
 var MemoryStorage = class {
   state = {
     recordTypes: /* @__PURE__ */ new Map(),
@@ -43756,9 +45395,7 @@ var MemoryStorage = class {
           content: { kind: "base", version: stored.version, value: stored.value }
         };
       } catch (error) {
-        if (error instanceof StorageRejected)
-          throw error;
-        throw new StorageRejected(`Document copy ${write.record.id} was rejected`, { cause: error });
+        throw new Error(`Document copy ${write.record.id} was rejected`, { cause: error });
       }
     });
   }
@@ -43868,17 +45505,18 @@ var MemoryStorage = class {
   async scanConversations(query, limit2, cursor, _context) {
     this.assertOpen();
     const ids = query.ownerTaskId !== void 0 ? this.state.conversationIdsByOwnerTask.get(query.ownerTaskId) ?? [] : query.ownerConversationId !== void 0 ? this.state.conversationIdsByOwnerConversation.get(query.ownerConversationId) ?? [] : this.state.conversationIds;
-    const after = cursorId(cursor);
-    const start = after === void 0 ? 0 : upperBound(ids, after);
+    const start = scanStart(query.order, cursor, "ascending");
     const values = [];
-    for (let index3 = start; index3 < ids.length && values.length <= limit2; index3++) {
+    for (const index3 of scanIndexes(ids, start)) {
+      if (values.length > limit2)
+        break;
       const value = this.state.conversations.get(ids[index3]);
       if (query.ownerConversationId !== void 0 && value.owner?.conversationId !== query.ownerConversationId) {
         continue;
       }
       values.push(value);
     }
-    return page(values, limit2);
+    return page(values, limit2, start.order);
   }
   async entry(idOrConversationId, idOrContext, context) {
     this.assertOpen();
@@ -43890,7 +45528,7 @@ var MemoryStorage = class {
       return { entry: clone(entry2), commitSeq: this.state.entryCommitSeqs.get(id2) };
     }
     if (typeof idOrContext !== "number")
-      throw new TypeError("Storage.entry() requires an entry ID");
+      throw new StorageRequestError("Storage.entry() requires an entry ID");
     const conversationId = idFromNumber(idOrConversationId);
     const id = idFromNumber(idOrContext);
     const entry = this.visibleEntries(conversationId, id, id).next().value;
@@ -43901,7 +45539,7 @@ var MemoryStorage = class {
   async findLatestHeadMarker(conversationId, atOrBeforeEntryId, _context) {
     this.assertOpen();
     if (!this.state.conversations.has(conversationId)) {
-      throw new Error(`Unknown conversation: ${conversationId}`);
+      throw new StorageRequestError(`Unknown conversation: ${conversationId}`);
     }
     let currentId = conversationId;
     let upperEntryId = atOrBeforeEntryId ?? Number.POSITIVE_INFINITY;
@@ -43921,15 +45559,21 @@ var MemoryStorage = class {
   }
   async scanEntries(query, limit2, cursor, _context) {
     this.assertOpen();
-    const after = cursorId(cursor);
-    const maxEntryId = after === void 0 ? query.maxEntryId : Math.min(query.maxEntryId ?? Number.POSITIVE_INFINITY, after - 1);
+    const { order, after } = scanStart(query.order, cursor, "descending");
+    let minEntryId = query.minEntryId;
+    let maxEntryId = query.maxEntryId;
+    if (after !== void 0 && order === "descending")
+      maxEntryId = Math.min(maxEntryId ?? after, after - 1);
+    if (after !== void 0 && order === "ascending")
+      minEntryId = Math.max(minEntryId ?? after, after + 1);
     const visible = [];
-    for (const entry of this.visibleEntries(query.conversationId, query.minEntryId, maxEntryId)) {
+    const entries = order === "descending" ? this.visibleEntries(query.conversationId, minEntryId, maxEntryId) : this.visibleEntriesAscending(query.conversationId, minEntryId, maxEntryId);
+    for (const entry of entries) {
       visible.push(entry);
       if (visible.length > limit2)
         break;
     }
-    return page(visible, limit2);
+    return page(visible, limit2, order);
   }
   async task(id, _context) {
     this.assertOpen();
@@ -43938,11 +45582,12 @@ var MemoryStorage = class {
   }
   async scanTasks(query, limit2, cursor, _context) {
     this.assertOpen();
-    const after = cursorId(cursor);
+    const start = scanStart(query.order, cursor, "ascending");
     const ids = query.status === void 0 ? this.state.taskIds : this.state.taskIdsByStatus[query.status];
-    const start = after === void 0 ? 0 : upperBound(ids, after);
     const values = [];
-    for (let index3 = start; index3 < ids.length && values.length <= limit2; index3++) {
+    for (const index3 of scanIndexes(ids, start)) {
+      if (values.length > limit2)
+        break;
       const value = this.state.tasks.get(ids[index3]);
       if (query.conversationId !== void 0 && value.conversationId !== query.conversationId)
         continue;
@@ -43954,7 +45599,7 @@ var MemoryStorage = class {
         continue;
       values.push(value);
     }
-    return page(values, limit2);
+    return page(values, limit2, start.order);
   }
   async submission(id, _context) {
     this.assertOpen();
@@ -43963,17 +45608,18 @@ var MemoryStorage = class {
   }
   async scanSubmissions(query, limit2, cursor, _context) {
     this.assertOpen();
-    const after = cursorId(cursor);
+    const start = scanStart(query.order, cursor, "ascending");
     const ids = query.status === void 0 ? this.state.submissionIds : this.state.submissionIdsByStatus[query.status];
-    const start = after === void 0 ? 0 : upperBound(ids, after);
     const values = [];
-    for (let index3 = start; index3 < ids.length && values.length <= limit2; index3++) {
+    for (const index3 of scanIndexes(ids, start)) {
+      if (values.length > limit2)
+        break;
       const value = this.state.submissions.get(ids[index3]);
       if (query.conversationId !== void 0 && value.conversationId !== query.conversationId)
         continue;
       values.push(value);
     }
-    return page(values, limit2);
+    return page(values, limit2, start.order);
   }
   async submissionByRequest(conversationId, requestId, _context) {
     this.assertOpen();
@@ -44028,7 +45674,7 @@ var MemoryStorage = class {
     if (stored === void 0)
       return void 0;
     if (at !== "current" && isCurrentOnly(stored.record)) {
-      throw new Error(`Document ${id} does not retain historical content`);
+      throw new StorageRequestError(`Document ${id} does not retain historical content`);
     }
     if (!isAliveAt(stored.record, at))
       return void 0;
@@ -44044,7 +45690,7 @@ var MemoryStorage = class {
   }
   *visibleEntries(conversationId, minEntryId = Number.NEGATIVE_INFINITY, maxEntryId = Number.POSITIVE_INFINITY) {
     if (!this.state.conversations.has(conversationId)) {
-      throw new Error(`Unknown conversation: ${conversationId}`);
+      throw new StorageRequestError(`Unknown conversation: ${conversationId}`);
     }
     let currentId = conversationId;
     let upperEntryId = maxEntryId;
@@ -44063,6 +45709,34 @@ var MemoryStorage = class {
       if (upperEntryId < minEntryId)
         break;
       currentId = conversation.parent.conversationId;
+    }
+  }
+  /** Visible entries oldest first: the fork chain's segments from the root conversation forward. */
+  *visibleEntriesAscending(conversationId, minEntryId = Number.NEGATIVE_INFINITY, maxEntryId = Number.POSITIVE_INFINITY) {
+    if (!this.state.conversations.has(conversationId)) {
+      throw new StorageRequestError(`Unknown conversation: ${conversationId}`);
+    }
+    const segments = [];
+    let currentId = conversationId;
+    let upperEntryId = maxEntryId;
+    while (true) {
+      segments.push({ conversationId: currentId, upper: upperEntryId });
+      const conversation = this.state.conversations.get(currentId);
+      if (conversation.parent === void 0)
+        break;
+      upperEntryId = Math.min(upperEntryId, conversation.parent.at);
+      if (upperEntryId < minEntryId)
+        break;
+      currentId = conversation.parent.conversationId;
+    }
+    for (const segment of segments.reverse()) {
+      const ids = this.state.entryIds.get(segment.conversationId) ?? [];
+      for (let index3 = lowerBound(ids, minEntryId); index3 < ids.length; index3++) {
+        const id = ids[index3];
+        if (id > segment.upper)
+          break;
+        yield this.state.entries.get(id);
+      }
     }
   }
   checkGlobalIds(writes) {
@@ -45471,7 +47145,7 @@ Cannot execute bash commands.`, cause));
       };
       let seenBytes = 0;
       let seenNewlines = 0;
-      const settle2 = (result) => {
+      const settle3 = (result) => {
         if (settled)
           return;
         settled = true;
@@ -45562,7 +47236,7 @@ Cannot execute bash commands.`, cause));
         }
       } catch (error) {
         const cause = toError3(error);
-        settle2(err(new ExecutionError("spawn_error", cause.message, cause)));
+        settle3(err(new ExecutionError("spawn_error", cause.message, cause)));
         return;
       }
       timeoutId = timeoutMs === void 0 ? void 0 : setTimeout(() => {
@@ -45604,23 +47278,23 @@ Cannot execute bash commands.`, cause));
         emit(stdoutDecoder.decode(), "stdout");
         emit(stderrDecoder.decode(), "stderr");
         if (callbackError) {
-          settle2(err(callbackError));
+          settle3(err(callbackError));
           return;
         }
         const interrupted = timedOut ? new ExecutionError("timeout", `timeout:${options?.timeout}`) : signal?.aborted ? new ExecutionError("aborted", "aborted") : void 0;
         if (interrupted !== void 0) {
           if (spillPath !== void 0)
             interrupted.spillPath = spillPath;
-          settle2(err(interrupted));
+          settle3(err(interrupted));
           return;
         }
         if (spillError) {
-          settle2(err(spillError));
+          settle3(err(spillError));
           return;
         }
         const exitCode = code ?? (exitSignal ? 128 + (osConstants.signals[exitSignal] ?? 0) : 1);
-        settle2(ok({ exitCode, ...spillPath === void 0 ? {} : { spillPath } }));
-      }, (error) => settle2(err(new ExecutionError("spawn_error", error.message, error))));
+        settle3(ok({ exitCode, ...spillPath === void 0 ? {} : { spillPath } }));
+      }, (error) => settle3(err(new ExecutionError("spawn_error", error.message, error))));
     });
   }
   async openTextLineReader(path5, context) {
@@ -45939,128 +47613,6 @@ Cannot execute bash commands.`, cause));
   }
 };
 
-// node_modules/typebox/build/typebox.mjs
-var typebox_exports = {};
-__export(typebox_exports, {
-  Any: () => Any,
-  Array: () => _Array_,
-  BigInt: () => BigInt2,
-  Boolean: () => Boolean2,
-  Call: () => Call2,
-  Capitalize: () => Capitalize,
-  Codec: () => Codec,
-  Conditional: () => Conditional,
-  Constructor: () => Constructor,
-  ConstructorParameters: () => ConstructorParameters,
-  Cyclic: () => Cyclic,
-  Decode: () => Decode2,
-  DecodeBuilder: () => DecodeBuilder,
-  Dependent: () => Dependent,
-  Encode: () => Encode2,
-  EncodeBuilder: () => EncodeBuilder,
-  Enum: () => Enum,
-  Evaluate: () => Evaluate2,
-  Exclude: () => Exclude,
-  Extends: () => Extends,
-  ExtendsResult: () => result_exports,
-  Extract: () => Extract,
-  Function: () => _Function_,
-  Generic: () => Generic,
-  Identifier: () => Identifier,
-  Immutable: () => Immutable,
-  Index: () => Index,
-  Infer: () => Infer,
-  InstanceType: () => InstanceType,
-  Instantiate: () => Instantiate,
-  Integer: () => Integer,
-  Interface: () => Interface,
-  Intersect: () => Intersect,
-  IsAny: () => IsAny,
-  IsArray: () => IsArray3,
-  IsBigInt: () => IsBigInt3,
-  IsBoolean: () => IsBoolean4,
-  IsCall: () => IsCall,
-  IsCodec: () => IsCodec,
-  IsConstructor: () => IsConstructor3,
-  IsCyclic: () => IsCyclic,
-  IsDependent: () => IsDependent,
-  IsEnum: () => IsEnum2,
-  IsEnumValue: () => IsEnumValue,
-  IsFunction: () => IsFunction3,
-  IsGeneric: () => IsGeneric,
-  IsIdentifier: () => IsIdentifier2,
-  IsImmutable: () => IsImmutable,
-  IsInfer: () => IsInfer,
-  IsInteger: () => IsInteger3,
-  IsIntersect: () => IsIntersect,
-  IsKind: () => IsKind,
-  IsLiteral: () => IsLiteral,
-  IsNever: () => IsNever,
-  IsNull: () => IsNull3,
-  IsNumber: () => IsNumber4,
-  IsObject: () => IsObject3,
-  IsOptional: () => IsOptional,
-  IsParameter: () => IsParameter,
-  IsReadonly: () => IsReadonly,
-  IsRecord: () => IsRecord,
-  IsRef: () => IsRef2,
-  IsRefine: () => IsRefine2,
-  IsRest: () => IsRest,
-  IsSchema: () => IsSchema2,
-  IsString: () => IsString4,
-  IsSymbol: () => IsSymbol3,
-  IsTemplateLiteral: () => IsTemplateLiteral,
-  IsThis: () => IsThis,
-  IsTuple: () => IsTuple,
-  IsUndefined: () => IsUndefined3,
-  IsUnion: () => IsUnion,
-  IsUnknown: () => IsUnknown,
-  IsUnsafe: () => IsUnsafe,
-  IsVoid: () => IsVoid,
-  KeyOf: () => KeyOf2,
-  Literal: () => Literal,
-  Lowercase: () => Lowercase,
-  Mapped: () => Mapped,
-  Module: () => Module2,
-  Never: () => Never,
-  NonNullable: () => NonNullable,
-  Null: () => Null,
-  Number: () => Number2,
-  Object: () => _Object_,
-  Omit: () => Omit,
-  Optional: () => Optional,
-  Parameter: () => Parameter,
-  Parameters: () => Parameters,
-  Partial: () => Partial,
-  Pick: () => Pick,
-  Readonly: () => Readonly,
-  ReadonlyObject: () => ReadonlyObject,
-  ReadonlyType: () => ReadonlyType,
-  Record: () => Record,
-  RecordKey: () => RecordKey,
-  RecordPattern: () => RecordPattern,
-  RecordValue: () => RecordValue,
-  Ref: () => Ref2,
-  Refine: () => Refine,
-  Required: () => Required,
-  Rest: () => Rest,
-  ReturnType: () => ReturnType,
-  Script: () => Script2,
-  String: () => String2,
-  Symbol: () => Symbol2,
-  TemplateLiteral: () => TemplateLiteral2,
-  This: () => This,
-  Tuple: () => Tuple,
-  Uncapitalize: () => Uncapitalize,
-  Undefined: () => Undefined,
-  Union: () => Union,
-  Unknown: () => Unknown,
-  Unsafe: () => Unsafe,
-  Uppercase: () => Uppercase,
-  Void: () => Void,
-  With: () => With2
-});
-
 // node_modules/@earendil-works/pi-durable/dist/tools/env.js
 function requireEnv(api) {
   if (api.env === void 0)
@@ -46077,6 +47629,12 @@ var bashSchema = typebox_exports.Object({
 var powershellSchema = typebox_exports.Object({
   command: typebox_exports.String({ description: "PowerShell command to execute" }),
   timeout: typebox_exports.Optional(typebox_exports.Number({ description: "Timeout in seconds (optional, no default timeout)" }))
+});
+var shellStructuredOutputSchema = typebox_exports.Object({
+  output: typebox_exports.String({ description: "Combined stdout and stderr: the retained tail, as the model sees it" }),
+  truncated: typebox_exports.Boolean({ description: "Whether earlier output was dropped" }),
+  fullOutputPath: typebox_exports.Optional(typebox_exports.String({ description: "File with the complete output, when it was spilled" })),
+  exitCode: typebox_exports.Number()
 });
 function validateTimeout(timeout) {
   if (timeout === void 0)
@@ -46131,20 +47689,30 @@ async function runCommand2(commands, execution, timeout, api, context) {
       throw new Error("Command aborted");
     throw result.error;
   }
-  if (result.value.exitCode !== 0)
-    throw new Error(`Command exited with code ${result.value.exitCode}`);
+  const exitCode = result.value.exitCode;
+  const retained = api.retainedOutput();
+  const structuredOutput = {
+    output: retained.text,
+    truncated: retained.truncated,
+    ...spillPath === void 0 ? {} : { fullOutputPath: spillPath },
+    exitCode
+  };
+  if (exitCode === 0)
+    return { structuredOutput };
+  const exited = { severity: "error", code: "exit_code", message: `Command exited with code ${exitCode}` };
+  return { structuredOutput, isError: true, diagnostics: [exited] };
 }
 function createBashTool(options) {
   return defineTool({
     name: "bash",
     description: `Execute a bash command in the current working directory. Returns combined stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.`,
     parameters: bashSchema,
+    structuredOutputSchema: shellStructuredOutputSchema,
     outputLimits: { retain: "tail" },
     async execute(args, api, context) {
       validateTimeout(args.timeout);
       const execution = await prepareExecution(args.command, options, api, context);
-      await runCommand2([execution.command], execution, args.timeout, api, context);
-      return {};
+      return runCommand2([execution.command], execution, args.timeout, api, context);
     }
   });
 }
@@ -47055,7 +48623,7 @@ function createEditTool() {
           ...diffResult.firstChangedLine === void 0 ? {} : { firstChangedLine: diffResult.firstChangedLine }
         };
         return {
-          content: [{ type: "text", text: `Successfully replaced ${edits.length} block(s) in ${path5}.` }],
+          output: [{ type: "text", text: `Successfully replaced ${edits.length} block(s) in ${path5}.` }],
           details
         };
       }, context);
@@ -47130,6 +48698,45 @@ function isAnimatedPng(buffer) {
   }
   return false;
 }
+function imageDimensions(bytes, mimeType) {
+  switch (mimeType) {
+    case "image/png":
+      return bytes.length < 24 ? void 0 : { width: readUint32BE(bytes, 16), height: readUint32BE(bytes, 20) };
+    case "image/gif":
+      return bytes.length < 10 ? void 0 : { width: readUint16LE(bytes, 6), height: readUint16LE(bytes, 8) };
+    case "image/webp":
+      if (bytes.length < 30)
+        return void 0;
+      if (startsWithAscii(bytes, 12, "VP8 "))
+        return { width: readUint16LE(bytes, 26) & 16383, height: readUint16LE(bytes, 28) & 16383 };
+      if (startsWithAscii(bytes, 12, "VP8L")) {
+        const bits = readUint32LE(bytes, 21);
+        return { width: (bits & 16383) + 1, height: (bits >>> 14 & 16383) + 1 };
+      }
+      if (startsWithAscii(bytes, 12, "VP8X")) {
+        const uint24 = (offset) => readUint16LE(bytes, offset) + ((bytes[offset + 2] ?? 0) << 16);
+        return { width: uint24(24) + 1, height: uint24(27) + 1 };
+      }
+      return void 0;
+    case "image/jpeg":
+      for (let offset = 2; offset + 9 <= bytes.length; ) {
+        if (bytes[offset] !== 255)
+          return void 0;
+        const marker = bytes[offset + 1];
+        if (marker === 255) {
+          offset++;
+          continue;
+        }
+        if (marker >= 192 && marker <= 207 && marker !== 196 && marker !== 200 && marker !== 204) {
+          return { width: readUint16BE(bytes, offset + 7), height: readUint16BE(bytes, offset + 5) };
+        }
+        offset += 2 + readUint16BE(bytes, offset + 2);
+      }
+      return void 0;
+    default:
+      return void 0;
+  }
+}
 function isBmp(buffer) {
   if (buffer.length < 26)
     return false;
@@ -47160,6 +48767,9 @@ function isBmp(buffer) {
 function readUint16LE(buffer, offset) {
   return (buffer[offset] ?? 0) + ((buffer[offset + 1] ?? 0) << 8);
 }
+function readUint16BE(buffer, offset) {
+  return ((buffer[offset] ?? 0) << 8) + (buffer[offset + 1] ?? 0);
+}
 function readUint32BE(buffer, offset) {
   return (buffer[offset] ?? 0) * 16777216 + ((buffer[offset + 1] ?? 0) << 16) + ((buffer[offset + 2] ?? 0) << 8) + (buffer[offset + 3] ?? 0);
 }
@@ -47179,6 +48789,33 @@ function startsWithAscii(buffer, offset, text) {
       return false;
   }
   return true;
+}
+
+// node_modules/@earendil-works/pi-durable/dist/tools/image-processor.js
+var DEFAULT_IMAGE_LIMITS = { maxWidth: 2e3, maxHeight: 2e3, maxBytes: 4.5 * 1024 * 1024 };
+var INLINE_IMAGE_TYPES = /* @__PURE__ */ new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+var BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+function toBase64(bytes) {
+  const parts2 = [];
+  let chunk = "";
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i];
+    const b = bytes[i + 1];
+    const c = bytes[i + 2];
+    chunk += BASE64[a >> 2];
+    chunk += BASE64[(a & 3) << 4 | (b ?? 0) >> 4];
+    chunk += b === void 0 ? "=" : BASE64[(b & 15) << 2 | (c ?? 0) >> 6];
+    chunk += c === void 0 ? "=" : BASE64[c & 63];
+    if (chunk.length >= 8192) {
+      parts2.push(chunk);
+      chunk = "";
+    }
+  }
+  parts2.push(chunk);
+  return parts2.join("");
+}
+function base64Length(byteLength) {
+  return Math.ceil(byteLength / 3) * 4;
 }
 
 // node_modules/@earendil-works/pi-durable/dist/tools/read.js
@@ -47209,10 +48846,11 @@ async function readHead(reader, start, end, skipBom, context) {
   }
   return text + decoder2.decode();
 }
-function createReadTool() {
+function createReadTool(options = {}) {
+  const formats2 = options.images === void 0 ? "jpg, png, gif, webp" : "jpg, png, gif, webp, bmp";
   return defineTool({
     name: "read",
-    description: `Read the contents of a text file. Output is truncated to ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.`,
+    description: `Read the contents of a file. Supports text files and images (${formats2}). Images are sent as attachments. For text files, output is truncated to ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.`,
     parameters: readSchema,
     async execute(args, api, context) {
       const { path: path5, offset, limit: limit2 } = args;
@@ -47222,11 +48860,15 @@ function createReadTool() {
       try {
         for (let attempt = 0; ; attempt++) {
           const before = getOrThrow(await reader.info(context));
-          const result = await readText(reader, before, path5, offset, limit2, context);
+          const mimeType = await detectSupportedImageMimeTypeOf({
+            size: before.size,
+            read: async (position, length) => getOrThrow(await reader.read(position, length, context))
+          });
+          const result = mimeType === void 0 ? await readText(reader, path5, offset, limit2, context) : await readImage(reader, before, path5, mimeType, options.images, await imageModel(api, context), context);
           const after = getOrThrow(await reader.info(context));
-          if (after.size > before.size || after.size === before.size && after.mtimeMs === before.mtimeMs) {
+          const unchanged = after.size === before.size && after.mtimeMs === before.mtimeMs;
+          if (unchanged || mimeType === void 0 && after.size > before.size)
             return result;
-          }
           if (attempt === 1)
             throw new Error(`${path5} changed while it was read`);
         }
@@ -47236,31 +48878,70 @@ function createReadTool() {
     }
   });
 }
-async function readText(reader, info, path5, offset, limit2, context) {
-  const mimeType = await detectSupportedImageMimeTypeOf({
-    size: info.size,
-    read: async (position, length) => getOrThrow(await reader.read(position, length, context))
-  });
-  if (mimeType) {
-    return {
-      content: [],
-      isError: true,
-      diagnostics: [
-        {
-          severity: "error",
-          code: "unsupported_image",
-          message: `${path5} is an image (${mimeType}); reading images is not supported`
-        }
-      ]
-    };
+async function readImage(reader, info, path5, mimeType, processor, { vision, limits }, context) {
+  let image;
+  const notes = [];
+  if (processor !== void 0) {
+    const bytes = getOrThrow(await reader.read(0, info.size, context));
+    const prepared = await processor.prepare(bytes, mimeType, limits);
+    if (prepared === void 0)
+      return imageError(`${path5} is an image (${mimeType}) that cannot be prepared for the model`);
+    image = prepared;
+    if (prepared.convertedFrom !== void 0)
+      notes.push(`Converted from ${prepared.convertedFrom} to ${prepared.mimeType}.`);
+    if (prepared.resized !== void 0) {
+      const { from, to } = prepared.resized;
+      const scale = (from.width / to.width).toFixed(2);
+      notes.push(`Resized from ${from.width}x${from.height} to ${to.width}x${to.height}. Multiply coordinates by ${scale} to map them to the original.`);
+    }
+  } else {
+    if (!INLINE_IMAGE_TYPES.has(mimeType)) {
+      return imageError(`${path5} is an image (${mimeType}) that needs converting, and no image processor is configured`);
+    }
+    const unshrinkable = "and no image processor is configured to shrink it";
+    if (base64Length(info.size) > limits.maxBytes) {
+      return imageError(`${path5} is an image (${mimeType}) of ${formatSize(info.size)}, too large to send, ${unshrinkable}`);
+    }
+    const bytes = getOrThrow(await reader.read(0, info.size, context));
+    const size = imageDimensions(bytes, mimeType);
+    if (size === void 0)
+      return imageError(`${path5} is an image (${mimeType}) whose size cannot be read`);
+    if (size.width > limits.maxWidth || size.height > limits.maxHeight) {
+      return imageError(`${path5} is an image (${mimeType}) of ${size.width}x${size.height}, larger than ${limits.maxWidth}x${limits.maxHeight}, ${unshrinkable}`);
+    }
+    image = { data: toBase64(bytes), mimeType };
   }
+  if (!vision)
+    notes.push("The current model does not support images; it sees a placeholder instead.");
+  const diagnostics = [
+    { severity: "info", code: "image", message: [`Read image file [${image.mimeType}].`, ...notes].join(" ") }
+  ];
+  return { output: [{ type: "image", data: image.data, mimeType: image.mimeType }], diagnostics };
+}
+async function imageModel(api, context) {
+  const ref = (await api.agent(context)).model;
+  const model = ref === void 0 ? void 0 : api.models.getModel(ref.provider, ref.modelId);
+  const resize = model?.inputLimits?.images?.resize;
+  return {
+    vision: model?.input.includes("image") ?? true,
+    limits: {
+      maxWidth: resize?.maxWidth ?? DEFAULT_IMAGE_LIMITS.maxWidth,
+      maxHeight: resize?.maxHeight ?? DEFAULT_IMAGE_LIMITS.maxHeight,
+      maxBytes: resize?.maxBytes ?? DEFAULT_IMAGE_LIMITS.maxBytes
+    }
+  };
+}
+function imageError(message) {
+  return { output: [], isError: true, diagnostics: [{ severity: "error", code: "unsupported_image", message }] };
+}
+async function readText(reader, path5, offset, limit2, context) {
   const startLine = offset ? Math.max(0, offset - 1) : 0;
   const startLineDisplay = startLine + 1;
   const sliceStart = sliceIndex(startLine);
-  const scanStart = Number.isSafeInteger(sliceStart) ? sliceStart : 0;
-  const requestedEnd = limit2 === void 0 ? void 0 : Math.max(scanStart + 1, sliceIndex(startLine + limit2));
+  const scanStart2 = Number.isSafeInteger(sliceStart) ? sliceStart : 0;
+  const requestedEnd = limit2 === void 0 ? void 0 : Math.max(scanStart2 + 1, sliceIndex(startLine + limit2));
   const scanEnd = requestedEnd !== void 0 && Number.isSafeInteger(requestedEnd) ? requestedEnd : void 0;
-  const scanOf = async (endLine) => getOrThrow(await reader.scanLines({ startLine: scanStart, ...endLine === void 0 ? {} : { endLine } }, context));
+  const scanOf = async (endLine) => getOrThrow(await reader.scanLines({ startLine: scanStart2, ...endLine === void 0 ? {} : { endLine } }, context));
   let scan = await scanOf(scanEnd);
   const totalFileLines = scan.newlines + 1;
   if (startLine >= totalFileLines) {
@@ -47320,7 +49001,7 @@ async function readText(reader, info, path5, offset, limit2, context) {
     });
   }
   return {
-    content: outputText === "" ? [] : [{ type: "text", text: outputText }],
+    output: outputText === "" ? [] : [{ type: "text", text: outputText }],
     ...details === void 0 ? {} : { details },
     diagnostics
   };
@@ -47346,17 +49027,20 @@ function createWriteTool() {
         getOrThrow(await env.writeFile(absolutePath, content, context));
         if (context.abortSignal?.aborted)
           throw new Error("Operation aborted");
-        return { content: [{ type: "text", text: `Successfully wrote to ${path5}` }] };
+        return { output: [{ type: "text", text: `Successfully wrote to ${path5}` }] };
       }, context);
     }
   });
 }
 
 // node_modules/@earendil-works/pi-durable/dist/tools/index.js
-var CodingTools = defineExtension({
-  name: "coding-tools",
-  tools: [createReadTool(), createWriteTool(), createEditTool(), createBashTool()]
-});
+function createCodingTools(options = {}) {
+  return defineExtension({
+    name: "coding-tools",
+    tools: [createReadTool(options), createWriteTool(), createEditTool(), createBashTool()]
+  });
+}
+var CodingTools = createCodingTools();
 
 // node_modules/@earendil-works/pi-durable/dist/storage/jsonl/storage.js
 var FORMAT_VERSION = 1;
@@ -47549,7 +49233,7 @@ var JsonlStorage = class _JsonlStorage {
     if (context === void 0)
       return this.store.entry(idFromNumber(idOrConversationId), idOrContext);
     if (typeof idOrContext !== "number")
-      throw new TypeError("Storage.entry() requires an entry ID");
+      throw new StorageRequestError("Storage.entry() requires an entry ID");
     return this.store.entry(idFromNumber(idOrConversationId), idFromNumber(idOrContext), context);
   }
   async findLatestHeadMarker(conversationId, atOrBeforeEntryId, context) {
@@ -48474,7 +50158,7 @@ async function main() {
   const [major, minor] = process.versions.node.split(".").map(Number);
   if (major < 22 || major === 22 && minor < 19) throw new Error("Pi requires Node >=22.19");
   if (process.argv[2] === "--version") {
-    console.log(`esf-pi/1 pi-durable/1.0.4 node/${process.versions.node}`);
+    console.log(`esf-pi/1 pi-durable/1.2.0 node/${process.versions.node}`);
     return 0;
   }
   const request = await readRequest();

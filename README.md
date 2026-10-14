@@ -35,7 +35,7 @@ This is actively developed software. Review the [validated behavior and
 operational requirements](docs/production-readiness.md) before deployment.
 ESF produces changes for review; it does not decide what ships.
 ESF 0.6.2 is a release candidate. The
-[component upgrade record](release/qualification/component-upgrade-2026-10-06.md)
+[component upgrade record](release/qualification/component-upgrade-2026-10-14.md)
 records its local validation. Production qualification requires a matching,
 attested companion manifest for its exact source and asset digests. The
 [release procedure](docs/release-v0.6.2.md) and
@@ -48,7 +48,7 @@ attested companion manifest for its exact source and asset digests. The
 
 ## Quick start
 
-Requirements for v0.6.2 development: Go 1.27.1, Node.js 24.21.0, Git,
+Requirements for v0.6.2 development: Go 1.27.2, Node.js 26.12.0, Git,
 an existing CubeSandbox deployment with a READY template, and Temporal.
 Python tools use the frozen `uv.lock`; they are optional. Docker Compose can
 run the included local Temporal stack.
