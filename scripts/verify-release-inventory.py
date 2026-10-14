@@ -55,8 +55,40 @@ def main() -> int:
 
     require(re.search(rf"(?m)^go {re.escape(inventory['toolchains']['go'])}$", mod) is not None, "Go toolchain does not match inventory")
     require(dependencies["cubesandbox"]["go_sdk"] in mod, "Cube SDK does not match inventory")
-    for module, version in (("google.golang.org/grpc", "grpc"), ("go.opentelemetry.io/otel", "otel"), ("modernc.org/sqlite", "sqlite")):
+    require(example["cube"].get("version") == dependencies["cubesandbox"]["release"], "example Cube version differs from inventory")
+    for module, version in (("google.golang.org/grpc", "grpc"), ("go.opentelemetry.io/otel", "otel"), ("modernc.org/sqlite", "sqlite"), ("golang.org/x/net", "x_net")):
         require(re.search(rf"(?m)^\s*{re.escape(module)} v{re.escape(dependencies[version])}(?:\s|$)", mod) is not None, f"{module} does not match inventory")
+    for module, key in (("go.temporal.io/sdk", "go_sdk"), ("go.temporal.io/api", "api")):
+        require(re.search(rf"(?m)^\s*{re.escape(module)} v{re.escape(dependencies['temporal'][key])}(?:\s|$)", mod) is not None,
+                f"{module} does not match inventory")
+    mise = tomllib.loads((ROOT / ".mise.toml").read_text())["tools"]
+    for tool, key in (("go", "go"), ("node", "node"), ("python", "python_optional"), ("uv", "uv")):
+        require(mise[tool] == inventory["toolchains"][key], f"mise {tool} differs from inventory")
+    for workflow in ("ci", "images", "release"):
+        source = (ROOT / f".github/workflows/{workflow}.yml").read_text()
+        require(re.search(rf"go-version: {re.escape(inventory['toolchains']['go'])}(?:\s|$)", source) is not None,
+                f"{workflow} Go toolchain differs from inventory")
+    ci = (ROOT / ".github/workflows/ci.yml").read_text()
+    require(f"node-version: {inventory['toolchains']['node']}" in ci, "CI Node differs from inventory")
+    require(f"@v{inventory['security_tools']['govulncheck']}" in ci, "CI vulnerability scanner differs from inventory")
+    require(f"@v{inventory['security_tools']['gitleaks']}" in ci, "CI secret scanner differs from inventory")
+    for name, bases in (("runtime", ("go", "runtime")), ("managedworker", ("go", "worker")), ("intake", ("go", "python"))):
+        source = (ROOT / f"deploy/images/Dockerfile.{name}").read_text()
+        for base in bases:
+            require(inventory["build_bases"][base] in source, f"{name} {base} base differs from inventory")
+    intake = (ROOT / "deploy/images/Dockerfile.intake").read_text()
+    require(f"uv=={inventory['toolchains']['uv']}" in intake, "intake uv differs from inventory")
+    makefile = (ROOT / "Makefile").read_text()
+    require(f"PYTHON_VERSION ?= {inventory['toolchains']['python_optional']}" in makefile, "Makefile Python differs from inventory")
+    temporal_env = dict(line.split("=", 1) for line in (ROOT / "deployments/dev/temporal/.env.example").read_text().splitlines()
+                        if line and not line.startswith("#") and "=" in line)
+    for variable, key in (("TEMPORAL_VERSION", "server"), ("TEMPORAL_ADMINTOOLS_VERSION", "admin_tools"), ("TEMPORAL_UI_VERSION", "ui")):
+        require(temporal_env[variable] == dependencies["temporal"][key], f"{variable} differs from inventory")
+    require(temporal_env["POSTGRESQL_VERSION"] == dependencies["postgresql"] + "-alpine", "PostgreSQL differs from inventory")
+    compose = (ROOT / "deployments/dev/temporal/docker-compose.yaml").read_text()
+    require("${POSTGRESQL_DATA_VOLUME:?" in compose, "PostgreSQL volume must be selected explicitly before migration")
+    if int(dependencies["postgresql"].split(".")[0]) >= 18:
+        require("temporal-postgresql-data:/var/lib/postgresql\n" in compose, "PostgreSQL 18+ volume layout differs from recipe")
     frontend = dependencies["frontend"]
     for package, key in (("vite", "vite"), ("lucide-react", "lucide"), ("jsdom", "jsdom"), ("react", "react"), ("tailwindcss", "tailwind")):
         actual = npm_frontend.get(f"node_modules/{package}", {}).get("version")
@@ -64,6 +96,10 @@ def main() -> int:
     opencode = npm_agent.get("node_modules/@opencode/cli", {})
     require(opencode.get("version") == dependencies["opencode"]["version"], "OpenCode version differs from inventory")
     require(opencode.get("integrity") == dependencies["opencode"]["npm_integrity"], "OpenCode package integrity differs from inventory")
+    opencode_binary = npm_agent.get("node_modules/" + dependencies["opencode"]["linux_amd64_package"], {})
+    require(opencode_binary.get("version") == dependencies["opencode"]["version"], "OpenCode binary package version differs from inventory")
+    require(opencode_binary.get("integrity") == dependencies["opencode"]["linux_amd64_npm_integrity"], "OpenCode binary package integrity differs from inventory")
+    require("node_modules/" + dependencies["opencode"]["linux_amd64_package"] + "/bin/opencode" in template, "Cube template OpenCode binary variant differs from inventory")
     example_agent = example["harnesses"]["opencode2"]
     require(example_agent.get("binary_sha256") == dependencies["opencode"]["linux_amd64_binary_sha256"], "example OpenCode digest differs from inventory")
     require(example_agent.get("preinstalled") is True, "example OpenCode agent is not template-installed")

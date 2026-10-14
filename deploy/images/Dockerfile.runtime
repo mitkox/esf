@@ -1,6 +1,6 @@
 # Refresh both digests with the release inventory before qualification.
-ARG GO_BUILDER=docker.io/library/golang@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195
-ARG RUNTIME_BASE=gcr.io/distroless/static-debian12@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+ARG GO_BUILDER=docker.io/library/golang@sha256:820153096fda4de6ac1b7194d12e416b7dd8f4e9a33d17e0345b111b945162d8
+ARG RUNTIME_BASE=gcr.io/distroless/static-debian13@sha256:58133991db06659feaabe0f4e97a35cebf15ef4ea08f8a4c6d2ee5f75e4aa6a0
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS build
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -8,7 +8,7 @@ RUN go mod download
 COPY . .
 ARG TARGETOS
 ARG TARGETARCH
-ARG ESF_VERSION=0.6.1
+ARG ESF_VERSION=0.6.2
 ARG ESF_COMMIT
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -buildvcs=false -trimpath \

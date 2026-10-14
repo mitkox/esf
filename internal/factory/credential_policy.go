@@ -29,8 +29,8 @@ func (c Config) runtimeNetworkForHarness(name string) (sandbox.Network, bool, er
 	if !strings.EqualFold(strings.TrimSpace(h.CredentialMode), cubeEgressCredentialMode) {
 		return sandbox.Network{}, false, nil
 	}
-	if !strings.EqualFold(strings.TrimSpace(h.Type), "unreal") && !strings.EqualFold(strings.TrimSpace(h.Type), "opencode") && !strings.EqualFold(strings.TrimSpace(h.Type), "pi") {
-		return sandbox.Network{}, false, fmt.Errorf("harness %q: cube_egress credential mode requires type unreal, opencode, or pi", name)
+	if !supportsManagedHarness(h.Type) {
+		return sandbox.Network{}, false, fmt.Errorf("harness %q: cube_egress credential mode requires type unreal, opencode, pi, claude, or codex", name)
 	}
 	if err := validateCubeEgressConfig(name, h); err != nil {
 		return sandbox.Network{}, false, err
@@ -58,12 +58,31 @@ func (c Config) runtimeNetworkForHarness(name string) (sandbox.Network, bool, er
 	}
 
 	header, format := "Authorization", "Bearer ${SECRET}"
-	return sandbox.Network{
+	if strings.EqualFold(strings.TrimSpace(h.Type), "claude") {
+		header, format = "x-api-key", "${SECRET}"
+	}
+	paths := []string{match.Path}
+	switch strings.ToLower(strings.TrimSpace(h.Type)) {
+	case "claude":
+		base := strings.TrimRight(endpoint.Path, "/")
+		paths = []string{base + "/v1/messages", base + "/v1/messages/count_tokens"}
+	case "codex":
+		base := strings.TrimRight(endpoint.Path, "/")
+		paths = []string{base + "/responses", base + "/responses/compact"}
+	}
+	network := sandbox.Network{
 		AllowInternet: boolPointer(false),
 		AllowOut:      append([]string(nil), c.Sandbox.RuntimeAllowOut...),
-		Rules: []sandbox.NetworkRule{{
-			Name:  "factory-" + name + "-model",
-			Match: match,
+	}
+	for i, path := range paths {
+		endpointMatch := match
+		endpointMatch.Path = path
+		ruleName := "factory-" + name + "-model"
+		if i > 0 {
+			ruleName += "-" + strconv.Itoa(i)
+		}
+		network.Rules = append(network.Rules, sandbox.NetworkRule{
+			Name: ruleName, Match: endpointMatch,
 			Action: sandbox.NetworkAction{
 				Allow: true,
 				Audit: "metadata",
@@ -73,8 +92,9 @@ func (c Config) runtimeNetworkForHarness(name string) (sandbox.Network, bool, er
 					Format: format,
 				}},
 			},
-		}},
-	}, true, nil
+		})
+	}
+	return network, true, nil
 }
 
 func egressPath(basePath string) string {
