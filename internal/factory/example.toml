@@ -8,6 +8,7 @@
 schema_version = 1
 
 [cube]
+version         = "0.7.3"
 # Set the API URL to match your operator-managed Cube deployment.
 api_url         = "https://cube.example.org"
 template_id     = "tpl-your-ready-template"

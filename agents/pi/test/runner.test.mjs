@@ -251,17 +251,29 @@ test('surviving processes and uncertain process inspection prevent recovery', as
   } finally { await uncertain.close(); }
 });
 
+// Shared CI runners can start unrelated processes between inventory snapshots.
+// These cases isolate journal integrity and restart allowance; the preceding
+// surviving-process test continues to exercise the real /proc inventory.
+function launchWithControlledInventory(request) {
+  const events = [];
+  const finished = supervise(request, runner, {
+    inventory: async () => new Map(),
+    log: event => events.push(event),
+  }).then(code => ({ code, events }));
+  return { events, finished };
+}
+
 test('corrupt journal and exhausted allowance never start a third engine', async () => {
   const corrupt = await fixture(() => {});
   try {
-    const run = launch(corrupt.request); await until(() => corrupt.calls() === 1);
+    const run = launchWithControlledInventory(corrupt.request); await until(() => corrupt.calls() === 1);
     await fs.writeFile(path.join(corrupt.request.state_dir, 'journal', 'main.jsonl'), 'not-json\nnot-json\n');
     process.kill(run.events.find(e => e.type === 'engine_started').pid, 'SIGKILL');
     assert.equal((await run.finished).code, 1); assert.equal(corrupt.calls(), 1);
   } finally { await corrupt.close(); }
   const f = await fixture(() => {});
   try {
-    const run = launch(f.request); await until(() => f.calls() === 1);
+    const run = launchWithControlledInventory(f.request); await until(() => f.calls() === 1);
     process.kill(run.events.find(e => e.type === 'engine_started').pid, 'SIGKILL');
     await until(() => f.calls() === 2 && run.events.filter(e => e.type === 'engine_started').length === 2);
     process.kill(run.events.filter(e => e.type === 'engine_started')[1].pid, 'SIGKILL');

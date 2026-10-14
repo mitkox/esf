@@ -33,7 +33,10 @@ PR #41's Linux vulnerability check. The checks remain enabled. Go and Python
 transitive dependencies, npm lockfiles, embedded release metadata, base-image
 digests, and GitHub Action commit pins are refreshed together. Pi's bundle,
 license notices, model catalog, and frontend assets are rebuilt in Cube.
-Node 26 requires libatomic1; both Cube template recipes install it.
+Node 26 requires libatomic1; both Cube template recipes install it. CubeAPI
+0.7.3 still reads `allow_internet_access` on create, while its Go SDK sends
+camelCase. The existing explicit-denial compatibility rule now covers both
+0.7.2 and 0.7.3; the operator example records the selected Cube version.
 
 ## Claude and Codex
 

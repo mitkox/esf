@@ -64,6 +64,33 @@ that archive predates this evidence note and the README link update.
 | `release-final.log` | `a441e70ec5c961f9ed94329d8aa75e8d21f8ff4dbf257094184aa8f09bd6af58` |
 | `native-cli-startup.log` | `3c546230cdaf37106f270cbf3e7760a16ff3100d41a2c3bea1cbe6993ba193c1` |
 
+## Follow-up compatibility regressions
+
+The first upgrade CI run rebuilt the exact committed Pi bundle but failed the
+restart-allowance test while waiting for its second engine. That test used the
+real global process inventory, so unrelated processes starting on a shared
+runner could correctly prevent recovery. Journal corruption and restart-budget
+cases now inject a deterministic inventory. The dedicated surviving-process
+and uncertain-inspection tests continue to check fail-closed recovery.
+
+The official Cube 0.7.3 create schema still accepts the snake_case denial flag,
+while its Go SDK emits camelCase. Explicit denial compatibility now covers
+0.7.2 and 0.7.3, including tagged versions. Defaults, allow requests, unknown
+versions and future schemas retain their existing handling. A negative test
+uses the old implementation to demonstrate that the new 0.7.3 denial cases
+fail before the fix; corrected Cube/factory/agent/CLI race suites then pass. The full Pi suite passed
+again, and the repaired recovery case passed five additional consecutive runs.
+Both validation VMs were destroyed; final sandbox count was zero.
+
+| Follow-up log | SHA-256 |
+| --- | --- |
+| `cube-denial-negative.log` | `99bdb60e939ae06f700ca2502f7b799bcf9f246746beb3e3604c682bbb2ba6e6` |
+| `cube-denial-race.log` | `acf8c2e49d879b6832a87e6f78de1a0e217326f206fde500f8212a42514a21fd` |
+| `cube-release-pins.log` | `83eec82092dc5f58cc9890dc2e664e6f7312fb882a795356f76515668dcc531f` |
+| `pi-recovery-regression.log` | `6b6314ed2a82d05acea62e063e54aec86f4621cb6bf9b874cb5cfb54db92684a` |
+
+The follow-up source archive hash is `35b822267afb3f7babc91a020960b77cd69650bac6966c8599e5130c19d3fd2d`.
+
 ## Qualification boundary
 
 These are source and local compatibility results. They do not establish a

@@ -55,6 +55,7 @@ def main() -> int:
 
     require(re.search(rf"(?m)^go {re.escape(inventory['toolchains']['go'])}$", mod) is not None, "Go toolchain does not match inventory")
     require(dependencies["cubesandbox"]["go_sdk"] in mod, "Cube SDK does not match inventory")
+    require(example["cube"].get("version") == dependencies["cubesandbox"]["release"], "example Cube version differs from inventory")
     for module, version in (("google.golang.org/grpc", "grpc"), ("go.opentelemetry.io/otel", "otel"), ("modernc.org/sqlite", "sqlite"), ("golang.org/x/net", "x_net")):
         require(re.search(rf"(?m)^\s*{re.escape(module)} v{re.escape(dependencies[version])}(?:\s|$)", mod) is not None, f"{module} does not match inventory")
     for module, key in (("go.temporal.io/sdk", "go_sdk"), ("go.temporal.io/api", "api")):
