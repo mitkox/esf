@@ -1,0 +1,9 @@
+opencode v2.0.29
+v26.12.0
+2.1.300 (Claude Code)
+codex-cli 0.162.1
+ff17011078cfe1d2db04f429c65a5bf9dd86e232cc493c7a03730ecc12a000ff  /opt/esf/agents/opencode2
+04bd662ac31ca6e74775a6b0c03403d66030c44855a9840607e95ab2fcf89bf5  /opt/esf/agents/pi-runner.mjs
+caa24debe02770c92a70677e2a62ca98890150e7ac1c17bcfe31bcc98cc89943  /opt/esf/agents/node
+674deba0bba9aee479f4503c438b49303b6fdd304b9a471b14977aaec5215453  /opt/esf/agents/claude
+628e35487d888a28f0427fc37501da529dd3d81fcbad7a2c3421c1e8670d92e1  /opt/esf/agents/codex
