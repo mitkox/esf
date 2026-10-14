@@ -816,6 +816,13 @@ func (a *Activities) ApplyRuntimeNetwork(ctx context.Context, in ApplyRuntimeNet
 		return out, err
 	}
 	if applies {
+		// Register the just-resolved values too, so credential rotation cannot
+		// leave a new key unredacted in a control-plane error response.
+		for _, rule := range network.Rules {
+			for _, injection := range rule.Action.Inject {
+				a.redactor.Add(injection.Secret)
+			}
+		}
 		sb, err := a.provider.Reattach(ctx, in.SandboxID)
 		if err != nil {
 			return out, err
@@ -825,8 +832,11 @@ func (a *Activities) ApplyRuntimeNetwork(ctx context.Context, in ApplyRuntimeNet
 			return out, fmt.Errorf("sandbox provider %q cannot apply the required runtime network policy", a.provider.Name())
 		}
 		if err := updater.UpdateNetwork(ctx, network); err != nil {
-			span.RecordError(err)
-			return out, fmt.Errorf("apply runtime network policy: %w", err)
+			// Control-plane error bodies may echo submitted policy credentials.
+			// Sanitize before the error enters traces or Temporal history.
+			safeErr := fmt.Errorf("apply runtime network policy: %s", a.redactor.Redact(err.Error()))
+			span.RecordError(safeErr)
+			return out, safeErr
 		}
 		out.Applied = true
 		a.log.InfoContext(ctx, "sandbox runtime network locked down",

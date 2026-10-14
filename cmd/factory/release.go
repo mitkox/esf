@@ -323,7 +323,7 @@ func runStructuredDoctor(ctx context.Context, configPath, profile, output string
 		sort.Strings(names)
 		for _, name := range names {
 			h := cfg.Harnesses[name]
-			if h.Type == "opencode" || h.Type == "unreal" || h.Type == "pi" {
+			if h.Type == "opencode" || h.Type == "unreal" || h.Type == "pi" || h.Type == "claude" || h.Type == "codex" {
 				var e error
 				if !h.Preinstalled || len(h.Packages) != 0 {
 					e = fmt.Errorf("use a digest-pinned agent in the versioned Cube template without per-run package installs")

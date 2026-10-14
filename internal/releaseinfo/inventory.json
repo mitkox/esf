@@ -1,5 +1,5 @@
 {
-  "release": "v0.6.1",
+  "release": "v0.6.2",
   "release_profile": "binary-preview",
   "qualification_mode": "companion-manifest",
   "baseline": "2bd466256b6ae5ffcca032127a2583f674211358",
@@ -77,7 +77,7 @@
     "postgresql": null
   },
   "templates": {
-    "recipe_sha256": "4d95fd0f2c6cb808d66bef09c472aed028fabdd1a17329e2906380049f66755f",
+    "recipe_sha256": "934cfe4ace0e377dd279256fb9165e2bc4848f5839a055d272fe3b514869c8d3",
     "architecture": "linux/amd64",
     "git_package": "1:2.34.1-1ubuntu1.17",
     "ca_certificates_package": "20260601~22.04.1",
@@ -98,5 +98,21 @@
     "agent_acceptance": "pending",
     "cube_lifecycle": "pending",
     "migration_drill": "pending"
+  },
+  "optional_harnesses": {
+    "claude": {
+      "type": "claude",
+      "credential_mode": "cube_egress",
+      "tested_cli_version": "2.1.273",
+      "installation": "operator-provisioned standalone binary or complete runtime in a pinned Cube template",
+      "qualification": "adapter and CLI startup checked in Cube; provider-backed and production qualification pending"
+    },
+    "codex": {
+      "type": "codex",
+      "credential_mode": "cube_egress",
+      "tested_cli_version": "0.162.1",
+      "installation": "operator-provisioned standalone binary or complete runtime in a pinned Cube template",
+      "qualification": "adapter and CLI startup checked in Cube; provider-backed and production qualification pending"
+    }
   }
 }
