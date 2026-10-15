@@ -1,0 +1,319 @@
+{
+  "date": "2026-10-14",
+  "environment": "local existing Cube deployment; not Azure or release acceptance",
+  "binary_sha256": {
+    "/tmp/esf-turn-executor": "10fa3d93af491329c42d6fd18198fd67ed7b61027c74fe156d71fc5098215a88",
+    "/tmp/esf-turn-smoke": "087f3cc967a67f1e223978316caf1e587f8f163517258dee3a54e041813697aa",
+    "/tmp/esf-turn-live-20261014/package/claude": "d81396a668eb76fbddb49a2a5841f1b5d7af96b4c1f6500ced92f2c988f5bcd4"
+  },
+  "go_tests": {
+    "execution": "compiled test binary executed inside a fresh Cube VM",
+    "suites": 11,
+    "exit_code": 0,
+    "test_command": "/usr/local/bin/opencode2 -test.v"
+  },
+  "sf_tests": {
+    "command": "node --test --test-isolation=none packages/sf/test/executor-run.test.ts packages/sf/test/executor.test.ts",
+    "passed": 9,
+    "typecheck": "passed"
+  },
+  "checkpoint_secret_scan": {
+    "files": 33,
+    "exact_model_credential_occurrences": 0
+  },
+  "live": {
+    "workflow": {
+      "run_id": "4941f426-fabd-4691-b017-8a9682e394f9",
+      "status": "completed",
+      "artifacts": [
+        {
+          "source": "out",
+          "path": "out/proof.txt",
+          "sha256": "sha256:c5ecc43e994e4af0aa2ac4d029afe4d49ab8cb204f8d9b3941c2abe113e3a226",
+          "bytes": 15,
+          "modified_at": "2026-10-14T20:21:26.007Z"
+        }
+      ],
+      "sandbox": {
+        "cleanup": {
+          "residual": [],
+          "verified": true
+        },
+        "network": "profile",
+        "provider": "cubesandbox"
+      },
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 15220,
+        "input_tokens": 15146,
+        "output_tokens": 112
+      },
+      "signals": {
+        "files_written": 1,
+        "deliverables_written": [],
+        "repos_touched": [],
+        "irreversible_calls": [],
+        "egress": null,
+        "cost_usd": null,
+        "duration_ms": 5138,
+        "exit_code": 0
+      },
+      "backend": {
+        "cost_status": "unknown_model_pricing",
+        "failure": "",
+        "harness_reported_cost_usd": 0.08614,
+        "profile_sha": "37568e3fd09688d2cad9035db9deebe1f0a2e01da65457846977cb3fd471e4ec"
+      },
+      "verified_template_allocation": {
+        "cpu_milli": 2000,
+        "memory_mib": 2000
+      },
+      "binary_sha256": "10fa3d93af491329c42d6fd18198fd67ed7b61027c74fe156d71fc5098215a88"
+    },
+    "real_permission": {
+      "run_id": "581f310a-8772-4068-8b7e-441aff98f6d1",
+      "status": "completed",
+      "artifacts": [
+        {
+          "bytes": 17,
+          "modified_at": "2026-10-14T20:16:58.932370115Z",
+          "path": "permission-proof.txt",
+          "sha256": "sha256:e60a84cce04db25db45e5940f8f3810b9c72870f5d7a3bb9244cd47680fd1840",
+          "source": "workspace"
+        }
+      ],
+      "sandbox": {
+        "cleanup": {
+          "residual": [],
+          "verified": true
+        },
+        "network": "profile",
+        "provider": "cubesandbox"
+      },
+      "usage": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 2164,
+        "input_tokens": 1850,
+        "output_tokens": 138
+      },
+      "signals": {
+        "cost_usd": null,
+        "deliverables_written": [],
+        "duration_ms": 7760,
+        "egress": null,
+        "exit_code": 0,
+        "files_written": 1,
+        "irreversible_calls": [],
+        "repos_touched": []
+      },
+      "backend": {
+        "cost_status": "unknown_model_pricing",
+        "failure": "",
+        "harness_reported_cost_usd": 0.013782,
+        "profile_sha": "84d6c009e93acd9f8ac37a10774078b827705d771f3f5248255fa0e0c17c7802"
+      },
+      "approvals": 1,
+      "proof": true,
+      "binary_sha256": "9fc9bed32a7f1ddbe815ddcb448e1f996d7fe0e9b6785e7ac28e4266cb97cbf9"
+    },
+    "binary_restore": [
+      {
+        "result": {
+          "apiVersion": "superfactory/v0",
+          "artifacts": [
+            {
+              "bytes": 4,
+              "modified_at": "2026-10-14T19:47:02.50839195Z",
+              "path": "binary.dat",
+              "sha256": "sha256:6509423fd9da5c225d2f8619ffae394b40f9f7686fee55a38c54b1424ac65f46",
+              "source": "workspace"
+            },
+            {
+              "bytes": 1,
+              "modified_at": "2026-10-14T19:47:02.508393242Z",
+              "path": "counter",
+              "sha256": "sha256:6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+              "source": "workspace"
+            }
+          ],
+          "backend": {
+            "failure": "",
+            "profile_sha": "a798e9ca7b01d36f0f2f1fc15286c957e49a1c2624229a4236c35e78a9549000"
+          },
+          "duration_ms": 496,
+          "exit_code": 0,
+          "finished_at": "2026-10-14T19:47:02.508377803Z",
+          "harness": {
+            "name": "fixture",
+            "session_id": "fixture-session"
+          },
+          "kind": "TurnResult",
+          "result_text": "turn 1",
+          "run_id": "9e95a4b5-21b8-45d5-b9d9-d2ed5fd7087e",
+          "sandbox": {
+            "cleanup": {
+              "residual": [],
+              "verified": true
+            },
+            "network": "profile",
+            "provider": "cubesandbox"
+          },
+          "signals": {
+            "cost_usd": 0,
+            "deliverables_written": [],
+            "duration_ms": 496,
+            "egress": null,
+            "exit_code": 0,
+            "files_written": 2,
+            "irreversible_calls": [],
+            "repos_touched": []
+          },
+          "spec_sha": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "started_at": "2026-10-14T19:47:02.012328695Z",
+          "status": "completed",
+          "stderr_tail": "",
+          "stdout_tail": "{\"type\": \"result\", \"result\": \"turn 1\", \"session_id\": \"fixture-session\", \"total_cost_usd\": 0, \"usage\": {\"input_tokens\": 0, \"output_tokens\": 0}}\n",
+          "usage": {
+            "cost_usd": 0,
+            "input_tokens": 0,
+            "output_tokens": 0
+          }
+        },
+        "checkpoint": "dc339b1d94cc16e16097d11a658337c53d2ea749d7bd03fa0129335c1ca51b61"
+      },
+      {
+        "result": {
+          "apiVersion": "superfactory/v0",
+          "artifacts": [
+            {
+              "bytes": 4,
+              "modified_at": "2026-10-14T19:47:02.904767804Z",
+              "path": "binary.dat",
+              "sha256": "sha256:020b257b1a7d9ca9e57398993c783c80b5998d3985a2e0884616db4a8c441000",
+              "source": "workspace"
+            },
+            {
+              "bytes": 1,
+              "modified_at": "2026-10-14T19:47:02.904768836Z",
+              "path": "counter",
+              "sha256": "sha256:d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
+              "source": "workspace"
+            }
+          ],
+          "backend": {
+            "failure": "",
+            "profile_sha": "a798e9ca7b01d36f0f2f1fc15286c957e49a1c2624229a4236c35e78a9549000"
+          },
+          "duration_ms": 382,
+          "exit_code": 0,
+          "finished_at": "2026-10-14T19:47:02.904742577Z",
+          "harness": {
+            "name": "fixture",
+            "session_id": "fixture-session"
+          },
+          "kind": "TurnResult",
+          "result_text": "turn 2",
+          "run_id": "a4ff6fff-946d-41fe-974d-9dfdd0f8f03c",
+          "sandbox": {
+            "cleanup": {
+              "residual": [],
+              "verified": true
+            },
+            "network": "profile",
+            "provider": "cubesandbox"
+          },
+          "signals": {
+            "cost_usd": 0,
+            "deliverables_written": [],
+            "duration_ms": 382,
+            "egress": null,
+            "exit_code": 0,
+            "files_written": 2,
+            "irreversible_calls": [],
+            "repos_touched": []
+          },
+          "spec_sha": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "started_at": "2026-10-14T19:47:02.52215948Z",
+          "status": "completed",
+          "stderr_tail": "",
+          "stdout_tail": "{\"type\": \"result\", \"result\": \"turn 2\", \"session_id\": \"fixture-session\", \"total_cost_usd\": 0, \"usage\": {\"input_tokens\": 0, \"output_tokens\": 0}}\n",
+          "usage": {
+            "cost_usd": 0,
+            "input_tokens": 0,
+            "output_tokens": 0
+          }
+        },
+        "checkpoint": "c29f6e4dcddbb0be767f79432cfc9b31a9cab36ba38b7c3bb90955c0e47b0c0b"
+      }
+    ],
+    "permission_fixture": {
+      "result": {
+        "apiVersion": "superfactory/v0",
+        "artifacts": [],
+        "backend": {
+          "failure": "",
+          "profile_sha": "0a863f21e50e45060286a0c2e5167c1699d3376a2a87dbd6b4d7981176aaf7d3"
+        },
+        "duration_ms": 2474,
+        "exit_code": 0,
+        "finished_at": "2026-10-14T19:51:47.08901746Z",
+        "harness": {
+          "name": "fixture",
+          "session_id": "fixture-permission"
+        },
+        "kind": "TurnResult",
+        "result_text": "allow",
+        "run_id": "e6fc916d-b274-4dd9-96d3-e6b9576a4d11",
+        "sandbox": {
+          "cleanup": {
+            "residual": [],
+            "verified": true
+          },
+          "network": "profile",
+          "provider": "cubesandbox"
+        },
+        "signals": {
+          "cost_usd": null,
+          "deliverables_written": [],
+          "duration_ms": 2474,
+          "egress": null,
+          "exit_code": 0,
+          "files_written": 0,
+          "irreversible_calls": [],
+          "repos_touched": []
+        },
+        "spec_sha": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "started_at": "2026-10-14T19:51:44.614526083Z",
+        "status": "completed",
+        "stderr_tail": "",
+        "stdout_tail": "{\"type\": \"result\", \"result\": \"allow\", \"session_id\": \"fixture-permission\"}\n"
+      },
+      "checkpoint": "21ed050c5f163b1dfaa6538500962ebfdeea605121b44118c46a60f41d0351db"
+    },
+    "resource_mismatch": {
+      "run_id": "e7b0a993-123c-4274-9f75-9acc0172d36e",
+      "expected_memory_mib": 4096,
+      "actual_memory_mib": 2000,
+      "result": "failed before model invocation",
+      "cleanup_verified": true
+    }
+  },
+  "limitations": [
+    "OpenCode Go MiniMax M3 price unrecognized by Claude; usage.cost_usd absent and cost signal null",
+    "Compiled adapter rejects Git sources/publication and interactive workflow profiles",
+    "Standalone single-process execution service fails interrupted runs rather than replaying them",
+    "Azure and hosted authentication acceptance are separate evidence"
+  ],
+  "resource_adapter_tests": {
+    "execution": "inside disposable Cube VM",
+    "cases": [
+      "exact",
+      "fractional CPU mismatch",
+      "wrong memory",
+      "missing receipt"
+    ],
+    "passed": 4
+  },
+  "source_revision": "fbd3267",
+  "source_note": "Original pre-rebase implementation. These model receipts were not rerun after rebasing onto master0ef8e23; see separate rebase evidence."
+}

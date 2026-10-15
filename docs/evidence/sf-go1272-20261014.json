@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-14",
+  "source_revision": "759a7467e4a9d23899774a3ce5383716af75dd47",
+  "go_version": "go1.27.2",
+  "x_net": "v0.60.0",
+  "govulncheck": "v1.8.0: No vulnerabilities found.",
+  "go_build": "passed",
+  "go_vet": "passed",
+  "inventory": "passed",
+  "tests": {
+    "turnexec": 11,
+    "cube": 13,
+    "execution": "inside disposable Cube VMs"
+  },
+  "logs": {
+    "vulncheck": "sf-go1272-vulncheck-20261014.log",
+    "turn-tests": "sf-go1272-turn-tests-20261014.log",
+    "cube-tests": "sf-go1272-cube-tests-20261014.log"
+  },
+  "binary_sha256": {
+    "/tmp/esf-turn-executor": "d1d9aedf8c268c0ccab16d26d298104c9ff8216713b243f94cc27878cc3ecedb",
+    "/tmp/esf-turn-smoke": "4fbfd0ca0fc07d8a13db5dce7c862908bd860cd12ea16a538cf2a8c13e223032"
+  },
+  "lifecycle": {
+    "allow_internet": false,
+    "binary_roundtrip": true,
+    "cleanup_verified": true,
+    "exit_code": 0,
+    "metadata_isolated": true,
+    "metadata_probe": "{\"metadata_http_status\": null}\n",
+    "owner": "6e02b1407f22dcbaee9027c7f504c26b",
+    "residual": [],
+    "sandbox_id": "50d8446a15d44d6790bcf82807b21129",
+    "stdout": "ESF_AZURE_CUBE_OK\n",
+    "template": "tpl-e774c165252b4096a158a397"
+  },
+  "owned_vm_cleanup": {
+    "ids_checked": 3,
+    "residual": [],
+    "verified": true
+  },
+  "limits": "No model requests repeated; original model receipts remain revision-tagged. No Azure or release acceptance claimed."
+}

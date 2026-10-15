@@ -1,0 +1,21 @@
+{
+  "chat-go": {
+    "template": "REPLACE_WITH_READY_TEMPLATE_ID",
+    "command": ["/tmp/esf-harness", "-p", "--verbose", "--output-format", "stream-json", "--permission-mode", "default", "--setting-sources", "", "--model", "minimax-m3"],
+    "harness": "claude-code",
+    "harness_artifact": {"file": "/opt/esf/claude/2.1.272/claude", "sha256": "d81396a668eb76fbddb49a2a5841f1b5d7af96b4c1f6500ced92f2c988f5bcd4"},
+    "model_base_url": "https://opencode.ai/inference/go",
+    "env_refs": {"ANTHROPIC_API_KEY": "OPENCODE_GO_API_KEY"},
+    "network": {"allow_internet": true},
+    "timeout_seconds": 600,
+    "max_cost_usd": 1,
+    "interactive_permissions": true
+  },
+  "fixture": {
+    "template": "REPLACE_WITH_READY_TEMPLATE_ID",
+    "command": ["python3", "-c", "import json;print(json.dumps({'type':'result','result':'ESF_AZURE_EXECUTOR_OK','session_id':'fixture-session','usage':{}}))"],
+    "harness": "fixture",
+    "network": {"allow_internet": false},
+    "timeout_seconds": 60
+  }
+}

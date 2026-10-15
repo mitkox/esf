@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-14",
+  "source_revision": "b1f06c76b8ab403d304e68053d96c6767a24ef41",
+  "base_revision": "0ef8e23484b2295fe035bdd98e11f180daf95322",
+  "original_revision": "fbd3267",
+  "scope": "Rebase, affected package regression and secret-free local Cube lifecycle. No model requests or Azure qualification.",
+  "binary_sha256": {
+    "/tmp/esf-turn-executor": "43d4ea470428a19c6ad6191798fdbdc97eaffb817c2cb14add6b5d41146be792",
+    "/tmp/esf-turn-smoke": "ebae833581cdbf90054d3f0e1c3611d80d9bff3ebb94d0de5b55b75be1e3960f"
+  },
+  "tests": {
+    "turnexec": {
+      "top_level_tests_passed": 11,
+      "exit_code": 0,
+      "log": "sf-turn-rebase-turnexec-20261014.log",
+      "execution": "compiled binary inside disposable Cube VM"
+    },
+    "cube": {
+      "top_level_tests_passed": 13,
+      "exit_code": 0,
+      "log": "sf-turn-rebase-cube-20261014.log",
+      "execution": "compiled binary inside disposable Cube VM"
+    }
+  },
+  "lifecycle": {
+    "allow_internet": false,
+    "binary_roundtrip": true,
+    "cleanup_verified": true,
+    "exit_code": 0,
+    "metadata_isolated": true,
+    "metadata_probe": "{\"metadata_http_status\": null}\n",
+    "owner": "6440fe53f5c72a68ea821a143283e661",
+    "residual": [],
+    "sandbox_id": "6b03b12f8dcd41f78a361503d1666f66",
+    "stdout": "ESF_AZURE_CUBE_OK\n",
+    "template": "tpl-e774c165252b4096a158a397"
+  },
+  "cleanup": {
+    "owned_ids": [
+      "73671ec1194e48c594333ba1925b3ec3",
+      "108a9cfc74614a92b90ec20738355ae5",
+      "6b03b12f8dcd41f78a361503d1666f66"
+    ],
+    "residual": [],
+    "verified": true,
+    "note": "Parallel test driver global-count warnings were reconciled by a final read-only inventory check of each owned sandbox identity."
+  },
+  "environment": {
+    "FACTORY_CUBE_VERSION": "0.7.2",
+    "model_calls": 0
+  }
+}

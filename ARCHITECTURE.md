@@ -38,3 +38,18 @@ The Temporal-based factory in `internal/factory` sits beside Machinist:
 - `internal/sandbox/lifecycle.go` declares the optional `Suspender`, `Previewer` and
   `Stater` capabilities. The factory records `SKIPPED` with a reason when a provider
   lacks one, so evidence never claims a cost was saved when it was not.
+
+## sf execution boundary
+
+`cmd/turn-executor` and `internal/turnexec` expose a private named-profile turn
+API over the existing Cube adapter. sf owns workflow ordering, workspaces, asks,
+connector grants and acceptance. This service owns only a fresh VM per turn,
+immutable binary checkpoint references, replayable bounded output, ownership
+leases, bound permission decisions and verified cleanup. It does not create a
+second Temporal workflow. Active records fail closed after service restart;
+provider metadata reconciles lost create responses without repeating execution.
+
+Profiles are operator-owned and have immutable digest receipts. Compiled turns
+also require an exact policy digest. API clients cannot choose commands, host
+paths, templates or secrets. See `docs/sf-turn-executor.md` for supported
+constraints, deployment, cost evidence and retained live qualification limits.

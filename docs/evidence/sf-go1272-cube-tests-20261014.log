@@ -1,0 +1,96 @@
+sandbox: 587f629999ca49e89d6f064bdbd231f4
+
+--- stdout ---
+=== RUN   TestConfigValidate
+=== PAUSE TestConfigValidate
+=== RUN   TestConfigStringRedactsAPIKey
+=== PAUSE TestConfigStringRedactsAPIKey
+=== RUN   TestConfigStringReportsUnsetKey
+=== PAUSE TestConfigStringReportsUnsetKey
+=== RUN   TestConfigFromEnvPrefersFactoryPrefixedVariables
+--- PASS: TestConfigFromEnvPrefersFactoryPrefixedVariables (0.00s)
+=== RUN   TestConfigFromEnvAcceptsSDKCompatibleNames
+--- PASS: TestConfigFromEnvAcceptsSDKCompatibleNames (0.00s)
+=== RUN   TestMergeNonZero
+=== PAUSE TestMergeNonZero
+=== RUN   TestParentDir
+=== PAUSE TestParentDir
+=== RUN   TestCreateExplicitDenialMatchesCube072APISchema
+=== RUN   TestCreateExplicitDenialMatchesCube072APISchema/stable_denial
+=== RUN   TestCreateExplicitDenialMatchesCube072APISchema/tagged_denial
+=== RUN   TestCreateExplicitDenialMatchesCube072APISchema/default_unchanged
+=== RUN   TestCreateExplicitDenialMatchesCube072APISchema/allow_unchanged
+=== RUN   TestCreateExplicitDenialMatchesCube072APISchema/future_schema
+=== RUN   TestCreateExplicitDenialMatchesCube072APISchema/unknown_schema
+--- PASS: TestCreateExplicitDenialMatchesCube072APISchema (0.01s)
+    --- PASS: TestCreateExplicitDenialMatchesCube072APISchema/stable_denial (0.01s)
+    --- PASS: TestCreateExplicitDenialMatchesCube072APISchema/tagged_denial (0.00s)
+    --- PASS: TestCreateExplicitDenialMatchesCube072APISchema/default_unchanged (0.00s)
+    --- PASS: TestCreateExplicitDenialMatchesCube072APISchema/allow_unchanged (0.00s)
+    --- PASS: TestCreateExplicitDenialMatchesCube072APISchema/future_schema (0.00s)
+    --- PASS: TestCreateExplicitDenialMatchesCube072APISchema/unknown_schema (0.00s)
+=== RUN   TestBoundedCommandScriptPreservesSmallOutputAndExit
+--- PASS: TestBoundedCommandScriptPreservesSmallOutputAndExit (0.02s)
+=== RUN   TestBoundedCommandScriptStopsExcessOutput
+--- PASS: TestBoundedCommandScriptStopsExcessOutput (0.02s)
+=== RUN   TestBoundedCommandScriptCapturesMultilineExit
+--- PASS: TestBoundedCommandScriptCapturesMultilineExit (0.01s)
+=== RUN   TestCubeNetworkRulesPreserveCredentialPolicy
+--- PASS: TestCubeNetworkRulesPreserveCredentialPolicy (0.00s)
+=== RUN   TestValidateActualTemplateResources
+=== RUN   TestValidateActualTemplateResources/exact
+=== RUN   TestValidateActualTemplateResources/fractional
+=== RUN   TestValidateActualTemplateResources/wrong_memory
+=== RUN   TestValidateActualTemplateResources/missing
+--- PASS: TestValidateActualTemplateResources (0.00s)
+    --- PASS: TestValidateActualTemplateResources/exact (0.00s)
+    --- PASS: TestValidateActualTemplateResources/fractional (0.00s)
+    --- PASS: TestValidateActualTemplateResources/wrong_memory (0.00s)
+    --- PASS: TestValidateActualTemplateResources/missing (0.00s)
+=== CONT  TestConfigValidate
+=== RUN   TestConfigValidate/valid
+=== PAUSE TestConfigValidate/valid
+=== RUN   TestConfigValidate/missing_api_url
+=== PAUSE TestConfigValidate/missing_api_url
+=== RUN   TestConfigValidate/bad_scheme
+=== PAUSE TestConfigValidate/bad_scheme
+=== RUN   TestConfigValidate/remote_API_without_TLS
+=== PAUSE TestConfigValidate/remote_API_without_TLS
+=== RUN   TestConfigValidate/remote_data_proxy_without_TLS
+=== PAUSE TestConfigValidate/remote_data_proxy_without_TLS
+=== RUN   TestConfigValidate/missing_template
+=== PAUSE TestConfigValidate/missing_template
+=== RUN   TestConfigValidate/negative_idle_timeout
+=== PAUSE TestConfigValidate/negative_idle_timeout
+=== RUN   TestConfigValidate/negative_request_timeout
+=== PAUSE TestConfigValidate/negative_request_timeout
+=== CONT  TestConfigValidate/valid
+=== CONT  TestParentDir
+--- PASS: TestParentDir (0.00s)
+=== CONT  TestMergeNonZero
+--- PASS: TestMergeNonZero (0.00s)
+=== CONT  TestConfigStringReportsUnsetKey
+--- PASS: TestConfigStringReportsUnsetKey (0.00s)
+=== CONT  TestConfigStringRedactsAPIKey
+--- PASS: TestConfigStringRedactsAPIKey (0.00s)
+=== CONT  TestConfigValidate/negative_request_timeout
+=== CONT  TestConfigValidate/negative_idle_timeout
+=== CONT  TestConfigValidate/missing_template
+=== CONT  TestConfigValidate/remote_data_proxy_without_TLS
+=== CONT  TestConfigValidate/remote_API_without_TLS
+=== CONT  TestConfigValidate/bad_scheme
+=== CONT  TestConfigValidate/missing_api_url
+--- PASS: TestConfigValidate (0.00s)
+    --- PASS: TestConfigValidate/valid (0.00s)
+    --- PASS: TestConfigValidate/negative_request_timeout (0.00s)
+    --- PASS: TestConfigValidate/negative_idle_timeout (0.00s)
+    --- PASS: TestConfigValidate/missing_template (0.00s)
+    --- PASS: TestConfigValidate/remote_data_proxy_without_TLS (0.00s)
+    --- PASS: TestConfigValidate/remote_API_without_TLS (0.00s)
+    --- PASS: TestConfigValidate/bad_scheme (0.00s)
+    --- PASS: TestConfigValidate/missing_api_url (0.00s)
+PASS
+
+--- stderr ---
+
+--- exit=0 ---

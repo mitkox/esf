@@ -1,0 +1,26 @@
+[Unit]
+Description=Private sf turn executor on Cube
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=esf-turn
+Group=esf-turn
+EnvironmentFile=/etc/esf/turn-executor.env
+ExecStart=/opt/esf/bin/turn-executor --listen 127.0.0.1:8091 --state /var/lib/esf-turn --profiles /etc/esf/turn-profiles.json
+Restart=on-failure
+RestartSec=5
+StateDirectory=esf-turn
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/esf /etc/esf
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target
