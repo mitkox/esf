@@ -1,0 +1,51 @@
+[
+  {
+    "api": "chat/completions",
+    "status": 200,
+    "model": "deepseek-v4.1-flash",
+    "usage": {
+      "prompt_tokens": 50,
+      "completion_tokens": 77,
+      "total_tokens": 127,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 62
+      }
+    },
+    "response_type": "chat.completion",
+    "error": null
+  },
+  {
+    "api": "messages",
+    "status": 200,
+    "model": "deepseek-v4.1-flash",
+    "usage": {
+      "input_tokens": 50,
+      "output_tokens": 93,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0
+    },
+    "response_type": "message",
+    "error": null
+  },
+  {
+    "api": "responses",
+    "status": 200,
+    "model": "deepseek-v4.1-flash",
+    "usage": {
+      "input_tokens": 50,
+      "output_tokens": 81,
+      "total_tokens": 131,
+      "input_tokens_details": {
+        "cached_tokens": 0
+      },
+      "output_tokens_details": {
+        "reasoning_tokens": 62
+      }
+    },
+    "response_type": "response",
+    "error": null
+  }
+]

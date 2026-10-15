@@ -1,0 +1,14 @@
+{
+  "status": "passed",
+  "http_mark": "0xce000000",
+  "https_mark": "0xcf000000",
+  "mask": "0xff000000",
+  "routing_table": 100,
+  "ingress_interface": "cube-dev",
+  "routing_rules_scoped_to_ingress": true,
+  "non_cube_routing_rules_unchanged": true,
+  "vpn_sysctls_changed": false,
+  "activation_cycles_verified": 2,
+  "supported_override": "CUBE_EGRESS_NET_INIT",
+  "wrapper_sha256": "36abeec88971fb505e6d9516556257dca37f06ce935d60013976395e1239f513"
+}

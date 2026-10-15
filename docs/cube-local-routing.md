@@ -64,3 +64,29 @@ egress network and proxy units. Check matching `ip rule` selectors, distinct
 HTTP/HTTPS TPROXY counters, an allowed provider request, and denied paths.
 Keep the previous configuration until those checks pass. Change only Cube's
 configuration; retain the existing Calico and Tailscale rules.
+
+## Scope policy routing to Cube's ingress interface
+
+A host with `net.ipv4.conf.all.src_valid_mark=1` includes packet marks in
+[reverse-path validation](https://docs.kernel.org/networking/ip-sysctl.html#ip-variables).
+An unscoped Cube mark rule can send that validation
+through Cube's `local default dev lo` table, preventing the intercepted TCP
+connection from completing even when TPROXY counters increase. Keep the host's
+VPN and reverse-path settings and restrict Cube's two table-100 rules with
+`iif cube-dev`. The incoming proxy flow still matches; reverse lookups and
+unrelated host traffic retain their normal routes.
+
+The optional [network-init wrapper](../deploy/cube/cube-egress-net-init-scoped.sh)
+uses Cube's supported `CUBE_EGRESS_NET_INIT` override. Install it as a root-owned
+executable in the operator's Cube scripts directory and point that variable in
+Cube's private `.one-click.env` at its absolute path. It wraps the shipped
+`cube-proxy-iptables-init.sh`, keeps Cube's configured marks, and adds the
+ingress constraint to only Cube's reserved routing rules. Its `down` path also
+removes those scoped rules. Quiesce VMs and back up the environment before
+activation. Requalify after changing the Cube version, marks or host routing.
+
+The local qualification exercised two activation cycles, confirmed all other
+routing rules were unchanged, and then obtained authenticated HTTP 200
+responses through Chat Completions, Anthropic Messages and Responses for
+`deepseek-v4.1-flash`. Both actual native CLIs produced verified patches.
+See the [retained qualification](../release/qualification/live-upgrade-2026-10-15.md).

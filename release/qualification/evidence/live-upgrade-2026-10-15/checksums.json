@@ -1,5 +1,9 @@
 {
   "conformance-postmigration.log": "4f54acd1be33035ad2bda73fa0ed267e47353b16923ffc0a1ddf8213ed6a1617",
+  "cube-routing-qualification.json": "ceffc975c404567865e19a57543722c5ccd5f83cef917d9c4001c878ca0279cc",
+  "native-protocols.json": "455c2a83c224026b65476e4141ff9f3634ffe21f736fea4b377cb3d9c05d7d6a",
+  "native-provider-qualification.json": "afd9ee3bdb0f4210e6a0c851bdb854f8e2ef4258e1ff724d0212947b6d00f9b9",
+  "native-proxy-audit.json": "e6fed4d9f321206e6a3f14e3c87f68cc2994f21c1a33f0c57fb4c309c5c709fc",
   "native-template-versions.log": "7984df007d3a9f964b1836cdcc32e674e207cccb17119e31faa44e9602edb17f",
   "noop-postmigration.log": "4543de53958c55b4d5373dd166470edac0ea14cf239ca806a37a8223eb64ebf8",
   "pi-deadline-regression.log": "e1f4c6efa894149e86644756d7a540de8631443f376e13a697612a3e92045bdc",

@@ -78,14 +78,52 @@ Requested: Claude and Codex CLIs using `deepseek-v4.1-flash` through the
 operator's OpenCode Go subscription, with its key held outside the VM and
 injected by CubeEgress.
 
-Status: **pending**. Restricted HTTPS probes currently fail before reaching
-the provider. Calico's raw PREROUTING rules clear bits used by Cube's default
-HTTP/HTTPS packet marks, and both Cube TPROXY counters remain zero. The
-[pre-fix probe](evidence/live-upgrade-2026-10-15/provider-protocol-beforemarks.log)
-records connection refusal, not successful inference.
+Status: **passed for the local Linux/amd64 Cube VM profile**. Claude Code
+2.1.300 and Codex 0.162.1 ran as the actual native clients with
+`deepseek-v4.1-flash` through OpenCode Go. The factory binary used source
+`886a675ab9c894f202e076ea9a741d872830143a`; later changes in this PR add operator
+routing support, regression checks and retained evidence.
 
-The operator-owned mark correction is described in
-[local routing](../../docs/cube-local-routing.md). Native provider acceptance
-and credential-isolation qualification remain pending until that correction
-is applied and measured. This record does not substitute conformance execution
-or protocol documentation for successful native CLI inference.
+| Case | Claude | Codex |
+| --- | --- | --- |
+| Implement greeting change; unchanged gates pass | passed | passed |
+| Successful agent leaves failing baseline; mandatory gate rejects it | passed | passed |
+| Review pauses with expected patch; explicit fixture approval resumes it | passed | passed |
+| Active process/file credential scan and five network boundary checks | passed | passed |
+
+All eight workflows completed with their expected outcomes and verified
+cleanup. The review approvals were operator commands on disposable fixtures;
+they do not represent independent PR review or production acceptance.
+
+The real Go credential was absent from 186 retained artifact files, all eight
+workflow histories and 322 decoded Temporal payloads. Live snapshots observed
+both native CLI processes and their placeholder credentials; the real key was
+absent from their process environments, command lines and scanned mutable
+workspace/authentication files. Raw snapshots and histories remain private.
+These observations cover those surfaces, not arbitrary VM memory.
+
+For each active CLI, unapproved paths, the other client's protocol endpoint,
+and a Host/SNI mismatch returned HTTP 403. Direct public and metadata access
+failed with connection refusal. Separate protocol probes returned HTTP 200,
+the requested model ID and nonzero usage for all three API formats. Native
+completion events also retained usage. Client cost estimates are not treated
+as reconciled Go subscription charges.
+
+- [Native workflows and credential boundaries](evidence/live-upgrade-2026-10-15/native-provider-qualification.json)
+- [Protocol responses after persistent routing activation](evidence/live-upgrade-2026-10-15/native-protocols.json)
+- [Routing qualification](evidence/live-upgrade-2026-10-15/cube-routing-qualification.json)
+- [Sanitized proxy audit](evidence/live-upgrade-2026-10-15/native-proxy-audit.json)
+
+Two host interactions were resolved: Calico cleared Cube's original packet
+mark bits, and unscoped mark routing conflicted with reverse-path validation.
+The operator configured separate mark bits and the supported network-init
+override to scope only Cube's table-100 rules to its ingress interface. Two
+activation cycles passed, with all non-Cube routing rules and VPN sysctls
+preserved. The earlier
+[pre-fix probe](evidence/live-upgrade-2026-10-15/provider-protocol-beforemarks.log)
+is retained as failure evidence. See [local routing](../../docs/cube-local-routing.md).
+
+The factory's legacy pre-agent canary still reports `UNKNOWN`; the explicit
+live checks above are separate evidence and do not rewrite that condition.
+Kubernetes, non-root enforcement, full image/security qualification, performance
+and soak gates remain outside this local native-client qualification.
