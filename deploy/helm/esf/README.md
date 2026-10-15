@@ -1,7 +1,7 @@
-# ESF v0.6.1 Helm chart
+# ESF v0.6.2 Helm chart
 
 This chart runs one factory worker and an optional, loopback-bound Machinist
-console. CubeSandbox 0.7.2, Temporal 1.32.0, and PostgreSQL 16.15 are
+console. CubeSandbox 0.7.3, Temporal 1.32.1, and PostgreSQL 18.6 are
 operator-managed dependencies. The chart deliberately has no public console
 Service. Use `kubectl port-forward` through an authenticated Kubernetes API
 session to reach the console. Set `console.factoryReadClaim` to the factory's
@@ -37,7 +37,7 @@ rotating credentials; running pods retain their staged credential snapshot.
 2. Take consistent snapshots of the factory and console PVCs and the
    operator-managed Temporal/PostgreSQL state. Save configuration, payload
    keys, image digests, and the release inventory with the snapshot.
-3. For an existing CubeSandbox Kubernetes installation upgrading to 0.7.2,
+3. For an existing CubeSandbox Kubernetes installation upgrading from a version before 0.7.2,
    follow the upstream node-drain procedure and acknowledge the host-network
    change with `hostNetworkChangeAck` before admitting ESF work.
 4. Verify image digests and release provenance, update the chart values, then
@@ -53,4 +53,4 @@ restore drill in an isolated namespace and storage set before production use.
 
 Production qualification needs the matching attested companion manifest,
 including Kubernetes acceptance, restore, performance, and 24-hour soak
-evidence. See [the release procedure](../../../docs/release-v0.6.1.md).
+evidence. See [the release procedure](../../../docs/release-v0.6.2.md).

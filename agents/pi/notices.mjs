@@ -30,6 +30,6 @@ export async function writeNotices(inputs) {
     if (!notices.length) throw new Error(`missing bundled license notice for ${name}@${pkg.version}`);
     sections.push(`===== ${name}@${pkg.version} (${pkg.license ?? 'see notice'}) =====\n${notices.join('\n')}`);
   }
-  sections.push(`===== Node.js 24.21.0 =====\n${await fs.readFile('LICENSE.node', 'utf8')}`);
+  sections.push(`===== Node.js 26.12.0 =====\n${await fs.readFile('LICENSE.node', 'utf8')}`);
   await fs.writeFile('dist/THIRD_PARTY_NOTICES.txt', sections.join('\n\n') + '\n');
 }

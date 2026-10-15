@@ -82,14 +82,14 @@ jobs:
             ESF_COMMIT=${{ github.sha }}
       - name: Attest image provenance
         if: inputs.publish
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
       - name: Attest unpublished OCI image
         if: "!inputs.publish"
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: ${{ matrix.component }}-image.oci.tar
       - name: Generate linux/amd64 image SBOM
@@ -104,7 +104,7 @@ jobs:
           upload-release-assets: false
       - name: Attest linux/amd64 image SBOM
         if: inputs.publish
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}
           subject-digest: ${{ steps.push.outputs.digest }}
@@ -112,7 +112,7 @@ jobs:
           push-to-registry: true
       - name: Attest unpublished linux/amd64 image SBOM
         if: "!inputs.publish"
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: ${{ matrix.component }}-image.oci.tar
           sbom-path: image-sbom-linux-amd64.cdx.json
@@ -129,7 +129,7 @@ jobs:
           upload-release-assets: false
       - name: Attest linux/arm64 image SBOM
         if: matrix.component != 'cube-template' && inputs.publish
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/esf-${{ matrix.component }}
           subject-digest: ${{ steps.push.outputs.digest }}
@@ -137,13 +137,13 @@ jobs:
           push-to-registry: true
       - name: Attest unpublished linux/arm64 image SBOM
         if: matrix.component != 'cube-template' && !inputs.publish
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: ${{ matrix.component }}-image.oci.tar
           sbom-path: image-sbom-linux-arm64.cdx.json
       - name: Retain unpublished image and SBOMs
         if: "!inputs.publish"
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: esf-candidate-image-${{ matrix.component }}
           path: |

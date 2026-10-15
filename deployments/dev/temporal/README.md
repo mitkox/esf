@@ -26,11 +26,11 @@ local value before running `make temporal-up`. Never commit `.env`.
 
 | Service | Image | Host binding | Purpose |
 | --- | --- | --- | --- |
-| `postgresql` | `postgres:16.15-alpine3.24` | `127.0.0.1:5433` | Temporal persistence + visibility store |
-| `temporal-admin-tools` | `temporalio/admin-tools:1.32.0` | — | one-shot schema setup |
-| `temporal` | `temporalio/server:1.32.0` | `127.0.0.1:7233` | gRPC frontend |
-| `temporal-create-namespace` | `temporalio/admin-tools:1.32.0` | — | one-shot namespace creation |
-| `temporal-ui` | `temporalio/ui:2.55.0` | `127.0.0.1:8233` | web UI |
+| `postgresql` | `postgres:18.6-alpine` | `127.0.0.1:5433` | Temporal persistence + visibility store |
+| `temporal-admin-tools` | `temporalio/admin-tools:1.32.1` | — | one-shot schema setup |
+| `temporal` | `temporalio/server:1.32.1` | `127.0.0.1:7233` | gRPC frontend |
+| `temporal-create-namespace` | `temporalio/admin-tools:1.32.1` | — | one-shot namespace creation |
+| `temporal-ui` | `temporalio/ui:2.56.0` | `127.0.0.1:8233` | web UI |
 
 ### Deliberate deviations from upstream
 
@@ -76,8 +76,8 @@ docker compose down          # add -v to also delete the data volume
 
 ## Data
 
-Temporal's own state lives in the `factory-temporal-postgresql-data` Docker
-volume, so workflow history survives `make temporal-down`. Because
+Temporal's own state lives in the configured `POSTGRESQL_DATA_VOLUME`
+(default `factory-temporal-postgresql-data-v18`) Docker volume, so workflow history survives `make temporal-down`. Because
 `restart: unless-stopped` is set, the containers also come back after a host
 reboot.
 
@@ -95,3 +95,15 @@ make temporal-hello        # runs a tagged integration workflow end-to-end
 
 `make temporal-hello` is the proof that gRPC is reachable, the namespace exists,
 and a workflow can actually execute — not merely that a container is running.
+
+PostgreSQL 18 uses a fresh `factory-temporal-postgresql-data-v18` volume mounted
+at `/var/lib/postgresql`. Existing PostgreSQL 16 volumes are preserved. Back up
+the Temporal database and visibility store, restore them into the new 18.6
+instance, and validate Temporal schema/replay before switching an existing
+installation. Do not run `docker compose down -v` during this migration.
+
+The updated compose file requires `POSTGRESQL_DATA_VOLUME` explicitly. An old
+`.env` without it fails before startup. For an existing 16.x installation, keep
+its old compose file, `.env`, and volume until backup/restore validation passes.
+Do not mount the old 16.x volume using the new 18.x directory layout. Use
+distinct container names and ports for the isolated migration stack.

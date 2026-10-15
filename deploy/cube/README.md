@@ -3,10 +3,10 @@
 The opt-in Pi v1 candidate uses `Dockerfile.pi-v1` and a separate candidate
 inventory. See [Pi installation and qualification](../../docs/harness-pi.md).
 
-`Dockerfile` builds the Linux/amd64 ESF v0.6.1 template from a pinned
+`Dockerfile` builds the Linux/amd64 ESF v0.6.2 template from a pinned
 CubeSandbox base. It includes Git, CA certificates, Python, the command-output
-limiter tools, OpenCode 2.0.24, and Unreal 0.3.1. The Docker build verifies
-both executable digests against the release inventory. Provider credentials
+limiter tools, OpenCode 2.0.29, and Unreal 0.3.1. The Docker build verifies
+the portable glibc x64-baseline OpenCode package and both executable digests against the release inventory. Provider credentials
 are absent from the image; CubeEgress injects them at runtime.
 
 Build and attest the candidate image through the `Candidate images` workflow.
@@ -30,7 +30,7 @@ Set `cube.template_id` only after the build reports READY. Configure agents
 with `preinstalled = true` and their in-template paths. Run `factory agents
 verify` to check both hashes in a disposable sandbox. Verify `git`, CA trust,
 `sha256sum`, `head`, `mkfifo`, and Python as part of template qualification.
-Then run the full Cube 0.7.2 lifecycle and agent acceptance
+Then run the full Cube 0.7.3 lifecycle and agent acceptance
 matrix on both VM and Kubernetes. Templates and image digests change only with
 requalification. Linux/arm64 agent packages and runner checksums need their
 own inventory and acceptance results before an arm64 template is supported.
