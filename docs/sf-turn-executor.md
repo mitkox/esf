@@ -170,3 +170,18 @@ The original model receipts above are tagged `fbd3267`. After rebasing onto
 probe passed with `FACTORY_CUBE_VERSION=0.7.2`, including binary roundtrip, metadata
 isolation and verified owned-VM cleanup. No model calls were repeated. Retained
 logs and new binary digests are in `docs/evidence/sf-turn-rebase-20261014.json`.
+
+### Merge preparation validation, 15 October 2026
+
+The branch now includes master `3cf6348`. Compiled policies explicitly disable
+implicit MCP servers from restored files. Claude completion requires a terminal
+result event, and completion after ownership expiry cannot publish a checkpoint.
+All three regression tests fail against the pre-fix code and pass with the fixes.
+The 14 executor and 13 provider test cases passed with the race detector inside
+Cube. Binary roundtrip and metadata isolation passed with internet enabled and
+disabled; the conformance factory run passed verification and cleanup. The final
+leak check found no live sandboxes. This validation used the local Cube stack;
+no model calls were repeated. Earlier model receipts remain revision-tagged.
+The factory conformance metadata probe was inconclusive; the separate lifecycle
+probes passed. Azure, production qualification and sf acceptance remain separate
+validation gates.
