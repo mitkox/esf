@@ -1,0 +1,27 @@
+{
+  "status": "passed",
+  "postgresql": "16.15",
+  "temporal": "1.32.0",
+  "workflow_history_digests": {
+    "factory-run-hop-gate-20261009-222901-5/01a122c8-baff-7a28-a3c4-ea07e2fd9ecb": {
+      "sha256": "a7a1e3e1d31c556b39380d52d752925fc9601a35d8aa417eba606f43a2f3a7b7",
+      "status": "WORKFLOW_EXECUTION_STATUS_RUNNING"
+    },
+    "factory-run-hop-gate-task10-ecfd8cc/01a121b1-26c9-7da8-92da-1dd9815d172c": {
+      "sha256": "ba5b914c266b3293df63ebffbe89ee4db9749b92358e4149211d88dd3d99ef6f",
+      "status": "WORKFLOW_EXECUTION_STATUS_RUNNING"
+    },
+    "factory-run-run-3be69ef5368834d855a27e0c/01a13c40-5972-7a87-97c6-1dc11547bbe3": {
+      "sha256": "b69c22af027066a02b64c66f1dc82f0a76efff837112b013fb2aa9fb70e525bf",
+      "status": "WORKFLOW_EXECUTION_STATUS_COMPLETED"
+    },
+    "factory-run-run-48a7f57cc07ef809105e3293/01a13c1c-8679-7f1a-b09c-2ef90a8b3c6d": {
+      "sha256": "7b62c39db805fc28c69b28f103c362f1f4eea9abcf5a696d32962c80d32f31e4",
+      "status": "WORKFLOW_EXECUTION_STATUS_COMPLETED"
+    },
+    "factory-run-run-51b33b2729fca741e598db9b/01a13c04-75bb-7c18-831a-fca7cd164737": {
+      "sha256": "55c8c1e3ad88550b942148d32cf9b89d4722a5b956c94199c8fb2040dae95825",
+      "status": "WORKFLOW_EXECUTION_STATUS_COMPLETED"
+    }
+  }
+}

@@ -56,6 +56,7 @@ services:
       - POSTGRES_PWD=${POSTGRES_PASSWORD}
       - POSTGRES_SEEDS=postgresql
       - SQL_PASSWORD=${POSTGRES_PASSWORD}
+      - TEMPORAL_SCHEMA_MODE=${TEMPORAL_SCHEMA_MODE:?set TEMPORAL_SCHEMA_MODE to create or upgrade}
     networks:
       - temporal-network
     volumes:

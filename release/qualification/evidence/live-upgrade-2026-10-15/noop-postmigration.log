@@ -1,0 +1,42 @@
+Run ID:      esf-pg18-verification-denial-20261015
+Workflow ID: factory-run-esf-pg18-verification-denial-20261015
+Repository:  local:/home/mitko/dev/esf/testdata/e2e-repo-work @ 36396eea01db534e0e73f00dc41d87420b3cbe6c
+Agent:       noop
+Verification:default
+Template:    tpl-e0b123805849416a915a751e
+
+Waiting for the run to complete...
+
+FACTORY RESULT: VERIFICATION_FAILED
+AGENT RESULT:   SUCCESS
+SCOPE:          default
+EGRESS:         local-model (internet=denied allow_out=1.1.1.1)
+EGRESS:         measured (policy=local-model expect_deny=true internet=UNKNOWN metadata=UNKNOWN uid=0)
+BEHAVIOR:       clean (0 lines scanned, ruleset 1)
+GATE INTEGRITY: unchanged (tree-hash, 3 gate program(s) checked)
+VERIFICATION:   FAILED
+CLEANUP:        PASSED
+ERROR:          verification failed: gates [unit-tests] did not pass
+
+Conditions:
+  Validated              True    PolicyAccepted — scope=default
+  SandboxReady           True    Created — sandbox=b9b085347fc44e569924f620130f0c81 template=tpl-e0b123805849416a915a751e
+  WorkspacePrepared      True    Provisioned — workspace= digest=
+  RepositoryPrepared     True    CheckedOut — sha=36396eea01db534e0e73f00dc41d87420b3cbe6c
+  InventoryWritten       True    Published — path=/workspace/.factory/inventory.json digest=sha256:40be5acb70fdbb342d6bc2ee965092c9950acb3c28b5fb988ab2f61c3f0189c8
+  EgressVerified         Unknown ProbeInconclusive — expect_deny=true internet=unknown metadata=unknown uid=0
+  AgentBlocked           False   NotBlocked
+  AgentCompleted         True    ExitZero — attempt=1 duration=12.190064ms
+  ArtifactsCollected     True    PostVerification — drift=false
+  GateIntegrity          True    Unmodified — method=tree-hash gates=3
+  BehaviorScanned        True    Clean — no findings
+  Verified               False   GateFailed — unit-tests
+  BudgetExceeded         False   WithinBudget
+  CleanupVerified        True    NoSandboxesRemain — remaining=0
+
+Patch:
+/home/mitko/dev/esf/.factory/live-upgrade-20261015/runs/runs/esf-pg18-verification-denial-20261015/changes.patch
+Artifacts:
+/home/mitko/dev/esf/.factory/live-upgrade-20261015/runs/runs/esf-pg18-verification-denial-20261015
+Error: factory result: VERIFICATION_FAILED
+factory: factory result: VERIFICATION_FAILED

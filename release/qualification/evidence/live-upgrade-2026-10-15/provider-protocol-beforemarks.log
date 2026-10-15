@@ -1,0 +1,3 @@
+{"api": "chat/completions", "error": "<urlopen error [Errno 111] Connection refused>"}
+{"api": "messages", "error": "<urlopen error [Errno 111] Connection refused>"}
+{"api": "responses", "error": "<urlopen error [Errno 111] Connection refused>"}
