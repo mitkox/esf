@@ -356,6 +356,13 @@ func (s *Service) finish(r *record, ctx context.Context, out sandbox.Execution, 
 	if errors.Is(ctx.Err(), context.Canceled) {
 		state = "cancelled"
 	}
+	// The lease watcher runs once a second. Completion must enforce the exact
+	// deadline too, so a fast exit cannot publish success after ownership expires.
+	leaseExpired := !time.Now().Before(r.Status.LeaseExpiresAt)
+	if leaseExpired && ctx.Err() == nil {
+		state = "cancelled"
+		failure = "execution ownership lease expired"
+	}
 	if !verified {
 		if failure != "" {
 			failure += "; "
@@ -369,15 +376,15 @@ func (s *Service) finish(r *record, ctx context.Context, out sandbox.Execution, 
 	if parsed["is_error"] == true && state == "completed" {
 		state = "failed"
 	}
-	if len(parsed) == 0 && state == "completed" {
+	if (len(parsed) == 0 || (s.profiles[r.Request.Profile].Harness == "claude-code" && parsed["type"] != "result")) && state == "completed" {
 		state = "failed"
-		failure = "harness produced no result JSON"
+		failure = "harness produced no terminal result JSON"
 	}
 	if id, ok := parsed["session_id"].(string); ok && idPattern.MatchString(id) {
 		checkpoint.HarnessSessionID = id
 	}
 	checkpointRef := ""
-	if checkpoint.Files != nil && ctx.Err() == nil {
+	if checkpoint.Files != nil && ctx.Err() == nil && !leaseExpired {
 		var err error
 		checkpointRef, err = s.putManifest(checkpoint)
 		if err != nil {

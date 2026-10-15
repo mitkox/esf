@@ -392,7 +392,7 @@ func TestPolicyReceiptSelectionAndBudget(t *testing.T) {
 }
 func TestUnknownModelPricingIsNotCostCoverage(t *testing.T) {
 	s, _ := fixture(t)
-	r := &record{Status: Status{ExecutionID: "unknown-price", State: "running"}, Request: request("unknown-price"), StartedAt: time.Now(), Events: []Event{}}
+	r := &record{Status: Status{ExecutionID: "unknown-price", State: "running", LeaseExpiresAt: time.Now().Add(time.Minute)}, Request: request("unknown-price"), StartedAt: time.Now(), Events: []Event{}}
 	s.finish(r, context.Background(), sandbox.Execution{ExitCode: 0, Stdout: `{"type":"result","result":"ok","total_cost_usd":0.008,"usage":{"input_tokens":1400,"output_tokens":40}}`, Stderr: `[claude-code:unrecognized_model] {"model":"minimax-m3"}`}, Manifest{Files: []File{}}, nil, "", true)
 	usage := r.Result.Result["usage"].(map[string]any)
 	if _, ok := usage["cost_usd"]; ok {

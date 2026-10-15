@@ -78,7 +78,7 @@ func policyCommand(p Profile) []string {
 		return argv
 	}
 	v := p.TurnPolicy
-	argv = append(argv, "-p", "--verbose", "--output-format", "stream-json", "--permission-mode", v.Harness.PermissionMode, "--setting-sources", "")
+	argv = append(argv, "-p", "--verbose", "--output-format", "stream-json", "--permission-mode", v.Harness.PermissionMode, "--setting-sources", "", "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`)
 	if v.Harness.Model != "" {
 		argv = append(argv, "--model", v.Harness.Model)
 	}
