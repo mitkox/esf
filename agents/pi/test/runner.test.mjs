@@ -283,11 +283,16 @@ test('corrupt journal and exhausted allowance never start a third engine', async
 });
 
 test('a restart consumes the original deadline', async () => {
-  const f = await fixture(() => {}); f.request.timeout_ms = 900;
+  // Leave enough time for process startup on a shared runner. Crash after most
+  // of the original budget is spent: resetting it would exceed the upper bound
+  // below by several seconds. Isolate this deadline check from /proc churn.
+  const f = await fixture(() => {}); f.request.timeout_ms = 10_000;
   try {
-    const start = Date.now(); const run = launch(f.request); await until(() => f.calls() === 1);
-    await delay(300); process.kill(run.events.find(e => e.type === 'engine_started').pid, 'SIGKILL');
-    assert.equal((await run.finished).code, 1); assert.ok(Date.now() - start < 1600);
+    const start = Date.now(); const run = launchWithControlledInventory(f.request); await until(() => f.calls() === 1);
+    await delay(Math.max(0, 6_000 - (Date.now() - start)));
+    process.kill(run.events.find(e => e.type === 'engine_started').pid, 'SIGKILL');
+    await until(() => f.calls() === 2 && run.events.filter(e => e.type === 'engine_started').length === 2);
+    assert.equal((await run.finished).code, 1); assert.ok(Date.now() - start < 13_000);
     const terminal = await summary(f, 'terminal.json'); assert.equal(terminal.status, 'timeout'); assert.equal(terminal.restarts, 1);
   } finally { await f.close(); }
 });

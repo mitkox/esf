@@ -1,0 +1,392 @@
+{
+  "schema": "esf-native-provider-qualification/v1",
+  "scope": "local Linux/amd64 Cube microVMs",
+  "release": "0.6.2",
+  "factory_binary_source": "886a675ab9c894f202e076ea9a741d872830143a",
+  "provider": "OpenCode Go",
+  "model": "deepseek-v4.1-flash",
+  "cases": [
+    {
+      "agent": "claude",
+      "case": "positive",
+      "run_id": "esf-claude-go-positive-20261015",
+      "factory_result": "SUCCEEDED",
+      "agent_result": "SUCCESS",
+      "agent_exit_code": 0,
+      "verification_result": "SUCCESS",
+      "gate_programs_unchanged": true,
+      "cleanup_verified": true,
+      "remaining_sandboxes": 0,
+      "agent_duration_seconds": 16.889853642,
+      "model": "deepseek-v4.1-flash",
+      "reported_model_ids": [
+        "deepseek-v4.1-flash"
+      ],
+      "reported_usage": {
+        "input_tokens": 20059,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 113280,
+        "output_tokens": 694,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "",
+        "iterations": [],
+        "speed": "standard",
+        "fallback_credit": null
+      },
+      "history_sha256": "88ca0ce5afb2ca181805509319ba57e3238c6dcff64d369a0194ff6c2a1d5577",
+      "patch_sha256": "365194a7478c8a4a35e3f59104b27496b1a3eb1f52166cc27c78bfdae8af2769",
+      "review_outcome": null
+    },
+    {
+      "agent": "claude",
+      "case": "negative",
+      "run_id": "esf-claude-go-negative-20261015",
+      "factory_result": "VERIFICATION_FAILED",
+      "agent_result": "SUCCESS",
+      "agent_exit_code": 0,
+      "verification_result": "FAILED",
+      "gate_programs_unchanged": true,
+      "cleanup_verified": true,
+      "remaining_sandboxes": 0,
+      "agent_duration_seconds": 68.389729565,
+      "model": "deepseek-v4.1-flash",
+      "reported_model_ids": [
+        "deepseek-v4.1-flash"
+      ],
+      "reported_usage": {
+        "input_tokens": 2612,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 52352,
+        "output_tokens": 322,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "",
+        "iterations": [],
+        "speed": "standard",
+        "fallback_credit": null
+      },
+      "history_sha256": "214aaf46b9c2f739cc8fcb70f966c8edb3c518f9874ee5b256110d8a92369705",
+      "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "review_outcome": null
+    },
+    {
+      "agent": "claude",
+      "case": "review",
+      "run_id": "esf-claude-go-review-20261015",
+      "factory_result": "SUCCEEDED",
+      "agent_result": "SUCCESS",
+      "agent_exit_code": 0,
+      "verification_result": "SUCCESS",
+      "gate_programs_unchanged": true,
+      "cleanup_verified": true,
+      "remaining_sandboxes": 0,
+      "agent_duration_seconds": 48.616337857,
+      "model": "deepseek-v4.1-flash",
+      "reported_model_ids": [
+        "deepseek-v4.1-flash"
+      ],
+      "reported_usage": {
+        "input_tokens": 4900,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 132352,
+        "output_tokens": 855,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "",
+        "iterations": [],
+        "speed": "standard",
+        "fallback_credit": null
+      },
+      "history_sha256": "77d367ccdddc9c7de1030315831eafbfe0148fd6c16c8eaa6f4df32c2a6b8d33",
+      "patch_sha256": "365194a7478c8a4a35e3f59104b27496b1a3eb1f52166cc27c78bfdae8af2769",
+      "review_outcome": "approved"
+    },
+    {
+      "agent": "claude",
+      "case": "boundary",
+      "run_id": "esf-claude-go-boundary-20261015",
+      "factory_result": "VERIFICATION_FAILED",
+      "agent_result": "SUCCESS",
+      "agent_exit_code": 0,
+      "verification_result": "FAILED",
+      "gate_programs_unchanged": true,
+      "cleanup_verified": true,
+      "remaining_sandboxes": 0,
+      "agent_duration_seconds": 103.168284413,
+      "model": "deepseek-v4.1-flash",
+      "reported_model_ids": [
+        "deepseek-v4.1-flash"
+      ],
+      "reported_usage": {
+        "input_tokens": 19671,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 55680,
+        "output_tokens": 915,
+        "output_tokens_details": {
+          "thinking_tokens": 0
+        },
+        "server_tool_use": {
+          "web_search_requests": 0,
+          "web_fetch_requests": 0
+        },
+        "service_tier": "standard",
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "inference_geo": "",
+        "iterations": [],
+        "speed": "standard",
+        "fallback_credit": null
+      },
+      "history_sha256": "ca17257dbe9cafae6df261aa40e00e82137aff281ecdc3155f6509c5b1434eb7",
+      "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "review_outcome": null
+    },
+    {
+      "agent": "codex",
+      "case": "positive",
+      "run_id": "esf-codex-go-positive-20261015",
+      "factory_result": "SUCCEEDED",
+      "agent_result": "SUCCESS",
+      "agent_exit_code": 0,
+      "verification_result": "SUCCESS",
+      "gate_programs_unchanged": true,
+      "cleanup_verified": true,
+      "remaining_sandboxes": 0,
+      "agent_duration_seconds": 8.764335719,
+      "model": "deepseek-v4.1-flash",
+      "reported_model_ids": null,
+      "reported_usage": {
+        "input_tokens": 36523,
+        "cached_input_tokens": 33024,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 387,
+        "reasoning_output_tokens": 19
+      },
+      "history_sha256": "c4c7abd32047f552e9a7544836689f8485cd80b26fa4c8758529de93eac8237b",
+      "patch_sha256": "365194a7478c8a4a35e3f59104b27496b1a3eb1f52166cc27c78bfdae8af2769",
+      "review_outcome": null
+    },
+    {
+      "agent": "codex",
+      "case": "negative",
+      "run_id": "esf-codex-go-negative-20261015",
+      "factory_result": "VERIFICATION_FAILED",
+      "agent_result": "SUCCESS",
+      "agent_exit_code": 0,
+      "verification_result": "FAILED",
+      "gate_programs_unchanged": true,
+      "cleanup_verified": true,
+      "remaining_sandboxes": 0,
+      "agent_duration_seconds": 67.070514013,
+      "model": "deepseek-v4.1-flash",
+      "reported_model_ids": null,
+      "reported_usage": {
+        "input_tokens": 35018,
+        "cached_input_tokens": 34176,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 417,
+        "reasoning_output_tokens": 78
+      },
+      "history_sha256": "aa620560898cdd9d182a0a5e4ffd9f61ab3898206be8192ebe4aaad76d695716",
+      "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "review_outcome": null
+    },
+    {
+      "agent": "codex",
+      "case": "review",
+      "run_id": "esf-codex-go-review-20261015",
+      "factory_result": "SUCCEEDED",
+      "agent_result": "SUCCESS",
+      "agent_exit_code": 0,
+      "verification_result": "SUCCESS",
+      "gate_programs_unchanged": true,
+      "cleanup_verified": true,
+      "remaining_sandboxes": 0,
+      "agent_duration_seconds": 42.080604553,
+      "model": "deepseek-v4.1-flash",
+      "reported_model_ids": null,
+      "reported_usage": {
+        "input_tokens": 46993,
+        "cached_input_tokens": 45312,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 845,
+        "reasoning_output_tokens": 183
+      },
+      "history_sha256": "909759f15afddcd7544616ee7c3165a1087cce7926f8be71ac175375e01807d9",
+      "patch_sha256": "365194a7478c8a4a35e3f59104b27496b1a3eb1f52166cc27c78bfdae8af2769",
+      "review_outcome": "approved"
+    },
+    {
+      "agent": "codex",
+      "case": "boundary",
+      "run_id": "esf-codex-go-boundary-20261015",
+      "factory_result": "VERIFICATION_FAILED",
+      "agent_result": "SUCCESS",
+      "agent_exit_code": 0,
+      "verification_result": "FAILED",
+      "gate_programs_unchanged": true,
+      "cleanup_verified": true,
+      "remaining_sandboxes": 0,
+      "agent_duration_seconds": 99.792221232,
+      "model": "deepseek-v4.1-flash",
+      "reported_model_ids": null,
+      "reported_usage": {
+        "input_tokens": 53787,
+        "cached_input_tokens": 52480,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 802,
+        "reasoning_output_tokens": 176
+      },
+      "history_sha256": "e92e5189e836d0b9315cf9a3c3d49a64d7660267bc787b34860ddff2267c2744",
+      "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "review_outcome": null
+    }
+  ],
+  "credential_scan": {
+    "actual_credential_found": false,
+    "artifact_files": 186,
+    "artifact_bytes": 249217,
+    "workflow_histories": 8,
+    "decoded_temporal_payloads": 322
+  },
+  "live_vm_boundary_checks": [
+    {
+      "active_cli_observed": true,
+      "actual_credential_found": false,
+      "agent": "claude",
+      "bytes_scanned": 118865,
+      "entries_scanned": 42,
+      "network_checks": [
+        {
+          "check": "unapproved-path",
+          "status": 403
+        },
+        {
+          "check": "cross-protocol",
+          "status": 403
+        },
+        {
+          "check": "host-sni-mismatch",
+          "status": 403
+        },
+        {
+          "blocked": true,
+          "check": "direct-public",
+          "errno": 111,
+          "error_type": "URLError",
+          "reason_type": "ConnectionRefusedError"
+        },
+        {
+          "blocked": true,
+          "check": "metadata",
+          "errno": 111,
+          "error_type": "URLError",
+          "reason_type": "ConnectionRefusedError"
+        }
+      ],
+      "placeholder_observed": true,
+      "process_entries": 22,
+      "run_id": "esf-claude-go-boundary-20261015"
+    },
+    {
+      "active_cli_observed": true,
+      "actual_credential_found": false,
+      "agent": "codex",
+      "bytes_scanned": 3500711,
+      "entries_scanned": 115,
+      "network_checks": [
+        {
+          "check": "unapproved-path",
+          "status": 403
+        },
+        {
+          "check": "cross-protocol",
+          "status": 403
+        },
+        {
+          "check": "host-sni-mismatch",
+          "status": 403
+        },
+        {
+          "blocked": true,
+          "check": "direct-public",
+          "errno": 111,
+          "error_type": "URLError",
+          "reason_type": "ConnectionRefusedError"
+        },
+        {
+          "blocked": true,
+          "check": "metadata",
+          "errno": 111,
+          "error_type": "URLError",
+          "reason_type": "ConnectionRefusedError"
+        }
+      ],
+      "placeholder_observed": true,
+      "process_entries": 22,
+      "run_id": "esf-codex-go-boundary-20261015"
+    }
+  ],
+  "review_pause_evidence": [
+    {
+      "agent": "claude",
+      "run_id": "esf-claude-go-review-20261015",
+      "observed_state": "PAUSED",
+      "observed_gate": "AwaitingHuman",
+      "patch_sha256": "365194a7478c8a4a35e3f59104b27496b1a3eb1f52166cc27c78bfdae8af2769",
+      "changed_files": [
+        "greeting.py"
+      ],
+      "approval_scope": "operator command on disposable qualification fixture"
+    },
+    {
+      "agent": "codex",
+      "run_id": "esf-codex-go-review-20261015",
+      "observed_state": "PAUSED",
+      "observed_gate": "AwaitingHuman",
+      "patch_sha256": "365194a7478c8a4a35e3f59104b27496b1a3eb1f52166cc27c78bfdae8af2769",
+      "changed_files": [
+        "greeting.py"
+      ],
+      "approval_scope": "operator command on disposable qualification fixture"
+    }
+  ],
+  "billing": "CLI usage is retained; client cost estimates are not reconciled OpenCode Go subscription charges.",
+  "final_cleanup": {
+    "live_sandboxes": 0
+  },
+  "status": "passed"
+}

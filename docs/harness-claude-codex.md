@@ -89,3 +89,53 @@ The CLI contracts are documented in the
 [official Codex CLI reference](https://developers.openai.com/codex/cli/reference).
 Adapter/conformance checks and CLI startup checks are distinct from successful
 model-backed acceptance and production qualification.
+
+## OpenCode Go with DeepSeek
+
+The local Linux/amd64 profile qualified Claude Code 2.1.300 and Codex 0.162.1
+with `deepseek-v4.1-flash` through OpenCode Go. The names `claude` and `codex`
+select the CLI harness; inference uses the selected DeepSeek model. Both run
+inside Cube, with the Go key injected by CubeEgress. This uses the Go API key,
+not a copied interactive Claude or Codex login session.
+
+For preinstalled, digest-pinned CLIs, replace the credential path below with
+an owner-only worker file and set each binary's measured SHA-256:
+
+```toml
+[sandbox]
+# Must match the template's DNS resolver; retain other approved runtime targets.
+runtime_allow_out = ["1.1.1.1"]
+
+[harnesses.claude]
+type = "claude"
+binary = "/opt/esf/agents/claude"
+preinstalled = true
+binary_sha256 = "REPLACE_WITH_64_HEX_DIGITS"
+model = "deepseek-v4.1-flash"
+base_url = "https://opencode.ai/inference/go"
+credential_mode = "cube_egress"
+api_key_file = "/run/credentials/factory-worker.service/opencode-go"
+
+[harnesses.codex]
+type = "codex"
+binary = "/opt/esf/agents/codex"
+preinstalled = true
+binary_sha256 = "REPLACE_WITH_64_HEX_DIGITS"
+model = "deepseek-v4.1-flash"
+base_url = "https://opencode.ai/inference/go/v1"
+credential_mode = "cube_egress"
+api_key_file = "/run/credentials/factory-worker.service/opencode-go"
+```
+
+Remove any `api_key_env` entry when selecting the file source. DNS destinations
+in Cube's `allow_out` use IPs or domains, not `IP:port` strings. The factory
+replaces the runtime policy with deny-by-default, protocol-specific POST rules.
+Preserve the clients' native session headers through the proxy, as described
+in the [OpenCode Go documentation](https://opencode.ai/v2/docs/console/go/).
+
+The [qualification record](../release/qualification/live-upgrade-2026-10-15.md)
+retains verified patches, expected verification failures, review pause/resume,
+live credential-boundary checks and proxy denials. Cube hosts sharing Calico
+or marked VPN routing may also need the
+[operator routing configuration](cube-local-routing.md). These results qualify
+the recorded local profile; broader production gates remain separate.

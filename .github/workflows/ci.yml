@@ -42,6 +42,8 @@ jobs:
         run: python3 scripts/verify-release-inventory.py
       - name: Test release qualification boundaries
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - name: Test Temporal restored-database safety
+        run: sh deployments/dev/temporal/tests/setup-postgres-test.sh
       - name: Verify Pi candidate inventory
         run: python3 scripts/verify-pi-inventory.py
       - name: Build and test pinned Pi runner

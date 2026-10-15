@@ -1,0 +1,237 @@
+{
+  "workflow_histories_before": {
+    "factory-run-hop-gate-20261009-222901-5/01a122c8-baff-7a28-a3c4-ea07e2fd9ecb": {
+      "sha256": "a7a1e3e1d31c556b39380d52d752925fc9601a35d8aa417eba606f43a2f3a7b7",
+      "status": "WORKFLOW_EXECUTION_STATUS_RUNNING"
+    },
+    "factory-run-hop-gate-task10-ecfd8cc/01a121b1-26c9-7da8-92da-1dd9815d172c": {
+      "sha256": "ba5b914c266b3293df63ebffbe89ee4db9749b92358e4149211d88dd3d99ef6f",
+      "status": "WORKFLOW_EXECUTION_STATUS_RUNNING"
+    },
+    "factory-run-run-3be69ef5368834d855a27e0c/01a13c40-5972-7a87-97c6-1dc11547bbe3": {
+      "sha256": "b69c22af027066a02b64c66f1dc82f0a76efff837112b013fb2aa9fb70e525bf",
+      "status": "WORKFLOW_EXECUTION_STATUS_COMPLETED"
+    },
+    "factory-run-run-48a7f57cc07ef809105e3293/01a13c1c-8679-7f1a-b09c-2ef90a8b3c6d": {
+      "sha256": "7b62c39db805fc28c69b28f103c362f1f4eea9abcf5a696d32962c80d32f31e4",
+      "status": "WORKFLOW_EXECUTION_STATUS_COMPLETED"
+    },
+    "factory-run-run-51b33b2729fca741e598db9b/01a13c04-75bb-7c18-831a-fca7cd164737": {
+      "sha256": "55c8c1e3ad88550b942148d32cf9b89d4722a5b956c94199c8fb2040dae95825",
+      "status": "WORKFLOW_EXECUTION_STATUS_COMPLETED"
+    }
+  },
+  "databases": {
+    "temporal": {
+      "tables": {
+        "activity_info_maps": {
+          "rows": 2,
+          "sha256": "6d0446498407f1e6de3ee88c19104f1db102a04475126b57deaf65c76369babd"
+        },
+        "buffered_events": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "build_id_to_task_queue": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "chasm_node_maps": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "child_execution_info_maps": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "cluster_membership": {
+          "rows": 8,
+          "sha256": "24259e4f1ffc8bbc20f1ffc6a902df54d1f90d227b5288effcbb41d02dc2008e"
+        },
+        "cluster_metadata": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "cluster_metadata_info": {
+          "rows": 1,
+          "sha256": "3c81b951a02037e5a24f370ae9cbbdf7e5d68eb9a2fcab7c72df59284e47d7e1"
+        },
+        "current_chasm_executions": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "current_executions": {
+          "rows": 7,
+          "sha256": "4f03971904cdfa0137744977af41f14002b1aff43ab0d19d4e7b3e080e461f9f"
+        },
+        "executions": {
+          "rows": 35,
+          "sha256": "b3afb04f800ec76ad5b3a494abb2b87ef1987cbff8c1183113be2279ba8445a4"
+        },
+        "history_immediate_tasks": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "history_node": {
+          "rows": 430,
+          "sha256": "bb4848dad6f2a4ba64af27190653b9c79ecdf41feb389558ec92e0007fdf6509"
+        },
+        "history_scheduled_tasks": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "history_tree": {
+          "rows": 47,
+          "sha256": "bfd89ed82a50f491056091dfabf5102f459b85bd5aa201231a864b042e015ce7"
+        },
+        "namespace_metadata": {
+          "rows": 1,
+          "sha256": "3999b6f5084ff9263a06f6d24b847aa343221d87fd9e0bddfa36a8e6d69dc25c"
+        },
+        "namespaces": {
+          "rows": 2,
+          "sha256": "46e895e07022f0627932d52839eb50e8a65feab5c554ac16bc3119a49e0cdf63"
+        },
+        "nexus_endpoints": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "nexus_endpoints_partition_status": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "queue": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "queue_messages": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "queue_metadata": {
+          "rows": 2,
+          "sha256": "e4dd7ecabb655942eb0a96b6bbcb3ecd67a9904218cffcb1c4adaeaf58ae0071"
+        },
+        "queues": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "replication_tasks": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "replication_tasks_dlq": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "request_cancel_info_maps": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "schema_update_history": {
+          "rows": 21,
+          "sha256": "288216803fd5d6765a28b2d243fe59e2e5658d6dd582232204d52403bd2e0d88"
+        },
+        "schema_version": {
+          "rows": 1,
+          "sha256": "b65b67c3996b7c394a5f99274592a069d857d4508151998706066f6e6b0af8eb"
+        },
+        "shards": {
+          "rows": 4,
+          "sha256": "7398c0474b5d3b547e834e1f92429939a389a15a7fde274df68372f116560f51"
+        },
+        "signal_info_maps": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "signals_requested_sets": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "task_queue_user_data": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "task_queues": {
+          "rows": 110,
+          "sha256": "0713a0f9a559b1c5c62ef5f4c79726551294046812dfc528bfe083c87e1005e0"
+        },
+        "task_queues_v2": {
+          "rows": 1184,
+          "sha256": "f41415276e05507f15b96477445e1df1ffc1d9e097d9eb39b5cf5e92ce8642f3"
+        },
+        "tasks": {
+          "rows": 38,
+          "sha256": "8fce416a5bab2cd4001b953b6a429c013d2531c6cae2ba9b0a01877b30603040"
+        },
+        "tasks_v2": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "timer_info_maps": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "timer_tasks": {
+          "rows": 46,
+          "sha256": "596020b70fcee667352b68c66555c15177208e297182e1f9482b2fe5045f6aee"
+        },
+        "transfer_tasks": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "visibility_tasks": {
+          "rows": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "dump_sha256": "7d4f36530918e8ff916a488d94119384edb2589c1e15c2143a53a0595fc1532c",
+      "dump_bytes": 178002
+    },
+    "temporal_visibility": {
+      "tables": {
+        "executions_visibility": {
+          "rows": 35,
+          "sha256": "04c5bffd20057b38529bc7802365a7eebf85355442305ceee67ad8803d236dc0"
+        },
+        "schema_update_history": {
+          "rows": 16,
+          "sha256": "2fb64e2d348147602acda003253d06cb7d05d6cc36c2f0773c4e064578b39e1d"
+        },
+        "schema_version": {
+          "rows": 1,
+          "sha256": "3772d008dfa7d2ab672637aff9efde87f22193a7a30f434652db8c34ab7d711b"
+        }
+      },
+      "dump_sha256": "17272ad8629dd854e9f70b1a8e9b13966620492660fd3b93cd855a252032b038",
+      "dump_bytes": 48164
+    }
+  },
+  "workflow_histories_after": {
+    "factory-run-hop-gate-20261009-222901-5/01a122c8-baff-7a28-a3c4-ea07e2fd9ecb": {
+      "sha256": "a7a1e3e1d31c556b39380d52d752925fc9601a35d8aa417eba606f43a2f3a7b7",
+      "status": "WORKFLOW_EXECUTION_STATUS_RUNNING"
+    },
+    "factory-run-hop-gate-task10-ecfd8cc/01a121b1-26c9-7da8-92da-1dd9815d172c": {
+      "sha256": "ba5b914c266b3293df63ebffbe89ee4db9749b92358e4149211d88dd3d99ef6f",
+      "status": "WORKFLOW_EXECUTION_STATUS_RUNNING"
+    },
+    "factory-run-run-3be69ef5368834d855a27e0c/01a13c40-5972-7a87-97c6-1dc11547bbe3": {
+      "sha256": "b69c22af027066a02b64c66f1dc82f0a76efff837112b013fb2aa9fb70e525bf",
+      "status": "WORKFLOW_EXECUTION_STATUS_COMPLETED"
+    },
+    "factory-run-run-48a7f57cc07ef809105e3293/01a13c1c-8679-7f1a-b09c-2ef90a8b3c6d": {
+      "sha256": "7b62c39db805fc28c69b28f103c362f1f4eea9abcf5a696d32962c80d32f31e4",
+      "status": "WORKFLOW_EXECUTION_STATUS_COMPLETED"
+    },
+    "factory-run-run-51b33b2729fca741e598db9b/01a13c04-75bb-7c18-831a-fca7cd164737": {
+      "sha256": "55c8c1e3ad88550b942148d32cf9b89d4722a5b956c94199c8fb2040dae95825",
+      "status": "WORKFLOW_EXECUTION_STATUS_COMPLETED"
+    }
+  },
+  "postgresql_version": "18.6",
+  "temporal_version": "1.32.1",
+  "temporal_ui_version": "2.56.0",
+  "rollback_volume": "factory-temporal-postgresql-data",
+  "active_volume": "factory-temporal-postgresql-data-v18"
+}

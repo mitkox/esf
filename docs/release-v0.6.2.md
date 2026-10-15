@@ -55,11 +55,13 @@ the ESF distribution.
 
 ## Deployment and validation boundary
 
-The updated recipes are candidates. The running development Cube and Temporal
-services retain their recorded versions during source validation. New images,
-READY templates, provider-backed runs, PostgreSQL migration, and production
-qualification require evidence for this execution chain; earlier results do
-not qualify new component versions.
+The updated production recipes are candidates. The local development services
+have moved to Cube 0.7.3, Temporal 1.32.1, UI 2.56.0 and PostgreSQL 18.6, with
+table-content and complete workflow-history checks plus a rollback drill.
+See the [local upgrade record](../release/qualification/live-upgrade-2026-10-15.md)
+for template measurements and the current provider qualification status.
+Production qualification requires evidence for this execution chain; earlier
+results do not qualify new component versions.
 
 PostgreSQL 18 changes the Docker volume layout. The development recipe mounts
 `/var/lib/postgresql` and uses a separate volume named with `-v18`. Before
