@@ -263,6 +263,8 @@ type ReviewConfig struct {
 // names the scope it acts in. A scope can only narrow the operator's policy,
 // never widen it — the union of all scopes is a subset of the global config.
 type ScopeConfig struct {
+	HarnessProfiles     []string `toml:"harness_profiles"`
+	ImprovementPolicies []string `toml:"improvement_policies"`
 	// Repositories narrows the global allowlist. Empty inherits the global list.
 	Repositories []string `toml:"repositories"`
 	// Harnesses restricts which harnesses may be used. Empty allows all.
@@ -286,6 +288,8 @@ type ScopeConfig struct {
 // plain data: workflow code must never resolve a name, because a config change
 // mid-run would make replay non-deterministic.
 type ResolvedResources struct {
+	HarnessProfile       string `json:"harness_profile,omitempty"`
+	HarnessProfileDigest string `json:"harness_profile_digest,omitempty"`
 	// Scope the run executes under. Empty means the default scope.
 	Scope string `json:"scope,omitempty"`
 	// RepositoriesAllowed is the effective repository allowlist after the scope

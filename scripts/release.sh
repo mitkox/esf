@@ -62,15 +62,20 @@ for target in "${targets[@]}"; do
     go build -buildvcs=false -trimpath -ldflags="-s -w -X github.com/mitkox/esf/internal/factory.Version=$binary_release -X main.buildCommit=$commit" \
     -o "$target_dir/factory" ./cmd/factory
   cp -L LICENSE README.md factory.example.toml "$target_dir/"
+  cp third_party/harness2/LICENSE "$target_dir/HARNESS2-LICENSE"
+  cp third_party/harness2/NOTICE "$target_dir/HARNESS2-NOTICE"
+  cp third_party/harness2/UPSTREAM.json "$target_dir/HARNESS2-UPSTREAM.json"
+  chmod 0644 "$target_dir/HARNESS2-LICENSE" "$target_dir/HARNESS2-NOTICE" "$target_dir/HARNESS2-UPSTREAM.json"
+  touch -t 198001010000 "$target_dir/HARNESS2-LICENSE" "$target_dir/HARNESS2-NOTICE" "$target_dir/HARNESS2-UPSTREAM.json"
   chmod 0644 "$target_dir/LICENSE" "$target_dir/README.md" "$target_dir/factory.example.toml"
   chmod 0755 "$target_dir/machinist" "$target_dir/factory"
   touch -t 198001010000 "$target_dir/LICENSE" "$target_dir/README.md" "$target_dir/factory.example.toml" "$target_dir/machinist" "$target_dir/factory"
   for component in factory machinist combined; do
     archive="$output_dir/esf_${component}_${release_name}_${goos}_${goarch}.tar.gz"
     case "$component" in
-      factory) files=(LICENSE README.md factory.example.toml factory) ;;
+      factory) files=(LICENSE HARNESS2-LICENSE HARNESS2-NOTICE HARNESS2-UPSTREAM.json README.md factory.example.toml factory) ;;
       machinist) files=(LICENSE README.md machinist) ;;
-      combined) files=(LICENSE README.md factory.example.toml factory machinist) ;;
+      combined) files=(LICENSE HARNESS2-LICENSE HARNESS2-NOTICE HARNESS2-UPSTREAM.json README.md factory.example.toml factory machinist) ;;
     esac
     COPYFILE_DISABLE=1 tar --format=ustar --owner=0 --group=0 --numeric-owner -C "$target_dir" -cf - "${files[@]}" | gzip -n > "$archive"
   done

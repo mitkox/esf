@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/google-research/harness2",
+  "version": "0.1.0",
+  "commit": "1cfe254e8d25b15f37048c3730134686abe60335",
+  "license": "Apache-2.0",
+  "integration": "ESF-native algorithm and adapted role instructions; no upstream runtime",
+  "editable_surface": ["systemprompt.md", "tool_guidance.md", "memory.md", "skills/*/SKILL.md"],
+  "production_qualified": false
+}

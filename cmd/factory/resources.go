@@ -42,6 +42,8 @@ import (
 // resources. It cannot express an executable, a host path or a credential,
 // exactly like the CLI flags.
 type runSpec struct {
+	HarnessProfile      string   `json:"harness_profile" toml:"harness_profile"`
+	ImprovementPolicy   string   `json:"improvement_policy" toml:"improvement_policy"`
 	RunID               string   `json:"run_id" toml:"run_id"`
 	ChangeID            string   `json:"change_id" toml:"change_id"`
 	ParentRunID         string   `json:"parent_run_id" toml:"parent_run_id"`
@@ -611,9 +613,10 @@ the existing workflow instead of starting a second one.`,
 
 			workflowID := factory.WorkflowIDForRun(req.RunID)
 			run, err := temporalClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-				ID:        workflowID,
-				TaskQueue: cfg.Temporal.TaskQueue,
-				Memo:      factory.RunMemoFor(req),
+				ID:                    workflowID,
+				TaskQueue:             cfg.Temporal.TaskQueue,
+				Memo:                  factory.RunMemoFor(req),
+				WorkflowIDReusePolicy: improvementReusePolicy(req),
 			}, factory.SoftwareChangeWorkflow, req)
 			if err != nil {
 				// Idempotent apply: an existing workflow is the desired state.
@@ -689,6 +692,8 @@ func readRunSpec(path string) (runSpec, error) {
 // runRequestFromSpec validates a manifest into a RunRequest.
 func runRequestFromSpec(cfg factory.Config, spec runSpec) (factory.RunRequest, error) {
 	req := factory.RunRequest{
+		HarnessProfile:      spec.HarnessProfile,
+		ImprovementPolicy:   spec.ImprovementPolicy,
 		RunID:               spec.RunID,
 		ChangeID:            spec.ChangeID,
 		ParentRunID:         spec.ParentRunID,

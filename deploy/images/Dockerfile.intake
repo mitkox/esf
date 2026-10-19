@@ -17,6 +17,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 FROM ${PYTHON_BASE} AS intake
 WORKDIR /opt/esf
 COPY --from=build /out/factory /usr/local/bin/factory
+COPY third_party/harness2 /usr/share/doc/esf/harness2
 COPY pyproject.toml uv.lock ./
 COPY tools/intake tools/intake
 COPY tools/brief_lab tools/brief_lab

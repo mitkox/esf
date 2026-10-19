@@ -25,6 +25,7 @@ def main() -> int:
     inventory = json.loads((ROOT / "release/inventory.json").read_text())
     embedded_inventory = ROOT / "internal/releaseinfo/inventory.json"
     dependencies = inventory["dependencies"]
+    harness2 = json.loads((ROOT / "third_party/harness2/UPSTREAM.json").read_text())
     mod = (ROOT / "go.mod").read_text()
     npm_frontend = json.loads((ROOT / "internal/controlplane/web/package-lock.json").read_text())["packages"]
     npm_agent = json.loads((ROOT / "agents/opencode/package-lock.json").read_text())["packages"]
@@ -38,6 +39,10 @@ def main() -> int:
             issues.append(message)
 
     require(embedded_inventory.exists() and embedded_inventory.read_bytes() == (ROOT / "release/inventory.json").read_bytes(), "embedded factory inventory differs from release inventory")
+    require(harness2["commit"] == "1cfe254e8d25b15f37048c3730134686abe60335" and
+            harness2["license"] == "Apache-2.0" and harness2["production_qualified"] is False,
+            "Harness2 provenance or qualification boundary changed")
+    require(dependencies.get("harness2") == harness2, "Harness2 release provenance differs")
     version = inventory["release"].removeprefix("v")
     root_python = tomllib.loads((ROOT / "pyproject.toml").read_text())
     require(root_python["project"]["version"] == version, "root Python version differs from inventory")

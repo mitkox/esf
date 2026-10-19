@@ -287,9 +287,10 @@ type PrepareRepositoryOutput struct {
 
 // ApplyRuntimeNetworkInput locks down egress before untrusted agent execution.
 type ApplyRuntimeNetworkInput struct {
-	RunID     string `json:"run_id"`
-	SandboxID string `json:"sandbox_id"`
-	Harness   string `json:"harness"`
+	BudgetAccount string `json:"budget_account,omitempty"`
+	RunID         string `json:"run_id"`
+	SandboxID     string `json:"sandbox_id"`
+	Harness       string `json:"harness"`
 	// ExpectDeny records that the caller believes public egress must be
 	// blocked. It is set from the resolved egress policy; an egress-managed
 	// harness implies it. When true, a reachable canary fails the run.
@@ -312,14 +313,17 @@ type ApplyRuntimeNetworkOutput struct {
 
 // RunAgentInput executes the coding agent inside the sandbox.
 type RunAgentInput struct {
-	RunID         string            `json:"run_id"`
-	SandboxID     string            `json:"sandbox_id"`
-	Harness       string            `json:"harness"`
-	Model         string            `json:"model,omitempty"`
-	Prompt        string            `json:"prompt"`
-	RepositoryDir string            `json:"repository_dir"`
-	Timeout       time.Duration     `json:"timeout"`
-	Env           map[string]string `json:"env,omitempty"`
+	ProfileDigest     string            `json:"profile_digest,omitempty"`
+	SelectedRun       string            `json:"selected_run,omitempty"`
+	ImprovementParent string            `json:"improvement_parent,omitempty"`
+	RunID             string            `json:"run_id"`
+	SandboxID         string            `json:"sandbox_id"`
+	Harness           string            `json:"harness"`
+	Model             string            `json:"model,omitempty"`
+	Prompt            string            `json:"prompt"`
+	RepositoryDir     string            `json:"repository_dir"`
+	Timeout           time.Duration     `json:"timeout"`
+	Env               map[string]string `json:"env,omitempty"`
 	// ModelAPIKeyEnv names an operator-approved host environment variable. The
 	// value is read inside this activity and never travels through workflow
 	// history or resolved-resource evidence.
@@ -402,6 +406,7 @@ type DestroySandboxInput struct {
 
 // FinalizeInput writes the run manifest.
 type FinalizeInput struct {
+	Improvement             *ImprovementReceipt `json:"improvement,omitempty"`
 	Request                 RunRequest          `json:"request"`
 	Validate                ValidateOutput      `json:"validate"`
 	Intake                  *IntakeResult       `json:"intake,omitempty"`
@@ -518,6 +523,9 @@ func (a *Activities) ValidateRequest(ctx context.Context, in ValidateInput) (Val
 	resolved, err := a.cfg.ResolveResources(req)
 	if err != nil {
 		return ValidateOutput{}, fmt.Errorf("resolve resources: %w", err)
+	}
+	if err := a.resolveInstructionProfile(req, &resolved); err != nil {
+		return ValidateOutput{}, err
 	}
 	if validator, ok := harness.(agentharness.ModelEndpointValidator); ok {
 		if err := validator.ValidateModelEndpoint(agentharness.ModelEndpoint{Provider: resolved.ModelProvider, Model: resolved.ModelID, BaseURL: resolved.ModelBaseURL, APIKeyEnv: resolved.ModelAPIKeyEnv}); err != nil {
@@ -810,7 +818,14 @@ func (a *Activities) ApplyRuntimeNetwork(ctx context.Context, in ApplyRuntimeNet
 	defer span.End()
 
 	out := ApplyRuntimeNetworkOutput{}
-	network, applies, err := a.cfg.runtimeNetworkForHarness(in.Harness)
+	var network sandbox.Network
+	var applies bool
+	var err error
+	if in.BudgetAccount != "" {
+		network, applies, err = a.cfg.improvementNetwork(in.Harness, in.BudgetAccount)
+	} else {
+		network, applies, err = a.cfg.runtimeNetworkForHarness(in.Harness)
+	}
 	if err != nil {
 		span.RecordError(err)
 		return out, err
@@ -926,6 +941,15 @@ func (a *Activities) RunAgent(ctx context.Context, in RunAgentInput) (RunAgentOu
 	sb, err := a.provider.Reattach(ctx, in.SandboxID)
 	if err != nil {
 		return RunAgentOutput{}, err
+	}
+	if in.SelectedRun != "" {
+		return a.materializeImprovementSelection(ctx, sb, in)
+	}
+	if in.ProfileDigest != "" {
+		in.Prompt, err = a.applyInstructionProfile(ctx, sb, in.ProfileDigest, in.Prompt)
+		if err != nil {
+			return RunAgentOutput{}, err
+		}
 	}
 
 	env := make(map[string]string, len(in.Env)+1)
@@ -1255,13 +1279,16 @@ func (a *Activities) FinalizeResult(ctx context.Context, in FinalizeInput) (Fina
 	}
 
 	manifest := RunManifest{
-		RunID:          in.Request.RunID,
-		ChangeID:       in.Request.ChangeID,
-		ParentRunID:    in.Request.ParentRunID,
-		Scope:          in.Resources.Scope,
-		FactoryVersion: a.cfg.effectiveVersion(),
-		WorkflowID:     in.WorkflowID,
-		WorkflowRunID:  in.WorkflowRunID,
+		Improvement:          in.Improvement,
+		HarnessProfile:       in.Resources.HarnessProfile,
+		HarnessProfileDigest: in.Resources.HarnessProfileDigest,
+		RunID:                in.Request.RunID,
+		ChangeID:             in.Request.ChangeID,
+		ParentRunID:          in.Request.ParentRunID,
+		Scope:                in.Resources.Scope,
+		FactoryVersion:       a.cfg.effectiveVersion(),
+		WorkflowID:           in.WorkflowID,
+		WorkflowRunID:        in.WorkflowRunID,
 
 		Repository:              in.Validate.Repository,
 		RepositoryKind:          in.Validate.Kind,
@@ -1325,6 +1352,31 @@ func (a *Activities) FinalizeResult(ctx context.Context, in FinalizeInput) (Fina
 		manifest.ModelProvider = in.Resources.ModelProvider
 	} else {
 		manifest.Model = in.AgentResult.Model
+	}
+	if in.Improvement != nil && in.Improvement.Budget.LimitMicros > 0 {
+		manifest.InferenceCost = nil
+		manifest.TokensIn = nil
+		manifest.TokensOut = nil
+		if in.Improvement.Error == "" {
+			var input, output, cost int64
+			known := true
+			for _, call := range in.Improvement.Budget.Calls {
+				known = known && call.State == "settled"
+				input += call.Input
+				output += call.Output
+				cost += call.Charged
+			}
+			if known {
+				usd := float64(cost) / 1e6
+				manifest.InferenceCost = &usd
+				manifest.TokensIn = &input
+				manifest.TokensOut = &output
+			}
+		}
+		if !in.Improvement.StartedAt.IsZero() {
+			manifest.StartedAt = in.Improvement.StartedAt
+			manifest.Duration = manifest.CompletedAt.Sub(manifest.StartedAt)
+		}
 	}
 
 	if in.Patch != "" && in.PatchArtifact == "" {

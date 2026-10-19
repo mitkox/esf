@@ -234,6 +234,9 @@ func (r *Runtime) RunWorker(ctx context.Context) error {
 	})
 
 	w.RegisterWorkflowWithOptions(SoftwareChangeWorkflow, workflowRegistrationOptions())
+	w.RegisterWorkflow(ImprovementProbeWorkflow)
+	w.RegisterWorkflow(ImprovementSuiteWorkflow)
+	w.RegisterWorkflow(ImprovementTrialWorkflow)
 
 	// RegisterActivity panics on a bad method set, so it has no error return.
 	w.RegisterActivity(acts)

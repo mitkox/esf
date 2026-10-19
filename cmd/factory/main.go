@@ -65,6 +65,9 @@ verification, one verified patch out.`,
 		newConfigCommand(&configPath),
 		newCredentialsCommand(),
 		newAgentsCommand(&configPath),
+		newHarnessProfileCommand(&configPath),
+		newImproveCommand(&configPath),
+		newBudgetGatewayCommand(&configPath),
 		newStorageCommand(&configPath),
 		newRetentionCommand(&configPath),
 		newRunCommand(&configPath),
@@ -114,24 +117,26 @@ func loadConfig(flagValue string) (factory.Config, error) {
 
 func newRunCommand(configPath *string) *cobra.Command {
 	var (
-		repo      string
-		localPath string
-		rev       string
-		task      string
-		taskFile  string
-		agent     string
-		model     string
-		profile   string
-		template  string
-		runID     string
-		wait      bool
-		agentTO   time.Duration
-		scope     string
-		workspace string
-		egress    string
-		changeID  string
-		parentRun string
-		review    bool
+		repo              string
+		localPath         string
+		rev               string
+		task              string
+		taskFile          string
+		agent             string
+		model             string
+		profile           string
+		template          string
+		runID             string
+		wait              bool
+		agentTO           time.Duration
+		scope             string
+		workspace         string
+		egress            string
+		changeID          string
+		parentRun         string
+		review            bool
+		harnessProfile    string
+		improvementPolicy string
 	)
 
 	cmd := &cobra.Command{
@@ -182,6 +187,8 @@ execute an arbitrary program.`,
 			}
 
 			req := factory.RunRequest{
+				HarnessProfile:      harnessProfile,
+				ImprovementPolicy:   improvementPolicy,
 				RunID:               runID,
 				ChangeID:            changeID,
 				ParentRunID:         parentRun,
@@ -242,7 +249,8 @@ execute an arbitrary program.`,
 				TaskQueue: cfg.Temporal.TaskQueue,
 				// The memo is what makes `factory halt --harness/--scope`
 				// possible without registering cluster search attributes.
-				Memo: factory.RunMemoFor(req),
+				Memo:                  factory.RunMemoFor(req),
+				WorkflowIDReusePolicy: improvementReusePolicy(req),
 			}, factory.SoftwareChangeWorkflow, req)
 			if err != nil {
 				return fmt.Errorf("start workflow: %w", err)
@@ -276,6 +284,8 @@ execute an arbitrary program.`,
 	cmd.Flags().StringVar(&agent, "agent", "", "agent harness name (from configuration)")
 	cmd.Flags().StringVar(&model, "model", "", "optional model override for the agent")
 	cmd.Flags().StringVar(&profile, "verification", "", "verification profile name")
+	cmd.Flags().StringVar(&harnessProfile, "harness-profile", "", "approved instructional profile name")
+	cmd.Flags().StringVar(&improvementPolicy, "improvement-policy", "", "operator-owned bounded improvement policy name")
 	cmd.Flags().StringVar(&template, "sandbox-template", "", "CubeSandbox template id (defaults to configuration)")
 	cmd.Flags().StringVar(&runID, "run-id", "", "explicit run id (default: generated)")
 	cmd.Flags().BoolVar(&wait, "wait", true, "wait for the run to finish")

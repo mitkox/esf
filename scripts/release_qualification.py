@@ -15,6 +15,58 @@ TARGETS = ("vm", "kubernetes")
 PLATFORMS = ("linux_amd64", "linux_arm64", "darwin_amd64", "darwin_arm64")
 IMAGE_PLATFORMS = ("linux/amd64", "linux/arm64")
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+HARNESS2_COMMIT = "1cfe254e8d25b15f37048c3730134686abe60335"
+
+
+def verify_harness_improvement(section, directory, verified_evidence, commit):
+    """Optional capability receipt; binary qualification cannot enable it implicitly."""
+    if section is None:
+        return []
+    if not isinstance(section, dict) or type(section.get("enabled")) is not bool:
+        return ["harness improvement activation receipt is malformed"]
+    if not section["enabled"]:
+        return []
+    issues = []
+    def require(value, message):
+        if not value:
+            issues.append("harness improvement: " + message)
+    require(section.get("upstream_commit") == HARNESS2_COMMIT, "upstream pin differs")
+    require(section.get("mode") in ("static", "adaptive"), "unsupported activation mode")
+    for name in ("profile_digest", "route_digest"):
+        require(isinstance(section.get(name), str) and
+                re.fullmatch(r"sha256:[0-9a-f]{64}", section[name]), name + " missing")
+    required = ("quality_report", "independent_approval", "component_activation", "budget_enforcement",
+                "scope_isolation", "cleanup")
+    for name in required:
+        require(isinstance(section.get(name), str) and section[name] in verified_evidence,
+                name + " lacks verified evidence")
+    if issues:
+        return issues
+    try:
+        report = json.loads((directory / section["quality_report"]).read_text())
+        if not isinstance(report, dict) or not isinstance(report.get("input"), dict):
+            return ["harness improvement: malformed quality report"]
+        require(report.get("schema") == "esf-harness-quality/v1" and report.get("passed") is True,
+                "quality report did not pass")
+        inputs = report.get("input", {})
+        require(inputs.get("source_commit") == commit, "quality report source differs")
+        require(inputs.get("split") == "qualification", "quality report used a non-held-out partition")
+        require(inputs.get("profile") == section["profile_digest"], "profile differs from quality report")
+        require(inputs.get("route_digest") == section["route_digest"], "model route differs from quality report")
+        require(inputs.get("mode") == section["mode"], "mode differs from quality report")
+        if section["mode"] == "adaptive":
+            require(inputs.get("policy_digest") == section.get("policy_digest") and
+                    re.fullmatch(r"sha256:[0-9a-f]{64}", str(section.get("policy_digest"))),
+                    "policy differs from quality report")
+        approval = json.loads((directory / section["independent_approval"]).read_text())
+        if not isinstance(approval, dict):
+            return ["harness improvement: malformed independent approval"]
+        require(approval.get("schema") == "esf-harness-approval/v1" and
+                approval.get("profile") == section["profile_digest"] and bool(approval.get("signature")),
+                "independent approval binding is missing")
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        issues.append("harness improvement evidence cannot be read: " + type(exc).__name__)
+    return issues
 
 
 def sha256(path: Path) -> str:
@@ -85,6 +137,8 @@ def verify_qualification(root: Path, inventory: dict, manifest_path: Path,
                 (root / "release/inventory.json").read_bytes(), "release assets inventory mismatch")
 
         evidence = check_files(manifest.get("evidence"), manifest_path.parent, "evidence")
+        issues.extend(verify_harness_improvement(manifest.get("harness_improvement"),
+                      manifest_path.parent, evidence, commit))
         def verified_refs(refs):
             return isinstance(refs, list) and bool(refs) and all(isinstance(ref, str) and ref in evidence for ref in refs)
         gates = manifest.get("gates", {})
