@@ -42,9 +42,9 @@ for target in "${targets[@]}"; do
     test -f "$archive"
     contents=$(tar -tzf "$archive" | LC_ALL=C sort)
     case "$component" in
-      factory) expected=$(printf '%s\n' LICENSE README.md factory.example.toml factory | LC_ALL=C sort) ;;
+      factory) expected=$(printf '%s\n' LICENSE HARNESS2-LICENSE HARNESS2-NOTICE HARNESS2-UPSTREAM.json README.md factory.example.toml factory | LC_ALL=C sort) ;;
       machinist) expected=$(printf '%s\n' LICENSE README.md machinist | LC_ALL=C sort) ;;
-      combined) expected=$(printf '%s\n' LICENSE README.md factory.example.toml factory machinist | LC_ALL=C sort) ;;
+      combined) expected=$(printf '%s\n' LICENSE HARNESS2-LICENSE HARNESS2-NOTICE HARNESS2-UPSTREAM.json README.md factory.example.toml factory machinist | LC_ALL=C sort) ;;
     esac
     test "$contents" = "$expected"
     tar -C "$target_dir" -xzf "$archive"

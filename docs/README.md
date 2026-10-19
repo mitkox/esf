@@ -3,6 +3,7 @@
 Start with [your first task workflow](task-guide.md) to run a task, review its files, and approve or request changes.
 
 - [Configuration and migration](configuration.md)
+- [Controlled Harness2 improvement](harness-improvement.md)
 - [Accepted task, stage, and artifact model](task-artifact-model.md)
 - [Current workflow configuration](workflows.md)
 - [Workflow roadmap: scaling AI engineering](workflow-roadmap.md)

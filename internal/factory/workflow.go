@@ -69,6 +69,7 @@ type RunStatus struct {
 // Every field is derived from an activity result, never from wall-clock time or
 // randomness, so Temporal replay reconstructs it identically.
 type workflowState struct {
+	execution       executionOverrides
 	status          RunStatus
 	executionID     string
 	createAttempted bool
@@ -146,6 +147,13 @@ type workflowState struct {
 // No network, filesystem or process call happens here: that is what keeps the
 // workflow deterministic and therefore replayable.
 func SoftwareChangeWorkflow(ctx workflow.Context, req RunRequest) (RunManifest, error) {
+	if req.ImprovementPolicy != "" {
+		return improvementWorkflow(ctx, req)
+	}
+	return softwareChangeWorkflow(ctx, req, executionOverrides{})
+}
+
+func softwareChangeWorkflow(ctx workflow.Context, req RunRequest, overrides executionOverrides) (RunManifest, error) {
 	// Retained for Temporal replay determinism: histories created while the
 	// assurance control plane existed carry this version marker. The routing
 	// decision is gone with the subsystem, so the returned version is unused.
@@ -158,6 +166,7 @@ func SoftwareChangeWorkflow(ctx workflow.Context, req RunRequest) (RunManifest, 
 	startedAt := workflow.Now(ctx)
 
 	state := &workflowState{
+		execution:   overrides,
 		executionID: info.WorkflowExecution.RunID,
 		changeID:    req.ChangeID,
 		status: RunStatus{
@@ -244,7 +253,9 @@ func SoftwareChangeWorkflow(ctx workflow.Context, req RunRequest) (RunManifest, 
 	// failure to update a derived index must not turn a successful change into
 	// a failed one. The gap surfaces as a missing entry in `factory get
 	// changes` and in the worker log.
-	state.changeRecorded = recordChange(ctx, acts, state)
+	if !overrides.Probe {
+		state.changeRecorded = recordChange(ctx, acts, state)
+	}
 
 	state.status.State = manifest.FactoryResult
 	state.status.AgentOutcome = manifest.AgentResult
@@ -303,6 +314,12 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	}
 	s.validate = validated
 	s.resources = validated.Resources
+	if s.execution.Probe {
+		s.resources.Review = false
+	}
+	if s.execution.ProfileDigest != "" {
+		s.resources.HarnessProfileDigest = s.execution.ProfileDigest
+	}
 	s.reviewPorts = validated.Resources.PreviewPorts
 	s.setCondition(ctx, ConditionValidated, ConditionTrue, "PolicyAccepted",
 		"scope="+s.resources.Scope)
@@ -442,11 +459,12 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	s.status.CurrentStep = "sandbox.network.lockdown"
 	var lockdown ApplyRuntimeNetworkOutput
 	lockdownErr := executeActivity(ctx, acts.ApplyRuntimeNetwork, infraRetry(), ApplyRuntimeNetworkInput{
-		RunID:      req.RunID,
-		SandboxID:  s.sandboxID,
-		Harness:    req.AgentHarness,
-		ExpectDeny: !s.resources.Egress.AllowsInternet(),
-		Policy:     s.resources.EgressPolicy,
+		BudgetAccount: s.execution.BudgetAccount,
+		RunID:         req.RunID,
+		SandboxID:     s.sandboxID,
+		Harness:       req.AgentHarness,
+		ExpectDeny:    !s.resources.Egress.AllowsInternet(),
+		Policy:        s.resources.EgressPolicy,
 	}).Get(ctx, &lockdown)
 	if lockdownErr != nil {
 		s.status.State = StateEgressUnverified
@@ -455,6 +473,10 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 			"sandbox egress could not be verified", map[string]string{"error": lockdownErr.Error()})
 		s.collect(ctx, acts, req, "")
 		return fmt.Errorf("verify sandbox egress: %w", lockdownErr)
+	}
+	if s.execution.BudgetAccount != "" && (lockdown.Probe == nil || !lockdown.Probe.Canary.Decided || !lockdown.Probe.Metadata.Decided) {
+		s.status.State = StateEgressUnverified
+		return fmt.Errorf("improvement requires conclusive sandbox boundary evidence")
 	}
 	if probe := lockdown.Probe; probe != nil {
 		s.egressProbe = probe
@@ -503,14 +525,17 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 		agentModel = s.resources.ModelID
 	}
 	agentErr := executeActivity(ctx, acts.RunAgent, agentOpts, RunAgentInput{
-		RunID:          req.RunID,
-		SandboxID:      s.sandboxID,
-		Harness:        req.AgentHarness,
-		Model:          agentModel,
-		ModelAPIKeyEnv: s.resources.ModelAPIKeyEnv,
-		Prompt:         req.Task,
-		RepositoryDir:  req.EffectiveRepositoryDir(),
-		Timeout:        req.AgentTimeout,
+		ProfileDigest:     s.resources.HarnessProfileDigest,
+		SelectedRun:       s.execution.SelectedRun,
+		ImprovementParent: s.execution.Parent,
+		RunID:             req.RunID,
+		SandboxID:         s.sandboxID,
+		Harness:           req.AgentHarness,
+		Model:             agentModel,
+		ModelAPIKeyEnv:    s.resources.ModelAPIKeyEnv,
+		Prompt:            req.Task,
+		RepositoryDir:     req.EffectiveRepositoryDir(),
+		Timeout:           req.AgentTimeout,
 	}).Get(ctx, &agentOut)
 
 	if agentErr != nil {
@@ -1204,6 +1229,7 @@ func finalizeRun(
 	}
 
 	input := FinalizeInput{
+		Improvement:             state.execution.Receipt,
 		Request:                 req,
 		Validate:                state.validate,
 		Intake:                  state.intake,

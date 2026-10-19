@@ -28,7 +28,11 @@ const ConfigSchemaVersion = 1
 // Everything in this structure is OPERATOR policy. A task or API caller can
 // choose only: the task text, an approved repository, and an approved revision.
 type Config struct {
-	SchemaVersion int `toml:"schema_version"`
+	HarnessProfiles     map[string]string            `toml:"harness_profiles"`
+	Improvement         ImprovementConfig            `toml:"improvement"`
+	ImprovementPolicies map[string]ImprovementPolicy `toml:"improvement_policies"`
+	ImprovementSuites   map[string]string            `toml:"improvement_suites"`
+	SchemaVersion       int                          `toml:"schema_version"`
 	// FactoryVersion overrides Version in evidence when set.
 	FactoryVersion string `toml:"factory_version"`
 
@@ -377,6 +381,9 @@ func (c Config) Validate() error {
 	}
 	if err := c.Intake.Validate(); err != nil {
 		problems = append(problems, "intake: "+err.Error())
+	}
+	if err := c.validateImprovement(); err != nil {
+		problems = append(problems, err.Error())
 	}
 	if err := c.validateHardening(); err != nil {
 		problems = append(problems, err.Error())

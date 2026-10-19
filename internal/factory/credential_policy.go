@@ -40,6 +40,14 @@ func (c Config) runtimeNetworkForHarness(name string) (sandbox.Network, bool, er
 		return sandbox.Network{}, false, fmt.Errorf("harness %q: %w", name, err)
 	}
 
+	network, err := c.networkForHarnessCredential(name, h, secret)
+	return network, true, err
+}
+
+func (c Config) networkForHarnessCredential(name string, h HarnessConfig, secret string) (sandbox.Network, error) {
+	if err := validateCubeEgressConfig(name, h); err != nil {
+		return sandbox.Network{}, err
+	}
 	endpoint, _ := url.Parse(strings.TrimSpace(h.BaseURL))
 	host := endpoint.Hostname()
 	match := sandbox.NetworkMatch{
@@ -52,7 +60,7 @@ func (c Config) runtimeNetworkForHarness(name string) (sandbox.Network, bool, er
 	if port := endpoint.Port(); port != "" {
 		parsed, parseErr := strconv.Atoi(port)
 		if parseErr != nil || parsed < 1 || parsed > 65535 {
-			return sandbox.Network{}, false, fmt.Errorf("harness %q: invalid base_url port %q", name, port)
+			return sandbox.Network{}, fmt.Errorf("harness %q: invalid base_url port %q", name, port)
 		}
 		match.Port = parsed
 	}
@@ -94,7 +102,7 @@ func (c Config) runtimeNetworkForHarness(name string) (sandbox.Network, bool, er
 			},
 		})
 	}
-	return network, true, nil
+	return network, nil
 }
 
 func egressPath(basePath string) string {

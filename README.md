@@ -18,6 +18,8 @@ and adds factory orchestration. See [upstream attribution](docs/upstream.md).
 ## Features
 
 - Named, operator-configured agent harnesses and repository policies.
+- Opt-in [Harness2 improvement](docs/harness-improvement.md) with immutable
+  instructional profiles, bounded experiments, and reviewed promotion.
 - Opt-in [Claude Code and Codex CLI agents](docs/harness-claude-codex.md)
   with stdin prompts and CubeEgress credential support.
 - Opt-in [Pi v1 harness candidate](docs/harness-pi.md) with bounded recovery

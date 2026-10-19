@@ -1,0 +1,14 @@
+Harness2: Recursive Agent Harnessing for an Open World
+Copyright 2026 Google LLC
+https://github.com/google-research/harness2
+Pinned source: 1cfe254e8d25b15f37048c3730134686abe60335 (upstream 0.1.0)
+
+ESF adapts the Propose-Probe-Compose algorithm and role instructions into its
+own Go/Temporal controller. The Python runner, benchmark installers, unrestricted
+executors, mutable guardrails, scripts, plugins, hooks and subagents are not
+included. ESF applies a restricted instructional surface and owns verification,
+credentials, network access, reservations, evidence and reviewed promotion.
+
+The accompanying Apache-2.0 LICENSE applies to the upstream material. New ESF
+integration code is covered by the repository license. The upstream project is
+not an officially supported Google product.

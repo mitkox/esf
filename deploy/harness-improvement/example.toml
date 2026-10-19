@@ -1,0 +1,45 @@
+# Operator overlay; merge into your existing factory.toml after review.
+# Replace digest placeholders with retained evidence. All policies start disabled.
+[improvement]
+upstream_url = "https://provider.example/v1"
+wire_model = "approved-model"
+gateway_control_url = "http://127.0.0.1:8093"
+gateway_public_url = "https://budget.internal.example/v1"
+gateway_admin_key_env = "ESF_BUDGET_ADMIN_KEY"
+gateway_token_key_env = "ESF_BUDGET_TOKEN_KEY"
+route_digest = "REPLACE_WITH_FACTORY_BUDGET_GATEWAY_DIGEST"
+pricing_evidence = "REPLACE_WITH_VERIFIED_PRICING_EVIDENCE_DIGEST"
+input_micros_per_million = 1000000
+output_micros_per_million = 1000000
+
+[models.improvement]
+provider = "openai-compatible"
+model = "opencode-go/approved-model" # Match the existing model's provider/model identity.
+base_url = "https://budget.internal.example/v1"
+api_key_env = "OPENCODE_CUBE_EGRESS_KEY"
+
+[improvement_policies.offline]
+mode = "offline"
+enabled = false
+editor_harness = "opencode2"
+model = "improvement"
+max_cost_micros = 8000000
+max_duration = "90m"
+cleanup_allowance = "5m"
+max_input_tokens = 65536
+max_output_tokens = 8192
+max_requests = 64
+
+# Once a reusable candidate exists, bind its name to the immutable digest,
+# grant it through your existing scope, and set offline.profile = "candidate".
+# [harness_profiles]
+# candidate = "sha256:..."
+# [improvement_suites]
+# owned-tasks = "/secure/owned-task-suite.json"
+# In the EXISTING scope: improvement_policies = ["offline"]
+# In the EXISTING scope: harness_profiles = ["candidate"]
+# Harness opencode2 must be preinstalled, digest-pinned and credential_mode=cube_egress.
+
+# A live policy also requires baseline_cost_micros, baseline_duration,
+# qualification_profile, enrollment_percent=1, and a positive scope budget.
+# Set mode to shadow first, then adaptive after separate qualification.

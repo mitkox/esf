@@ -1,0 +1,1206 @@
+{
+  "schema": "esf-harness2-local-acceptance/v1",
+  "production_qualified": false,
+  "provider": "synthetic-fixture-no-paid-requests",
+  "runs": [
+    {
+      "run_id": "h2-accept-approved-20261019",
+      "manifest": {
+        "agent_exit_code": 0,
+        "agent_harness": "conformance",
+        "agent_result": "SKIPPED",
+        "artifacts": "runs/h2-accept-approved-20261019",
+        "baseline_sha": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "cleanup_result": {
+          "attempted": true,
+          "duration": 90675520,
+          "finished_at": "2026-10-19T13:39:21.675452664Z",
+          "outcome": "SUCCESS",
+          "remaining_sandboxes": 0,
+          "sandbox_id": "8f1c1516022945e887fcd0905d37e9f6",
+          "verified": true
+        },
+        "completed_at": "2026-10-19T13:39:21.684611048Z",
+        "conditions": [
+          {
+            "last_transition_time": "2026-10-19T13:39:20.971261704Z",
+            "message": "scope=default",
+            "reason": "PolicyAccepted",
+            "status": "True",
+            "type": "Validated"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:21.059099782Z",
+            "message": "sandbox=8f1c1516022945e887fcd0905d37e9f6 template=tpl-e0b123805849416a915a751e",
+            "reason": "Created",
+            "status": "True",
+            "type": "SandboxReady"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:21.077758065Z",
+            "message": "workspace= digest=",
+            "reason": "Provisioned",
+            "status": "True",
+            "type": "WorkspacePrepared"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:21.32293902Z",
+            "message": "sha=2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+            "reason": "CheckedOut",
+            "status": "True",
+            "type": "RepositoryPrepared"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:21.354531239Z",
+            "message": "path=/workspace/.factory/inventory.json digest=sha256:ca24da5bcfe8f246def90d18e30b66b1f40cbed1d0af35f0a1d5647a707670a8",
+            "reason": "Published",
+            "status": "True",
+            "type": "InventoryWritten"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:21.481560759Z",
+            "message": "egress policy \"closed\" claims to deny public internet, but the sandbox reached https://example.com/ (http_200)",
+            "reason": "BoundaryViolated",
+            "status": "False",
+            "type": "EgressVerified"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:21.573160552Z",
+            "message": "bytes=0",
+            "reason": "PatchCaptured",
+            "status": "True",
+            "type": "ArtifactsCollected"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:21.684611048Z",
+            "message": "remaining=0",
+            "reason": "NoSandboxesRemain",
+            "status": "True",
+            "type": "CleanupVerified"
+          }
+        ],
+        "duration": 749248326,
+        "egress_digest": "sha256:8b93b4575a8eeac47ed4adb462db3fd6a6cc6bc6c35090bf4bcefdd384b8c37e",
+        "egress_policy": "closed",
+        "egress_summary": "internet=denied",
+        "error": "sandbox security invariants violated: egress policy \"closed\" claims to deny public internet, but the sandbox reached https://example.com/ (http_200)",
+        "factory_result": "EGRESS_UNVERIFIED",
+        "factory_version": "0.6.2",
+        "hardening": {
+          "alerts": [
+            {
+              "at": "2026-10-19T13:39:21.492918331Z",
+              "delivered": false,
+              "error": "no hardening.alert_webhook_url is configured",
+              "kind": "run.egress_violation",
+              "severity": "CRITICAL",
+              "summary": "sandbox security invariants violated"
+            }
+          ],
+          "egress_probe": {
+            "agent_uid": 0,
+            "agent_user": "root",
+            "canary": {
+              "decided": true,
+              "detail": "http_200",
+              "reachable": true,
+              "url": "https://example.com/"
+            },
+            "duration": 108845071,
+            "expect_deny": true,
+            "metadata": {
+              "decided": false,
+              "detail": "curl_rc=7",
+              "reachable": false,
+              "url": "http://169.254.169.254/latest/meta-data/"
+            },
+            "notes": [
+              "the metadata probe was undecided (inconclusive): curl_rc=7"
+            ],
+            "policy": "closed",
+            "probed_at": "2026-10-19T13:39:21.36584064Z",
+            "raw": "ESF_PROBE identity 0 root\nESF_PROBE canary reachable http_200\nESF_PROBE metadata unknown curl_rc=7",
+            "violations": [
+              "egress policy \"closed\" claims to deny public internet, but the sandbox reached https://example.com/ (http_200)"
+            ]
+          }
+        },
+        "patch": "changes.patch",
+        "repository": "local:/tmp/esf-h2-acceptance-fixture",
+        "repository_kind": "local",
+        "requested_revision": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "resource_digest": "sha256:752d93f4fe4b83a7bf4844c60102f5b70163c12ae8498f7dd73941e203bdc33f",
+        "resulting_sha_if_any": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "run_id": "h2-accept-approved-20261019",
+        "sandbox_id": "8f1c1516022945e887fcd0905d37e9f6",
+        "sandbox_provider": "cubesandbox",
+        "sandbox_template": "tpl-e0b123805849416a915a751e",
+        "scope": "default",
+        "started_at": "2026-10-19T13:39:20.935362722Z",
+        "task_hash": "b0105c6b6089ead0abcf6bc9c318c1dbbfd0abc4e0984dcf25b9a411b3a7cd4a",
+        "verification_mutated_tree": false,
+        "verification_profile": "default",
+        "verification_result": "SKIPPED",
+        "workflow_id": "factory-run-h2-accept-approved-20261019",
+        "workflow_run_id": "01a15463-5ed1-7e43-abbd-384aec7fa6ff"
+      },
+      "manifest_sha256": "b250970e28ffb37a01edfaf737ed236e239d363133ba75457790ee87e12e2905"
+    },
+    {
+      "run_id": "h2-accept-approved-v2-20261019",
+      "manifest": {
+        "agent_exit_code": 0,
+        "agent_harness": "conformance",
+        "agent_result": "SUCCESS",
+        "artifacts": "runs/h2-accept-approved-v2-20261019",
+        "baseline_sha": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "cleanup_result": {
+          "attempted": true,
+          "duration": 108499557,
+          "finished_at": "2026-10-19T13:41:06.09823635Z",
+          "outcome": "SUCCESS",
+          "remaining_sandboxes": 0,
+          "sandbox_id": "db655010ab784de6bbe9f90bc229a0fa",
+          "verified": true
+        },
+        "completed_at": "2026-10-19T13:41:06.110283964Z",
+        "conditions": [
+          {
+            "last_transition_time": "2026-10-19T13:40:22.505540324Z",
+            "message": "scope=default",
+            "reason": "PolicyAccepted",
+            "status": "True",
+            "type": "Validated"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:22.591848806Z",
+            "message": "sandbox=db655010ab784de6bbe9f90bc229a0fa template=tpl-e0b123805849416a915a751e",
+            "reason": "Created",
+            "status": "True",
+            "type": "SandboxReady"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:22.612786598Z",
+            "message": "workspace= digest=",
+            "reason": "Provisioned",
+            "status": "True",
+            "type": "WorkspacePrepared"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:22.877896117Z",
+            "message": "sha=2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+            "reason": "CheckedOut",
+            "status": "True",
+            "type": "RepositoryPrepared"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:22.91223698Z",
+            "message": "path=/workspace/.factory/inventory.json digest=sha256:8aee650eb808a5b7ed5536b11147f5814d96f1f4792285a1ac651df16a5b764d",
+            "reason": "Published",
+            "status": "True",
+            "type": "InventoryWritten"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:32.997413047Z",
+            "message": "expect_deny=true internet=unknown metadata=unknown uid=0",
+            "reason": "ProbeInconclusive",
+            "status": "Unknown",
+            "type": "EgressVerified"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:33.100096614Z",
+            "reason": "NotBlocked",
+            "status": "False",
+            "type": "AgentBlocked"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:33.100096614Z",
+            "message": "attempt=1 duration=59.815241ms",
+            "reason": "ExitZero",
+            "status": "True",
+            "type": "AgentCompleted"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:33.383371426Z",
+            "message": "drift=false",
+            "reason": "PostVerification",
+            "status": "True",
+            "type": "ArtifactsCollected"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:33.219550534Z",
+            "message": "method=tree-hash gates=2",
+            "reason": "Unmodified",
+            "status": "True",
+            "type": "GateIntegrity"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:33.237040943Z",
+            "message": "no findings",
+            "reason": "Clean",
+            "status": "True",
+            "type": "BehaviorScanned"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:05.822215793Z",
+            "message": "outcome=approved",
+            "reason": "DecisionReceived",
+            "status": "False",
+            "type": "ReviewPaused"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:05.976074404Z",
+            "reason": "AllGatesPassed",
+            "status": "True",
+            "type": "Verified"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:05.976074404Z",
+            "reason": "WithinBudget",
+            "status": "False",
+            "type": "BudgetExceeded"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:06.110283964Z",
+            "message": "remaining=0",
+            "reason": "NoSandboxesRemain",
+            "status": "True",
+            "type": "CleanupVerified"
+          }
+        ],
+        "cube_version_if_available": "0.7.3",
+        "duration": 43637308072,
+        "egress_digest": "sha256:8b93b4575a8eeac47ed4adb462db3fd6a6cc6bc6c35090bf4bcefdd384b8c37e",
+        "egress_policy": "closed",
+        "egress_summary": "internet=denied",
+        "factory_result": "SUCCEEDED",
+        "factory_version": "0.6.2",
+        "hardening": {
+          "behavior": {
+            "findings": null,
+            "ruleset_version": "1",
+            "scanned_lines": 16,
+            "tripped": false
+          },
+          "egress_probe": {
+            "agent_uid": 0,
+            "agent_user": "root",
+            "canary": {
+              "decided": false,
+              "detail": "curl_rc=28",
+              "reachable": false,
+              "url": "https://example.com/"
+            },
+            "duration": 10063316596,
+            "expect_deny": true,
+            "metadata": {
+              "decided": false,
+              "detail": "curl_rc=7",
+              "reachable": false,
+              "url": "http://169.254.169.254/latest/meta-data/"
+            },
+            "notes": [
+              "the public-internet probe was undecided (inconclusive): curl_rc=28",
+              "the metadata probe was undecided (inconclusive): curl_rc=7"
+            ],
+            "policy": "closed",
+            "probed_at": "2026-10-19T13:40:22.925524753Z",
+            "raw": "ESF_PROBE identity 0 root\nESF_PROBE canary unknown curl_rc=28\nESF_PROBE metadata unknown curl_rc=7"
+          },
+          "gate_integrity": {
+            "allowed": false,
+            "checked": true,
+            "gate_paths": [
+              "build.sh",
+              "test.sh"
+            ],
+            "method": "tree-hash"
+          }
+        },
+        "human_result": "approved",
+        "patch": "changes.patch",
+        "post_verification_patch": "verification/post-verification.patch",
+        "repository": "local:/tmp/esf-h2-acceptance-fixture",
+        "repository_kind": "local",
+        "requested_revision": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "resource_digest": "sha256:752d93f4fe4b83a7bf4844c60102f5b70163c12ae8498f7dd73941e203bdc33f",
+        "resulting_sha_if_any": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "review_configured": true,
+        "review_note": "Conformance fixture: verify the candidate preserves the human review gate; this is not independent production approval.",
+        "review_outcome": "approved",
+        "run_id": "h2-accept-approved-v2-20261019",
+        "sandbox_id": "db655010ab784de6bbe9f90bc229a0fa",
+        "sandbox_provider": "cubesandbox",
+        "sandbox_template": "tpl-e0b123805849416a915a751e",
+        "scope": "default",
+        "started_at": "2026-10-19T13:40:22.472975892Z",
+        "suspend_result": "SUCCESS",
+        "task_hash": "b0105c6b6089ead0abcf6bc9c318c1dbbfd0abc4e0984dcf25b9a411b3a7cd4a",
+        "verification_mutated_tree": false,
+        "verification_profile": "default",
+        "verification_result": "SUCCESS",
+        "workflow_id": "factory-run-h2-accept-approved-v2-20261019",
+        "workflow_run_id": "01a15464-4f35-73d0-aef9-aee21d63f1e3"
+      },
+      "manifest_sha256": "090d05cd0b052ab7b05da3f3c492f56ed250be852450946629f322adfa05c15d"
+    },
+    {
+      "run_id": "h2-accept-failed-gate-20261019",
+      "manifest": {
+        "agent_exit_code": 0,
+        "agent_harness": "noop",
+        "agent_result": "SKIPPED",
+        "artifacts": "runs/h2-accept-failed-gate-20261019",
+        "baseline_sha": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "cleanup_result": {
+          "attempted": true,
+          "duration": 79979746,
+          "finished_at": "2026-10-19T13:39:25.548698243Z",
+          "outcome": "SUCCESS",
+          "remaining_sandboxes": 0,
+          "sandbox_id": "3d6c6dffec804cdb9ab74ecef4fa9a64",
+          "verified": true
+        },
+        "completed_at": "2026-10-19T13:39:25.55614039Z",
+        "conditions": [
+          {
+            "last_transition_time": "2026-10-19T13:39:24.847397325Z",
+            "message": "scope=default",
+            "reason": "PolicyAccepted",
+            "status": "True",
+            "type": "Validated"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:24.935086543Z",
+            "message": "sandbox=3d6c6dffec804cdb9ab74ecef4fa9a64 template=tpl-e0b123805849416a915a751e",
+            "reason": "Created",
+            "status": "True",
+            "type": "SandboxReady"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:24.960785666Z",
+            "message": "workspace= digest=",
+            "reason": "Provisioned",
+            "status": "True",
+            "type": "WorkspacePrepared"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:25.21194166Z",
+            "message": "sha=2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+            "reason": "CheckedOut",
+            "status": "True",
+            "type": "RepositoryPrepared"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:25.253563366Z",
+            "message": "path=/workspace/.factory/inventory.json digest=sha256:ea7e43d0de50bf138843d7310f886fb539b41557bf34e939160968e0c0df458c",
+            "reason": "Published",
+            "status": "True",
+            "type": "InventoryWritten"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:25.373095615Z",
+            "message": "egress policy \"closed\" claims to deny public internet, but the sandbox reached https://example.com/ (http_200)",
+            "reason": "BoundaryViolated",
+            "status": "False",
+            "type": "EgressVerified"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:25.457733127Z",
+            "message": "bytes=0",
+            "reason": "PatchCaptured",
+            "status": "True",
+            "type": "ArtifactsCollected"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:39:25.55614039Z",
+            "message": "remaining=0",
+            "reason": "NoSandboxesRemain",
+            "status": "True",
+            "type": "CleanupVerified"
+          }
+        ],
+        "duration": 731804653,
+        "egress_digest": "sha256:8b93b4575a8eeac47ed4adb462db3fd6a6cc6bc6c35090bf4bcefdd384b8c37e",
+        "egress_policy": "closed",
+        "egress_summary": "internet=denied",
+        "error": "sandbox security invariants violated: egress policy \"closed\" claims to deny public internet, but the sandbox reached https://example.com/ (http_200)",
+        "factory_result": "EGRESS_UNVERIFIED",
+        "factory_version": "0.6.2",
+        "hardening": {
+          "alerts": [
+            {
+              "at": "2026-10-19T13:39:25.38393989Z",
+              "delivered": false,
+              "error": "no hardening.alert_webhook_url is configured",
+              "kind": "run.egress_violation",
+              "severity": "CRITICAL",
+              "summary": "sandbox security invariants violated"
+            }
+          ],
+          "egress_probe": {
+            "agent_uid": 0,
+            "agent_user": "root",
+            "canary": {
+              "decided": true,
+              "detail": "http_200",
+              "reachable": true,
+              "url": "https://example.com/"
+            },
+            "duration": 97541501,
+            "expect_deny": true,
+            "metadata": {
+              "decided": false,
+              "detail": "curl_rc=7",
+              "reachable": false,
+              "url": "http://169.254.169.254/latest/meta-data/"
+            },
+            "notes": [
+              "the metadata probe was undecided (inconclusive): curl_rc=7"
+            ],
+            "policy": "closed",
+            "probed_at": "2026-10-19T13:39:25.267761056Z",
+            "raw": "ESF_PROBE identity 0 root\nESF_PROBE canary reachable http_200\nESF_PROBE metadata unknown curl_rc=7",
+            "violations": [
+              "egress policy \"closed\" claims to deny public internet, but the sandbox reached https://example.com/ (http_200)"
+            ]
+          }
+        },
+        "patch": "changes.patch",
+        "repository": "local:/tmp/esf-h2-acceptance-fixture",
+        "repository_kind": "local",
+        "requested_revision": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "resource_digest": "sha256:558a55565a3442b68b8f6e2f1e8c941c76bc61b43b5f8aaed59ea094e1963f4c",
+        "resulting_sha_if_any": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "run_id": "h2-accept-failed-gate-20261019",
+        "sandbox_id": "3d6c6dffec804cdb9ab74ecef4fa9a64",
+        "sandbox_provider": "cubesandbox",
+        "sandbox_template": "tpl-e0b123805849416a915a751e",
+        "scope": "default",
+        "started_at": "2026-10-19T13:39:24.824335737Z",
+        "task_hash": "b0105c6b6089ead0abcf6bc9c318c1dbbfd0abc4e0984dcf25b9a411b3a7cd4a",
+        "verification_mutated_tree": false,
+        "verification_profile": "default",
+        "verification_result": "SKIPPED",
+        "workflow_id": "factory-run-h2-accept-failed-gate-20261019",
+        "workflow_run_id": "01a15463-6e11-74cd-ac23-60863da0efc1"
+      },
+      "manifest_sha256": "2f8cca0eaed40d278c9c330ebc64d25e69e76579c7366419d18b87ce68d9e9d3"
+    },
+    {
+      "run_id": "h2-accept-failed-gate-v2-20261019",
+      "manifest": {
+        "agent_exit_code": 0,
+        "agent_harness": "noop",
+        "agent_result": "SUCCESS",
+        "artifacts": "runs/h2-accept-failed-gate-v2-20261019",
+        "baseline_sha": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "cleanup_result": {
+          "attempted": true,
+          "duration": 82882730,
+          "finished_at": "2026-10-19T13:40:35.309006561Z",
+          "outcome": "SUCCESS",
+          "remaining_sandboxes": 0,
+          "sandbox_id": "029328643bb547a0a35ad54b0ff3b7f3",
+          "verified": true
+        },
+        "completed_at": "2026-10-19T13:40:35.316890852Z",
+        "conditions": [
+          {
+            "last_transition_time": "2026-10-19T13:40:24.394716156Z",
+            "message": "scope=default",
+            "reason": "PolicyAccepted",
+            "status": "True",
+            "type": "Validated"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:24.477527782Z",
+            "message": "sandbox=029328643bb547a0a35ad54b0ff3b7f3 template=tpl-e0b123805849416a915a751e",
+            "reason": "Created",
+            "status": "True",
+            "type": "SandboxReady"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:24.499156157Z",
+            "message": "workspace= digest=",
+            "reason": "Provisioned",
+            "status": "True",
+            "type": "WorkspacePrepared"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:24.74637981Z",
+            "message": "sha=2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+            "reason": "CheckedOut",
+            "status": "True",
+            "type": "RepositoryPrepared"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:24.787408527Z",
+            "message": "path=/workspace/.factory/inventory.json digest=sha256:36f5d0c5e7f93cfb289dac530176762d16db9d14c533997a23663f884b1d27e7",
+            "reason": "Published",
+            "status": "True",
+            "type": "InventoryWritten"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:34.873294198Z",
+            "message": "expect_deny=true internet=unknown metadata=unknown uid=0",
+            "reason": "ProbeInconclusive",
+            "status": "Unknown",
+            "type": "EgressVerified"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:34.924083736Z",
+            "reason": "NotBlocked",
+            "status": "False",
+            "type": "AgentBlocked"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:34.924083736Z",
+            "message": "attempt=1 duration=11.816738ms",
+            "reason": "ExitZero",
+            "status": "True",
+            "type": "AgentCompleted"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:35.215595764Z",
+            "message": "drift=false",
+            "reason": "PostVerification",
+            "status": "True",
+            "type": "ArtifactsCollected"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:35.042788381Z",
+            "message": "method=tree-hash gates=2",
+            "reason": "Unmodified",
+            "status": "True",
+            "type": "GateIntegrity"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:35.067949369Z",
+            "message": "no findings",
+            "reason": "Clean",
+            "status": "True",
+            "type": "BehaviorScanned"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:35.215595764Z",
+            "message": "unit-tests",
+            "reason": "GateFailed",
+            "status": "False",
+            "type": "Verified"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:35.215595764Z",
+            "reason": "WithinBudget",
+            "status": "False",
+            "type": "BudgetExceeded"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:40:35.316890852Z",
+            "message": "remaining=0",
+            "reason": "NoSandboxesRemain",
+            "status": "True",
+            "type": "CleanupVerified"
+          }
+        ],
+        "cube_version_if_available": "0.7.3",
+        "duration": 10946309679,
+        "egress_digest": "sha256:8b93b4575a8eeac47ed4adb462db3fd6a6cc6bc6c35090bf4bcefdd384b8c37e",
+        "egress_policy": "closed",
+        "egress_summary": "internet=denied",
+        "error": "verification failed: gates [unit-tests] did not pass",
+        "factory_result": "VERIFICATION_FAILED",
+        "factory_version": "0.6.2",
+        "hardening": {
+          "behavior": {
+            "findings": null,
+            "ruleset_version": "1",
+            "scanned_lines": 0,
+            "tripped": false
+          },
+          "egress_probe": {
+            "agent_uid": 0,
+            "agent_user": "root",
+            "canary": {
+              "decided": false,
+              "detail": "curl_rc=28",
+              "reachable": false,
+              "url": "https://example.com/"
+            },
+            "duration": 10063871148,
+            "expect_deny": true,
+            "metadata": {
+              "decided": false,
+              "detail": "curl_rc=7",
+              "reachable": false,
+              "url": "http://169.254.169.254/latest/meta-data/"
+            },
+            "notes": [
+              "the public-internet probe was undecided (inconclusive): curl_rc=28",
+              "the metadata probe was undecided (inconclusive): curl_rc=7"
+            ],
+            "policy": "closed",
+            "probed_at": "2026-10-19T13:40:24.801651873Z",
+            "raw": "ESF_PROBE identity 0 root\nESF_PROBE canary unknown curl_rc=28\nESF_PROBE metadata unknown curl_rc=7"
+          },
+          "gate_integrity": {
+            "allowed": false,
+            "checked": true,
+            "gate_paths": [
+              "build.sh",
+              "test.sh"
+            ],
+            "method": "tree-hash"
+          }
+        },
+        "patch": "changes.patch",
+        "post_verification_patch": "verification/post-verification.patch",
+        "repository": "local:/tmp/esf-h2-acceptance-fixture",
+        "repository_kind": "local",
+        "requested_revision": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "resource_digest": "sha256:558a55565a3442b68b8f6e2f1e8c941c76bc61b43b5f8aaed59ea094e1963f4c",
+        "resulting_sha_if_any": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "run_id": "h2-accept-failed-gate-v2-20261019",
+        "sandbox_id": "029328643bb547a0a35ad54b0ff3b7f3",
+        "sandbox_provider": "cubesandbox",
+        "sandbox_template": "tpl-e0b123805849416a915a751e",
+        "scope": "default",
+        "started_at": "2026-10-19T13:40:24.370581173Z",
+        "task_hash": "b0105c6b6089ead0abcf6bc9c318c1dbbfd0abc4e0984dcf25b9a411b3a7cd4a",
+        "verification_mutated_tree": false,
+        "verification_profile": "default",
+        "verification_result": "FAILED",
+        "workflow_id": "factory-run-h2-accept-failed-gate-v2-20261019",
+        "workflow_run_id": "01a15464-56a7-7ef5-9b4f-ca2c60122a06"
+      },
+      "manifest_sha256": "6bc437421491ee547992b211e06cc329e503c7645aaa93ac5029889487b6a366"
+    },
+    {
+      "run_id": "h2-accept-rejected-v2-20261019",
+      "manifest": {
+        "agent_exit_code": 0,
+        "agent_harness": "conformance",
+        "agent_result": "SUCCESS",
+        "artifacts": "runs/h2-accept-rejected-v2-20261019",
+        "baseline_sha": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "cleanup_result": {
+          "attempted": true,
+          "duration": 105892356,
+          "finished_at": "2026-10-19T13:43:11.755093671Z",
+          "outcome": "SUCCESS",
+          "remaining_sandboxes": 0,
+          "sandbox_id": "35f29ff4481c4e8686ca1d08f5518008",
+          "verified": true
+        },
+        "completed_at": "2026-10-19T13:43:11.766765966Z",
+        "conditions": [
+          {
+            "last_transition_time": "2026-10-19T13:41:08.045130197Z",
+            "message": "scope=default",
+            "reason": "PolicyAccepted",
+            "status": "True",
+            "type": "Validated"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:08.13942417Z",
+            "message": "sandbox=35f29ff4481c4e8686ca1d08f5518008 template=tpl-e0b123805849416a915a751e",
+            "reason": "Created",
+            "status": "True",
+            "type": "SandboxReady"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:08.161173633Z",
+            "message": "workspace= digest=",
+            "reason": "Provisioned",
+            "status": "True",
+            "type": "WorkspacePrepared"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:08.405727859Z",
+            "message": "sha=2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+            "reason": "CheckedOut",
+            "status": "True",
+            "type": "RepositoryPrepared"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:08.444194954Z",
+            "message": "path=/workspace/.factory/inventory.json digest=sha256:daa286db97bcb68c75c25957f94cbef45e2f56b9fe814547b83954bcdfd5b0a9",
+            "reason": "Published",
+            "status": "True",
+            "type": "InventoryWritten"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:18.538114566Z",
+            "message": "expect_deny=true internet=unknown metadata=unknown uid=0",
+            "reason": "ProbeInconclusive",
+            "status": "Unknown",
+            "type": "EgressVerified"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:18.630133457Z",
+            "reason": "NotBlocked",
+            "status": "False",
+            "type": "AgentBlocked"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:18.630133457Z",
+            "message": "attempt=1 duration=52.695081ms",
+            "reason": "ExitZero",
+            "status": "True",
+            "type": "AgentCompleted"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:18.911961136Z",
+            "message": "drift=false",
+            "reason": "PostVerification",
+            "status": "True",
+            "type": "ArtifactsCollected"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:18.749424848Z",
+            "message": "method=tree-hash gates=2",
+            "reason": "Unmodified",
+            "status": "True",
+            "type": "GateIntegrity"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:41:18.765452509Z",
+            "message": "no findings",
+            "reason": "Clean",
+            "status": "True",
+            "type": "BehaviorScanned"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:43:11.534377021Z",
+            "message": "outcome=rejected",
+            "reason": "DecisionReceived",
+            "status": "False",
+            "type": "ReviewPaused"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:43:11.637016392Z",
+            "reason": "AllGatesPassed",
+            "status": "True",
+            "type": "Verified"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:43:11.637016392Z",
+            "reason": "WithinBudget",
+            "status": "False",
+            "type": "BudgetExceeded"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:43:11.766765966Z",
+            "message": "remaining=0",
+            "reason": "NoSandboxesRemain",
+            "status": "True",
+            "type": "CleanupVerified"
+          }
+        ],
+        "cube_version_if_available": "0.7.3",
+        "duration": 123751539341,
+        "egress_digest": "sha256:8b93b4575a8eeac47ed4adb462db3fd6a6cc6bc6c35090bf4bcefdd384b8c37e",
+        "egress_policy": "closed",
+        "egress_summary": "internet=denied",
+        "error": "change rejected by human review: Conformance fixture: prove human rejection cannot be overridden; not a production review.",
+        "factory_result": "REJECTED",
+        "factory_version": "0.6.2",
+        "hardening": {
+          "behavior": {
+            "findings": null,
+            "ruleset_version": "1",
+            "scanned_lines": 16,
+            "tripped": false
+          },
+          "egress_probe": {
+            "agent_uid": 0,
+            "agent_user": "root",
+            "canary": {
+              "decided": false,
+              "detail": "curl_rc=28",
+              "reachable": false,
+              "url": "https://example.com/"
+            },
+            "duration": 10063167960,
+            "expect_deny": true,
+            "metadata": {
+              "decided": false,
+              "detail": "curl_rc=7",
+              "reachable": false,
+              "url": "http://169.254.169.254/latest/meta-data/"
+            },
+            "notes": [
+              "the public-internet probe was undecided (inconclusive): curl_rc=28",
+              "the metadata probe was undecided (inconclusive): curl_rc=7"
+            ],
+            "policy": "closed",
+            "probed_at": "2026-10-19T13:41:08.458066488Z",
+            "raw": "ESF_PROBE identity 0 root\nESF_PROBE canary unknown curl_rc=28\nESF_PROBE metadata unknown curl_rc=7"
+          },
+          "gate_integrity": {
+            "allowed": false,
+            "checked": true,
+            "gate_paths": [
+              "build.sh",
+              "test.sh"
+            ],
+            "method": "tree-hash"
+          }
+        },
+        "human_result": "rejected",
+        "patch": "changes.patch",
+        "post_verification_patch": "verification/post-verification.patch",
+        "repository": "local:/tmp/esf-h2-acceptance-fixture",
+        "repository_kind": "local",
+        "requested_revision": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "resource_digest": "sha256:752d93f4fe4b83a7bf4844c60102f5b70163c12ae8498f7dd73941e203bdc33f",
+        "resulting_sha_if_any": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "review_configured": true,
+        "review_note": "Conformance fixture: prove human rejection cannot be overridden; not a production review.",
+        "review_outcome": "rejected",
+        "run_id": "h2-accept-rejected-v2-20261019",
+        "sandbox_id": "35f29ff4481c4e8686ca1d08f5518008",
+        "sandbox_provider": "cubesandbox",
+        "sandbox_template": "tpl-e0b123805849416a915a751e",
+        "scope": "default",
+        "started_at": "2026-10-19T13:41:08.015226625Z",
+        "suspend_result": "SUCCESS",
+        "task_hash": "b0105c6b6089ead0abcf6bc9c318c1dbbfd0abc4e0984dcf25b9a411b3a7cd4a",
+        "verification_mutated_tree": false,
+        "verification_profile": "default",
+        "verification_result": "SUCCESS",
+        "workflow_id": "factory-run-h2-accept-rejected-v2-20261019",
+        "workflow_run_id": "01a15465-0126-705f-88f8-1fb53ec73ee5"
+      },
+      "manifest_sha256": "5782825fc83ed3cdf6d3b3be720638f8613ba597abbeb8188d579bf42ad63e3c"
+    },
+    {
+      "run_id": "h2-boundary-failclosed-20261019",
+      "manifest": {
+        "agent_exit_code": 0,
+        "agent_harness": "opencode2",
+        "agent_result": "SKIPPED",
+        "artifacts": "runs/h2-boundary-failclosed-20261019",
+        "cleanup_result": {
+          "attempted": false,
+          "duration": 0,
+          "finished_at": "0001-01-01T00:00:00Z",
+          "outcome": "SUCCESS",
+          "remaining_sandboxes": 0,
+          "verified": true
+        },
+        "completed_at": "0001-01-01T00:00:00Z",
+        "duration": 0,
+        "error": "baseline infrastructure or security outcome requires reconciliation",
+        "factory_result": "INFRASTRUCTURE_FAILED",
+        "factory_version": "0.6.2",
+        "improvement": {
+          "budget": {
+            "expires": "0001-01-01T00:00:00Z",
+            "id": "h2-boundary-failclosed-20261019",
+            "input_micros_per_million": 0,
+            "limit_micros": 8000,
+            "max_input_tokens": 0,
+            "max_output_tokens": 0,
+            "max_requests": 0,
+            "model": "fixture/fixture-model",
+            "output_micros_per_million": 0,
+            "pricing_evidence": "",
+            "revoked": false,
+            "route_digest": "",
+            "scope": "default"
+          },
+          "error": "baseline infrastructure or security outcome requires reconciliation",
+          "fallback": "baseline execution or cleanup failed",
+          "library_digest": "sha256:055539df4a0b804c58caf46c0cd2941af10d64c1395ddd8e50b5f55d945841e6",
+          "mode": "offline",
+          "policy": "offline",
+          "policy_digest": "sha256:66e8d12de4633313a514cadd77b78e90341c3f3d18b1c8766a71838772847b4f",
+          "schema": "esf-improvement/v1",
+          "stages": [
+            {
+              "id": "h2-boundary-failclosed-20261019-h2-base",
+              "role": "baseline",
+              "run": "h2-boundary-failclosed-20261019-h2-base"
+            }
+          ],
+          "started_at": "2026-10-19T13:45:25.486112927Z",
+          "upstream": "1cfe254e8d25b15f37048c3730134686abe60335"
+        },
+        "repository": "local:/tmp/esf-h2-acceptance-fixture",
+        "requested_revision": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "run_id": "h2-boundary-failclosed-20261019",
+        "sandbox_provider": "",
+        "sandbox_template": "",
+        "scope": "default",
+        "started_at": "0001-01-01T00:00:00Z",
+        "task_hash": "",
+        "verification_mutated_tree": false,
+        "verification_profile": "",
+        "verification_result": "SKIPPED",
+        "workflow_id": "",
+        "workflow_run_id": ""
+      },
+      "manifest_sha256": "9c6213b1a5004d0b6e5f41bf699fdcebff56e2c124f74a737c186df1090e6661"
+    },
+    {
+      "run_id": "h2-boundary-failclosed-20261019-h2-base",
+      "manifest": {
+        "agent_exit_code": 0,
+        "agent_harness": "opencode2",
+        "agent_result": "SKIPPED",
+        "agent_version_if_available": "opencode v2.0.29",
+        "artifacts": "runs/h2-boundary-failclosed-20261019-h2-base",
+        "baseline_sha": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "cleanup_result": {
+          "attempted": true,
+          "duration": 104536017,
+          "finished_at": "2026-10-19T13:45:27.037341009Z",
+          "outcome": "SUCCESS",
+          "remaining_sandboxes": 0,
+          "sandbox_id": "12766799508a488fa71fd1d678b8ad6e",
+          "verified": true
+        },
+        "completed_at": "2026-10-19T13:45:27.049544736Z",
+        "conditions": [
+          {
+            "last_transition_time": "2026-10-19T13:45:25.561446545Z",
+            "message": "scope=default",
+            "reason": "PolicyAccepted",
+            "status": "True",
+            "type": "Validated"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:45:25.650581783Z",
+            "message": "sandbox=12766799508a488fa71fd1d678b8ad6e template=tpl-e0b123805849416a915a751e",
+            "reason": "Created",
+            "status": "True",
+            "type": "SandboxReady"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:45:26.59802928Z",
+            "message": "workspace= digest=",
+            "reason": "Provisioned",
+            "status": "True",
+            "type": "WorkspacePrepared"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:45:26.791295881Z",
+            "message": "sha=2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+            "reason": "CheckedOut",
+            "status": "True",
+            "type": "RepositoryPrepared"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:45:26.825848702Z",
+            "message": "path=/workspace/.factory/inventory.json digest=sha256:4117a755fa19e9de93156e5742441299ffd65a21bf6a0611bcf8484bd49c7163",
+            "reason": "Published",
+            "status": "True",
+            "type": "InventoryWritten"
+          },
+          {
+            "last_transition_time": "2026-10-19T13:45:27.049544736Z",
+            "message": "remaining=0",
+            "reason": "NoSandboxesRemain",
+            "status": "True",
+            "type": "CleanupVerified"
+          }
+        ],
+        "cube_version_if_available": "0.7.3",
+        "duration": 1505585514,
+        "egress_digest": "sha256:8b93b4575a8eeac47ed4adb462db3fd6a6cc6bc6c35090bf4bcefdd384b8c37e",
+        "egress_policy": "closed",
+        "egress_summary": "internet=denied",
+        "error": "improvement requires conclusive sandbox boundary evidence",
+        "factory_result": "EGRESS_UNVERIFIED",
+        "factory_version": "0.6.2",
+        "hardening": {},
+        "model": "fixture/fixture-model",
+        "model_digest": "sha256:b69bce379396d1fa7659329987646ef787da0d770af0f2127f08646707d4e53c",
+        "model_provider": "openai-compatible",
+        "parent_run_id": "h2-boundary-failclosed-20261019",
+        "repository": "local:/tmp/esf-h2-acceptance-fixture",
+        "repository_kind": "local",
+        "requested_revision": "2f0d18e24f059388a2e870a09b64aa3b3a77d712",
+        "resource_digest": "sha256:b4df97344db8af4a3173daa5d4b73bff6b80a2c7d312083a177fa630c31082c6",
+        "run_id": "h2-boundary-failclosed-20261019-h2-base",
+        "sandbox_id": "12766799508a488fa71fd1d678b8ad6e",
+        "sandbox_provider": "cubesandbox",
+        "sandbox_template": "tpl-e0b123805849416a915a751e",
+        "scope": "default",
+        "started_at": "2026-10-19T13:45:25.543959222Z",
+        "task_hash": "b0105c6b6089ead0abcf6bc9c318c1dbbfd0abc4e0984dcf25b9a411b3a7cd4a",
+        "verification_mutated_tree": false,
+        "verification_profile": "default",
+        "verification_result": "SKIPPED",
+        "workflow_id": "factory-run-h2-boundary-failclosed-20261019-h2-base",
+        "workflow_run_id": "01a15468-ef04-7de3-b034-c76338200f72"
+      },
+      "manifest_sha256": "e79167efad589d37d1c91e136e0a0b89e16cac71505b90f75f64bf57c42998e6"
+    }
+  ],
+  "improvement_boundary": {
+    "receipt": {
+      "budget": {
+        "expires": "0001-01-01T00:00:00Z",
+        "id": "h2-boundary-failclosed-20261019",
+        "input_micros_per_million": 0,
+        "limit_micros": 8000,
+        "max_input_tokens": 0,
+        "max_output_tokens": 0,
+        "max_requests": 0,
+        "model": "fixture/fixture-model",
+        "output_micros_per_million": 0,
+        "pricing_evidence": "",
+        "revoked": false,
+        "route_digest": "",
+        "scope": "default"
+      },
+      "error": "baseline infrastructure or security outcome requires reconciliation",
+      "fallback": "baseline execution or cleanup failed",
+      "library_digest": "sha256:055539df4a0b804c58caf46c0cd2941af10d64c1395ddd8e50b5f55d945841e6",
+      "mode": "offline",
+      "policy": "offline",
+      "policy_digest": "sha256:66e8d12de4633313a514cadd77b78e90341c3f3d18b1c8766a71838772847b4f",
+      "schema": "esf-improvement/v1",
+      "stages": [
+        {
+          "id": "h2-boundary-failclosed-20261019-h2-base",
+          "role": "baseline",
+          "run": "h2-boundary-failclosed-20261019-h2-base"
+        }
+      ],
+      "started_at": "2026-10-19T13:45:25.486112927Z",
+      "upstream": "1cfe254e8d25b15f37048c3730134686abe60335"
+    },
+    "cleanup": {
+      "remaining_errors": 0,
+      "verified": true
+    },
+    "accounts": [
+      {
+        "id": "h2-boundary-failclosed-20261019-h2-reflect",
+        "scope": "default",
+        "model": "fixture-model",
+        "limit_micros": 1000,
+        "expires": "2026-10-19T13:54:25.487099599Z",
+        "max_input_tokens": 65536,
+        "max_output_tokens": 8192,
+        "input_micros_per_million": 1,
+        "output_micros_per_million": 1,
+        "route_digest": "sha256:df9f30644c64d7eed40ce71e9636a98f56d99eed33839957e12534c8224564c3",
+        "pricing_evidence": "sha256:8c5c124e7e3a5d678f5080fddd11ff563f4fbe3104f9470512b66f85a1754d67",
+        "max_requests": 1,
+        "revoked": true
+      },
+      {
+        "id": "h2-boundary-failclosed-20261019-h2-composed",
+        "scope": "default",
+        "model": "fixture-model",
+        "limit_micros": 1000,
+        "expires": "2026-10-19T13:54:25.487099599Z",
+        "max_input_tokens": 65536,
+        "max_output_tokens": 8192,
+        "input_micros_per_million": 1,
+        "output_micros_per_million": 1,
+        "route_digest": "sha256:df9f30644c64d7eed40ce71e9636a98f56d99eed33839957e12534c8224564c3",
+        "pricing_evidence": "sha256:8c5c124e7e3a5d678f5080fddd11ff563f4fbe3104f9470512b66f85a1754d67",
+        "max_requests": 1,
+        "revoked": true
+      },
+      {
+        "id": "h2-boundary-failclosed-20261019-h2-compose",
+        "scope": "default",
+        "model": "fixture-model",
+        "limit_micros": 1000,
+        "expires": "2026-10-19T13:54:25.487099599Z",
+        "max_input_tokens": 65536,
+        "max_output_tokens": 8192,
+        "input_micros_per_million": 1,
+        "output_micros_per_million": 1,
+        "route_digest": "sha256:df9f30644c64d7eed40ce71e9636a98f56d99eed33839957e12534c8224564c3",
+        "pricing_evidence": "sha256:8c5c124e7e3a5d678f5080fddd11ff563f4fbe3104f9470512b66f85a1754d67",
+        "max_requests": 1,
+        "revoked": true
+      },
+      {
+        "id": "h2-boundary-failclosed-20261019-h2-domain-probe",
+        "scope": "default",
+        "model": "fixture-model",
+        "limit_micros": 1000,
+        "expires": "2026-10-19T13:54:25.487099599Z",
+        "max_input_tokens": 65536,
+        "max_output_tokens": 8192,
+        "input_micros_per_million": 1,
+        "output_micros_per_million": 1,
+        "route_digest": "sha256:df9f30644c64d7eed40ce71e9636a98f56d99eed33839957e12534c8224564c3",
+        "pricing_evidence": "sha256:8c5c124e7e3a5d678f5080fddd11ff563f4fbe3104f9470512b66f85a1754d67",
+        "max_requests": 1,
+        "revoked": true
+      },
+      {
+        "id": "h2-boundary-failclosed-20261019-h2-general-probe",
+        "scope": "default",
+        "model": "fixture-model",
+        "limit_micros": 1000,
+        "expires": "2026-10-19T13:54:25.487099599Z",
+        "max_input_tokens": 65536,
+        "max_output_tokens": 8192,
+        "input_micros_per_million": 1,
+        "output_micros_per_million": 1,
+        "route_digest": "sha256:df9f30644c64d7eed40ce71e9636a98f56d99eed33839957e12534c8224564c3",
+        "pricing_evidence": "sha256:8c5c124e7e3a5d678f5080fddd11ff563f4fbe3104f9470512b66f85a1754d67",
+        "max_requests": 1,
+        "revoked": true
+      },
+      {
+        "id": "h2-boundary-failclosed-20261019-h2-domain",
+        "scope": "default",
+        "model": "fixture-model",
+        "limit_micros": 1000,
+        "expires": "2026-10-19T13:54:25.487099599Z",
+        "max_input_tokens": 65536,
+        "max_output_tokens": 8192,
+        "input_micros_per_million": 1,
+        "output_micros_per_million": 1,
+        "route_digest": "sha256:df9f30644c64d7eed40ce71e9636a98f56d99eed33839957e12534c8224564c3",
+        "pricing_evidence": "sha256:8c5c124e7e3a5d678f5080fddd11ff563f4fbe3104f9470512b66f85a1754d67",
+        "max_requests": 1,
+        "revoked": true
+      },
+      {
+        "id": "h2-boundary-failclosed-20261019-h2-general",
+        "scope": "default",
+        "model": "fixture-model",
+        "limit_micros": 1000,
+        "expires": "2026-10-19T13:54:25.487099599Z",
+        "max_input_tokens": 65536,
+        "max_output_tokens": 8192,
+        "input_micros_per_million": 1,
+        "output_micros_per_million": 1,
+        "route_digest": "sha256:df9f30644c64d7eed40ce71e9636a98f56d99eed33839957e12534c8224564c3",
+        "pricing_evidence": "sha256:8c5c124e7e3a5d678f5080fddd11ff563f4fbe3104f9470512b66f85a1754d67",
+        "max_requests": 1,
+        "revoked": true
+      },
+      {
+        "id": "h2-boundary-failclosed-20261019-h2-base",
+        "scope": "default",
+        "model": "fixture-model",
+        "limit_micros": 1000,
+        "expires": "2026-10-19T13:54:25.487099599Z",
+        "max_input_tokens": 65536,
+        "max_output_tokens": 8192,
+        "input_micros_per_million": 1,
+        "output_micros_per_million": 1,
+        "route_digest": "sha256:df9f30644c64d7eed40ce71e9636a98f56d99eed33839957e12534c8224564c3",
+        "pricing_evidence": "sha256:8c5c124e7e3a5d678f5080fddd11ff563f4fbe3104f9470512b66f85a1754d67",
+        "max_requests": 1,
+        "revoked": true
+      }
+    ],
+    "account_count": 8,
+    "revoked_accounts": 8,
+    "model_requests": 0
+  }
+}
