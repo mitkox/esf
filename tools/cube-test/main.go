@@ -33,7 +33,7 @@ func main() {
 }
 func run() (err error) {
 	var paths binaries
-	var config, output, filter, source, pythonRuntime string
+	var config, output, filter, source, pythonRuntime, secretScanner string
 	var timeout time.Duration
 	var checks bool
 	var verbose bool
@@ -43,11 +43,15 @@ func run() (err error) {
 	flag.StringVar(&filter, "run", ".", "Go test filter")
 	flag.StringVar(&source, "source", "", "source tar.gz for tests that read repository fixtures")
 	flag.StringVar(&pythonRuntime, "python-runtime", "", "optional standalone CPython tar.gz (bin/ and lib/) for release checks")
+	flag.StringVar(&secretScanner, "secret-scanner", "", "optional precompiled gitleaks binary, executed only inside Cube")
 	flag.BoolVar(&checks, "checks", false, "run release inventory and qualification Python checks inside Cube")
 	flag.BoolVar(&verbose, "verbose", false, "also print passing test logs; complete logs are always retained")
 	flag.DurationVar(&timeout, "timeout", 10*time.Minute, "timeout per binary")
 	flag.Parse()
-	if len(paths) == 0 && !checks {
+	if secretScanner != "" && source == "" {
+		return fmt.Errorf("secret scan requires --source")
+	}
+	if len(paths) == 0 && !checks && secretScanner == "" {
 		return fmt.Errorf("provide at least one compiled test binary")
 	}
 	cfg, e := factory.LoadConfig(config)
@@ -123,6 +127,32 @@ func run() (err error) {
 		report["source_sha256"] = hex.EncodeToString(sum[:])
 	}
 	var runs []map[string]any
+	if secretScanner != "" {
+		b, e := os.ReadFile(secretScanner)
+		if e != nil {
+			return e
+		}
+		sum := sha256.Sum256(b)
+		report["scanner_sha256"] = hex.EncodeToString(sum[:])
+		if e = sb.WriteFile(ctx, "/workspace/gitleaks", b); e != nil {
+			return e
+		}
+		x, e := sb.Execute(ctx, sandbox.Command{Script: "chmod 0700 /workspace/gitleaks && /workspace/gitleaks dir --redact --no-banner --report-format json --report-path /workspace/secret-scan.json /workspace/source", Timeout: timeout})
+		scan, re := sb.ReadFile(ctx, "/workspace/secret-scan.json")
+		if json.Valid(scan) {
+			report["secret_scan"] = map[string]any{"exit_code": x.ExitCode, "report": json.RawMessage(scan), "stdout": x.Stdout, "stderr": x.Stderr}
+		}
+		fmt.Print(x.Stdout, x.Stderr, string(scan))
+		if e != nil {
+			return e
+		}
+		if re != nil {
+			return re
+		}
+		if !x.Succeeded() {
+			return fmt.Errorf("secret scan failed")
+		}
+	}
 	for index, path := range paths {
 		pkg := ""
 		if key, value, ok := strings.Cut(path, "="); ok {

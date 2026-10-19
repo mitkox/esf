@@ -10,6 +10,10 @@ Project tests execute inside disposable local Cube VMs, after host compilation.
 The retained [regression receipt](evidence/harness2-20261019/cube-regression.json)
 binds the source archive and race-enabled test binary hashes, complete test logs,
 template, time and verified cleanup. `go vet ./...` also passes.
+The CI-pinned Gitleaks 8.30.1 scanner also passes inside Cube; its
+[receipt](evidence/harness2-20261019/secret-scan.json) retains the scanner hash
+and verified cleanup. Source checksums use separate path/hash fields so filenames
+containing `credential` are not misclassified as credential assignments.
 
 Coverage includes instructional bundle rejection and corruption, independent
 signed approval and renewal, cross-scope/runtime/route rejection, deterministic
