@@ -50,9 +50,9 @@ type HardeningConfig struct {
 	// third-party compromise.
 	MetadataProbeURL string `toml:"metadata_probe_url"`
 
-	// RequireNonRoot fails a run whose sandbox agent would execute as uid 0.
-	// CubeSandbox templates decide the user; this setting makes an unexpected
-	// root sandbox a visible failure instead of a quiet assumption.
+	// RequireNonRoot fails a run unless the enabled sandbox probe verifies a
+	// nonroot agent uid. It rejects root or unknown identities; it does not
+	// change the execution user or remove guest sudo privileges.
 	RequireNonRoot bool `toml:"require_non_root"`
 
 	// BehaviorMonitor scans the agent's captured output for indicators of
@@ -167,6 +167,9 @@ var validTripLevels = map[string]bool{
 // is opened only at delivery time, inside the activity worker.
 func (h HardeningConfig) validate() error {
 	var problems []string
+	if h.RequireNonRoot && !h.EgressProbeEnabled() {
+		problems = append(problems, "require_non_root requires egress_probe to verify the sandbox uid")
+	}
 	if level := strings.ToUpper(strings.TrimSpace(h.TripSeverity)); level != "" && !validTripLevels[level] {
 		problems = append(problems, fmt.Sprintf("trip_severity %q must be one of LOW, MEDIUM, HIGH, CRITICAL", h.TripSeverity))
 	}

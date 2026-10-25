@@ -11,9 +11,9 @@ Report vulnerabilities through [SECURITY.md](SECURITY.md), not a public issue.
 
 Install:
 
-- Go 1.27.2
-- Node.js 26.12.0, plus npm
-- Python 3.15.0 and uv 0.13.1 for optional Python checks
+- Go 1.27.3
+- Node.js 26.12.1, plus npm
+- Python 3.15.1 and uv 0.13.5 for optional Python checks
 - Git
 - `just` for repository shortcuts
 - the agent CLI needed for any real execution checks

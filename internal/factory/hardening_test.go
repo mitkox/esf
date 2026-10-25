@@ -198,7 +198,12 @@ func TestEvaluateEgressProbeViolations(t *testing.T) {
 			name:           "cannot determine uid when require_non_root is set",
 			probe:          EgressProbeResult{AgentUID: -1, Canary: ProbeObservation{Decided: true}, Metadata: ProbeObservation{Decided: true}},
 			requireNonRoot: true,
-			wantNote:       "could not determine the sandbox uid",
+			wantViolation:  "could not determine the sandbox uid",
+		},
+		{
+			name:           "verified nonroot identity meets the requirement",
+			probe:          EgressProbeResult{AgentUID: 1000, Canary: ProbeObservation{Decided: true}, Metadata: ProbeObservation{Decided: true}},
+			requireNonRoot: true,
 		},
 	}
 	for _, tc := range cases {

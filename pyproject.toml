@@ -6,6 +6,8 @@ dependencies = ["esf-intake", "esf-brief-lab"]
 
 [tool.uv]
 package = false
+# Certificate trust and lock-file security advisories require these minimums.
+constraint-dependencies = ["certifi>=2026.10.19", "filelock>=4.2.1"]
 
 [tool.uv.sources]
 esf-intake = { path = "tools/intake" }

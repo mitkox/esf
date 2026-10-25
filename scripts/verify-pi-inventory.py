@@ -12,7 +12,7 @@ assert hashlib.sha256(lock_path.read_bytes()).hexdigest() == inventory["package_
 for name in ("pi-durable", "pi-ai", "chord"):
     package = lock["packages"]["node_modules/@earendil-works/" + name]
     assert package["version"] == inventory["pi_durable"]["version"] and package["integrity"].startswith("sha512-"), "Pi package not pinned"
-assert inventory["pi_durable"]["git_commit"] == "06a466935536f8c9bcacb2d5efc0fc021be1bdff"
+assert inventory["pi_durable"]["git_commit"] == "4a080252f06caf63a525d7873c5d94d3c23887e0"
 assert hashlib.sha256((root / "internal/agentharness/pi-catalog.json").read_bytes()).hexdigest() == inventory["model_catalog_sha256"], "Pi catalog pin mismatch"
 digest = hashlib.sha256((root / "agents/pi/dist/pi-runner.mjs").read_bytes()).hexdigest()
 assert digest == inventory["runner"]["sha256"], "Pi runner inventory mismatch"

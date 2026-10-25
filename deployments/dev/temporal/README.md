@@ -38,7 +38,7 @@ fails before contacting PostgreSQL.
 | `temporal-admin-tools` | `temporalio/admin-tools:1.32.1` | — | one-shot schema setup |
 | `temporal` | `temporalio/server:1.32.1` | `127.0.0.1:7233` | gRPC frontend |
 | `temporal-create-namespace` | `temporalio/admin-tools:1.32.1` | — | one-shot namespace creation |
-| `temporal-ui` | `temporalio/ui:2.56.0` | `127.0.0.1:8233` | web UI |
+| `temporal-ui` | `temporalio/ui:2.57.0` | `127.0.0.1:8233` | web UI |
 
 ### Deliberate deviations from upstream
 

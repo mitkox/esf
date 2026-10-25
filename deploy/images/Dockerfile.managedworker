@@ -1,5 +1,5 @@
-ARG GO_BUILDER=docker.io/library/golang@sha256:820153096fda4de6ac1b7194d12e416b7dd8f4e9a33d17e0345b111b945162d8
-ARG WORKER_BASE=docker.io/library/debian@sha256:eb593cf2c358cacef45ca0a424bbc7d30cfa3466265fc2662b9466a0ca6ba1c5
+ARG GO_BUILDER=docker.io/library/golang@sha256:f20d83a83e18dbd2a4714b8ffd4b30b287b6243962dd75608e86abcc63ba4efc
+ARG WORKER_BASE=docker.io/library/debian@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS build
 WORKDIR /src
 COPY go.mod go.sum ./
