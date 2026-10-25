@@ -131,6 +131,18 @@ retains check outcomes, exact artifact identities, remaining scanner findings,
 and source binding. The configured OpenCyber watcher is rerun on the final
 publication tree; its full receipt remains private local evidence.
 
+The merge candidate also integrates the original dependency branches from
+PRs #44–#47. Those integration commits preserve the validated application,
+configuration, and generated artifacts byte for byte: Temporal uses the same
+versions, and OpenCode, Lucide, and jsdom retain this upgrade's matching or
+newer graph. The Pi runbook now matches the candidate's runner/runtime digests.
+The initial publication failed CI's secrets scan because four source manifest
+entries paired credential-related filenames with file checksums. Cube
+reproduction verified each value against the corresponding source bytes.
+Formatting digest values on separate lines preserves all 411 source bindings
+and the JSON schema, without scanner exclusions. Current-head CI and review
+remain required before merge; this repair does not change production gates.
+
 Early failures remain retained: the pre-rebuild Pi version check, the obsolete
 FIFO-read recovery fixture, missing native Python build tools, and the selected
 template's writable-disk ceiling during Go compilation. An unsupported Unreal

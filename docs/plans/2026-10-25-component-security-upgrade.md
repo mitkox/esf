@@ -208,3 +208,27 @@ Fixture conformance alone proves factory plumbing.
 - Owned sandboxes are destroyed and final cleanup evidence is retained; unrelated primary-checkout work and local-only files remain untouched.
 - GitHub contains the reviewed candidate, publication is read back, and the handoff names exact verification limits and CI state without claiming human approval, deployment, or production acceptance.
 - Abandoned implementation experiments are absent, and qualifying verified learnings are captured in repository solutions without personal-memory writes.
+
+## Pull request integration
+
+The follow-up request authorizes fixing and merging all five open pull requests:
+#44 (Temporal), #45 (OpenCode), #46 (Lucide), #47 (jsdom), and #48 (this
+component upgrade). The four Dependabot candidates change only their manifest
+and lockfile, so their Linux checks reject drift from the frozen inventory.
+This upgrade already contains the same or newer package versions, synchronized
+inventories, and rebuilt assets.
+
+Integrate the four original branch heads with merge commits, retaining the
+validated newer graph wherever their older lockfiles conflict. Require an
+unchanged application/configuration tree across those integration commits and
+verify that all four original heads are ancestors of the final candidate.
+Merge #48 using a merge commit after current-head CI passes and all actionable
+review conversations are resolved; read back the resulting master and all five
+PR states. Do not squash away the dependency branch ancestry.
+
+Repair the Pi runbook's stale runner/runtime digests. Reproduce the final
+publication's secret-scan failures in Cube, distinguish checksum evidence from
+credentials, and retain every source binding without weakening scanner rules.
+Repeat the pinned secrets scan and both inventory checks on the complete final
+tracked snapshot in Cube, then collect independent review of this delta.
+Existing production qualification limits remain in force.
