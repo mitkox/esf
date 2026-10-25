@@ -210,8 +210,8 @@ func parseEgressProbe(canary, metadata string, out string) EgressProbeResult {
 // The rules are deliberately narrow. A probe can prove that a boundary is OPEN
 // (a connection succeeded); it cannot prove a boundary is closed (a timeout may
 // be a proxy, a DNS failure, or a firewall). So only positive reachability
-// against an expected-deny posture fails a run, and everything undecided is a
-// note.
+// against an expected-deny posture fails a run. Undecided network probes are
+// notes; a required nonroot identity must be positively verified.
 func evaluateEgressProbe(result EgressProbeResult, requireNonRoot bool) EgressProbeResult {
 	var violations []string
 	var notes []string
@@ -229,7 +229,7 @@ func evaluateEgressProbe(result EgressProbeResult, requireNonRoot bool) EgressPr
 	if requireNonRoot {
 		switch {
 		case result.AgentUID < 0:
-			notes = append(notes, "could not determine the sandbox uid; require_non_root is not verified")
+			violations = append(violations, "could not determine the sandbox uid; require_non_root is not verified")
 		case result.AgentUID == 0:
 			violations = append(violations, "the agent would execute as uid 0 (root) inside the sandbox")
 		}

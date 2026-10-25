@@ -11,16 +11,16 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@earendil-works/pi-durable": "1.2.0",
-    "@earendil-works/pi-ai": "1.2.0",
-    "@earendil-works/chord": "1.2.0"
+    "@earendil-works/pi-durable": "1.4.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/chord": "1.4.0"
   },
   "devDependencies": {
     "esbuild": "0.28.2"
   },
   "overrides": {
-    "@earendil-works/pi-durable": "1.2.0",
-    "@earendil-works/pi-ai": "1.2.0",
-    "@earendil-works/chord": "1.2.0"
+    "@earendil-works/pi-durable": "1.4.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/chord": "1.4.0"
   }
 }

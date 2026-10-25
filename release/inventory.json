@@ -2,7 +2,7 @@
   "release": "v0.6.2",
   "release_profile": "binary-preview",
   "qualification_mode": "companion-manifest",
-  "baseline": "2bd466256b6ae5ffcca032127a2583f674211358",
+  "baseline": "804fb461068972a707628b0a3243e4db09cafb0c",
   "machinist": {
     "revision": "39435164faf1ff7fad49e41c38a7eb1a00538f21",
     "schema": 5,
@@ -17,20 +17,20 @@
     "temporal": {
       "server": "1.32.1",
       "admin_tools": "1.32.1",
-      "ui": "2.56.0",
-      "go_sdk": "1.49.0",
-      "api": "1.63.7",
+      "ui": "2.57.0",
+      "go_sdk": "1.50.0",
+      "api": "1.64.0",
       "qualification": "candidate; replay and deployment validation pending"
     },
     "opencode": {
       "package": "@opencode/cli",
-      "version": "2.0.29",
-      "npm_integrity": "sha512-1ZmbylUtiRvtN8YMLxBEN4u0tqhfKI0AQBPvgdCLYLbB8BS80e6cFnOhzHH6L663o4RVL5bMa/VleLh1hNX+NA==",
-      "linux_amd64_binary_sha256": "ff17011078cfe1d2db04f429c65a5bf9dd86e232cc493c7a03730ecc12a000ff",
+      "version": "2.1.4",
+      "npm_integrity": "sha512-vtHFa/1frSylpx1cZRuzmM2ecHWn6YB8cNvhw8eWKPvSFvDnckZXugDbi3LJYD9TGjRx2U6JRo725qwqtwMUfQ==",
+      "linux_amd64_binary_sha256": "ca9b3ee262e33bb4e7aa0e1230dc61086a474c8c8016b980081d0719712fd2e7",
       "license": "MIT",
-      "qualification": "portable Linux binary digest and CLI startup checked in Cube; model-backed and production qualification pending",
+      "qualification": "candidate; refreshed package integrity verified; Cube and provider validation recorded separately",
       "linux_amd64_package": "@opencode/cli-linux-x64-baseline",
-      "linux_amd64_npm_integrity": "sha512-YvDKgdRVZzBoedL22zNQyOrI38n9bElwdCNqYiZ1CLfE7CS6Ni4TulGi3RZgZe+KwJfhoiEjwNuZ0E55raFqGA=="
+      "linux_amd64_npm_integrity": "sha512-0/H4wRDAW4hA5IWN440XwDrRATbvT3cno+UUsqFynTu0TeGXNADjK2AZfvhNTfyJaVyCa+v7VhB+r7ghuMa5EQ=="
     },
     "unreal": {
       "release": "0.3.1",
@@ -42,12 +42,12 @@
     },
     "grpc": "1.84.0",
     "otel": "1.47.0",
-    "sqlite": "1.60.1",
+    "sqlite": "1.61.0",
     "dspy": "3.4.1",
     "frontend": {
-      "vite": "8.3.4",
-      "lucide": "1.57.0",
-      "jsdom": "30.1.2",
+      "vite": "8.3.5",
+      "lucide": "1.61.0",
+      "jsdom": "30.1.3",
       "react": "19.3.1",
       "tailwind": "4.3.3"
     },
@@ -69,19 +69,19 @@
     }
   },
   "toolchains": {
-    "go": "1.27.2",
-    "node": "26.12.0",
-    "python_optional": "3.15.0",
+    "go": "1.27.3",
+    "node": "26.12.1",
+    "python_optional": "3.15.1",
     "kubernetes_qualification": "1.37.1",
-    "helm_qualification": "4.3.0",
-    "uv": "0.13.1"
+    "helm_qualification": "4.3.1",
+    "uv": "0.13.5"
   },
   "build_bases": {
-    "go": "docker.io/library/golang@sha256:820153096fda4de6ac1b7194d12e416b7dd8f4e9a33d17e0345b111b945162d8",
-    "runtime": "gcr.io/distroless/static-debian13@sha256:58133991db06659feaabe0f4e97a35cebf15ef4ea08f8a4c6d2ee5f75e4aa6a0",
-    "worker": "docker.io/library/debian@sha256:eb593cf2c358cacef45ca0a424bbc7d30cfa3466265fc2662b9466a0ca6ba1c5",
-    "python": "docker.io/library/python@sha256:f48fda6d59b2b3437781d1c3ccf4aa0e26ae871de3cdd758b49ab45ee7291619",
-    "node": "docker.io/library/node@sha256:1b84b89ada025e3b14543cbb837ffaa1c1b5273b841c5b94dd1a8f9c1d8cf7fe",
+    "go": "docker.io/library/golang@sha256:f20d83a83e18dbd2a4714b8ffd4b30b287b6243962dd75608e86abcc63ba4efc",
+    "runtime": "gcr.io/distroless/static-debian13@sha256:15f8637509792e05b97d83451b0b6ccfa4abd548f997e406ac1e72c87fe1fa78",
+    "worker": "docker.io/library/debian@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad",
+    "python": "docker.io/library/python@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51",
+    "node": "docker.io/library/node@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec",
     "cube": "ghcr.io/tencentcloud/cubesandbox-base@sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472"
   },
   "images": {
@@ -95,7 +95,7 @@
     "postgresql": null
   },
   "templates": {
-    "recipe_sha256": "5110b291edc9cc261366ce429b343bb6898ae02ffe23df6dad9d1cfe43ce39a1",
+    "recipe_sha256": "abd9b5792d297e35f0c04fcdaceed3b81f8eb62eb57c2a0573a5f567f32dac2c",
     "architecture": "linux/amd64",
     "git_package": null,
     "ca_certificates_package": null,
@@ -121,25 +121,25 @@
     "claude": {
       "type": "claude",
       "credential_mode": "cube_egress",
-      "tested_cli_version": "2.1.300",
+      "tested_cli_version": "2.1.310",
       "installation": "operator-provisioned standalone binary or complete runtime in a pinned Cube template",
-      "qualification": "adapter and CLI startup checked in Cube; provider-backed and production qualification pending",
-      "linux_amd64_binary_sha256": "674deba0bba9aee479f4503c438b49303b6fdd304b9a471b14977aaec5215453"
+      "qualification": "candidate; official archive digest verified; CLI startup and provider qualification recorded separately",
+      "linux_amd64_binary_sha256": "b73676430af12f97316a798b8371f81d640f90a58bdcb8f3ce56a835bb47df56"
     },
     "codex": {
       "type": "codex",
       "credential_mode": "cube_egress",
-      "tested_cli_version": "0.162.1",
+      "tested_cli_version": "0.164.0",
       "installation": "operator-provisioned standalone binary or complete runtime in a pinned Cube template",
-      "qualification": "adapter and CLI startup checked in Cube; provider-backed and production qualification pending",
-      "linux_amd64_binary_sha256": "628e35487d888a28f0427fc37501da529dd3d81fcbad7a2c3421c1e8670d92e1"
+      "qualification": "candidate; official archive digest verified; CLI startup and provider qualification recorded separately",
+      "linux_amd64_binary_sha256": "b93f6811d3f653f0fb83be4050d857fb9abbb111dfa2ce160563327daff7f306"
     }
   },
   "service_images": {
     "temporal": "docker.io/temporalio/server@sha256:acecbab5b0b8ae9cf4012b508866ca97feda3709577bf157b537239f40029049",
     "temporal-admin": "docker.io/temporalio/admin-tools@sha256:9ef0dc5b063bf4ffd5c1512de72e0e73e225bd2c7006a18ce69bd592a8862a83",
-    "temporal-ui": "docker.io/temporalio/ui@sha256:66d55d383bfb334ee0781f21a3b36c865b3f0f2262491a070bb2143394e9fe88",
-    "postgresql": "docker.io/library/postgres@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+    "temporal-ui": "docker.io/temporalio/ui@sha256:d944f959d0923c35cd991a17a0edbe087770eff843724b181933e0cfdd563ab2",
+    "postgresql": "docker.io/library/postgres@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5"
   },
   "security_tools": {
     "govulncheck": "1.9.0",

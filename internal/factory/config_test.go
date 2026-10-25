@@ -144,6 +144,10 @@ func TestConfigValidationProblems(t *testing.T) {
 		{"invalid trip severity", func(c *Config) {
 			c.Hardening.TripSeverity = "APOCALYPTIC"
 		}, "trip_severity"},
+		{"nonroot requirement cannot disable its identity probe", func(c *Config) {
+			c.Hardening.RequireNonRoot = true
+			c.Hardening.EgressProbe = boolPtr(false)
+		}, "require_non_root"},
 		{"canary requires https", func(c *Config) {
 			c.Hardening.EgressCanaryURL = "http://example.com/"
 		}, "egress_canary_url"},

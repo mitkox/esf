@@ -138,7 +138,9 @@ say "Fixture"
 FIXTURE_OUTPUT="$("$ESF_ROOT/scripts/make-e2e-repo.sh")"
 FIXTURE_PATH="$(echo "$FIXTURE_OUTPUT" | sed -n 's/^fixture_path=//p')"
 FIXTURE_SHA="$(echo "$FIXTURE_OUTPUT" | sed -n 's/^fixture_sha=//p')"
-[ -n "$FIXTURE_PATH" ] && [ -n "$FIXTURE_SHA" ] || die "fixture setup failed"
+if [ -z "$FIXTURE_PATH" ] || [ -z "$FIXTURE_SHA" ]; then
+  die "fixture setup failed"
+fi
 printf 'path: %s\nsha:  %s\n' "$FIXTURE_PATH" "$FIXTURE_SHA"
 
 say "Demo operator config (overlay)"

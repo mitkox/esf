@@ -216,8 +216,15 @@ test('committed completion survives death before the supervisor terminal notific
 
 test('unsafe interrupted file tool is recorded instead of replayed', async () => {
   const f = await fixture(({ res, calls, body }) => {
-    if (calls === 1) answer(res, '', { tool: { name: 'read', args: { path: 'waiting' } } });
-    else { assert.match(JSON.stringify(body.messages), /interrupted/i); answer(res); }
+    // Pi rejects nonregular reads without blocking. A FIFO write keeps the
+    // unsafe tool in flight so recovery must record it instead of replaying it.
+    if (calls === 1) answer(res, '', { tool: { name: 'write', args: { path: 'waiting', content: 'must not replay' } } });
+    else {
+      const toolResult = body.messages.find(message => message.role === 'tool' && message.tool_call_id === 'tool-1');
+      assert.ok(toolResult, 'recovery must include the interrupted tool result');
+      assert.match(toolResult.content, /Tool write was interrupted/);
+      answer(res);
+    }
   });
   try {
     const fifo = spawn('mkfifo', [path.join(f.repo, 'waiting')]); await once(fifo, 'exit');

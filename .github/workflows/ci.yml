@@ -20,11 +20,11 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: 1.27.2
+          go-version: 1.27.3
           cache: true
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 26.12.0
+          node-version: 26.12.1
           cache: npm
           cache-dependency-path: |
             internal/controlplane/web/package-lock.json
@@ -32,7 +32,7 @@ jobs:
       - name: Test issue triage
         run: node --test .github/scripts/issue-triage.test.cjs
       - name: Confirm toolchain
-        run: test "$(go env GOVERSION)" = "go1.27.2"
+        run: test "$(go env GOVERSION)" = "go1.27.3"
       - name: Scan source for secrets
         run: go run github.com/zricethezav/gitleaks/v8@v8.30.1 dir --redact --no-banner .
       - name: Install frontend dependencies
@@ -107,10 +107,10 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: 1.27.2
+          go-version: 1.27.3
           cache: true
       - name: Confirm toolchain
-        run: test "$(go env GOVERSION)" = "go1.27.2"
+        run: test "$(go env GOVERSION)" = "go1.27.3"
       - name: Run Go tests with the race detector
         run: go test -race ./...
       - name: Build Machinist
