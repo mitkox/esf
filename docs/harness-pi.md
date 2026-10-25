@@ -56,9 +56,9 @@ template in `[cube]`, and append:
 type = "pi"
 preinstalled = true
 binary = "/opt/esf/agents/pi-runner.mjs"
-binary_sha256 = "04bd662ac31ca6e74775a6b0c03403d66030c44855a9840607e95ab2fcf89bf5"
+binary_sha256 = "5e2a1d725c3b5422265b3a6c9cfb90293856865184892894dc329f8ccaf89862"
 runtime_binary = "/opt/esf/agents/node"
-runtime_sha256 = "caa24debe02770c92a70677e2a62ca98890150e7ac1c17bcfe31bcc98cc89943"
+runtime_sha256 = "08f12d42fb304468e8ee86247fe686aae5b225836ea65e9d6566c11ae6ba2e8e"
 provider = "local"
 base_url = "http://192.168.0.14:8000/v1"
 model = "<operator-approved-model-id>"
