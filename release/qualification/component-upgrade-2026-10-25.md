@@ -110,11 +110,26 @@ by the configured security harness.
 | Python 3.14.9 conditional graph | The same 15 tests passed; 72 installed packages consistent, including LiteLLM/filelock imports |
 | DSPy CLI cache configuration | Both actual configuration paths disable disk caching and retain 1,024 memory entries under a fresh cache directory |
 | Existing OpenCode / Unreal installer | Installation and final digests passed; OpenCode version and Unreal's supported help command started successfully |
+| Optional native CLI startup | Verified Claude 2.1.310 and Codex 0.164.0 archives/binaries started with `--version` in Cube |
+| Release and packaging checks | Release/Pi inventories, three qualification tests, six Temporal safety scenarios, SBOM schema/UUID, TOML, ShellCheck, and shell syntax passed |
 | Nonroot hardening regressions | Both cases failed before the repair and passed afterward with race detection |
 
 The three Go skips are the Darwin-only process-group test on Linux, the
 standalone subprocess-helper entry, and the opt-in disposable GitHub intake
 test. They do not represent completed macOS or live GitHub acceptance.
+
+Factory conformance run `run-4e8ed4efb666d9ebb28a8a86` passed with the factory
+built from source commit `1259ab92f16522a776e359f23e69c2b0d7bc7254`, an isolated
+worker queue, and a committed disposable greeting fixture. It returned a
+verified patch, unchanged verification gates, successful cleanup, and zero
+remaining sandboxes. This validates fixture/factory plumbing, not a model-backed
+agent or hardened deployment: the selected development profile measured UID 0,
+reachable public internet, and an inconclusive metadata probe.
+
+The public [validation summary](evidence/component-upgrade-2026-10-25/summary.json)
+retains check outcomes, exact artifact identities, remaining scanner findings,
+and source binding. The configured OpenCyber watcher is rerun on the final
+publication tree; its full receipt remains private local evidence.
 
 Early failures remain retained: the pre-rebuild Pi version check, the obsolete
 FIFO-read recovery fixture, missing native Python build tools, and the selected
