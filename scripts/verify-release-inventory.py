@@ -27,7 +27,6 @@ def main() -> int:
     dependencies = inventory["dependencies"]
     harness2 = json.loads((ROOT / "third_party/harness2/UPSTREAM.json").read_text())
     mod = (ROOT / "go.mod").read_text()
-    npm_frontend = json.loads((ROOT / "internal/controlplane/web/package-lock.json").read_text())["packages"]
     npm_agent = json.loads((ROOT / "agents/opencode/package-lock.json").read_text())["packages"]
     python = tomllib.loads((ROOT / "uv.lock").read_text())
     example = tomllib.loads((ROOT / "internal/factory/example.toml").read_text())
@@ -54,14 +53,14 @@ def main() -> int:
     require(re.search(rf'(?m)^version: {re.escape(version)}$', chart) is not None and
             re.search(rf'(?m)^appVersion: "{re.escape(version)}"$', chart) is not None,
             "Helm chart versions differ from inventory")
-    for dockerfile in ("runtime", "managedworker", "intake"):
+    for dockerfile in ("runtime", "intake"):
         require(f"ARG ESF_VERSION={version}" in (ROOT / f"deploy/images/Dockerfile.{dockerfile}").read_text(),
                 f"{dockerfile} image version differs from inventory")
 
     require(re.search(rf"(?m)^go {re.escape(inventory['toolchains']['go'])}$", mod) is not None, "Go toolchain does not match inventory")
     require(dependencies["cubesandbox"]["go_sdk"] in mod, "Cube SDK does not match inventory")
     require(example["cube"].get("version") == dependencies["cubesandbox"]["release"], "example Cube version differs from inventory")
-    for module, version in (("google.golang.org/grpc", "grpc"), ("go.opentelemetry.io/otel", "otel"), ("modernc.org/sqlite", "sqlite"), ("golang.org/x/net", "x_net")):
+    for module, version in (("google.golang.org/grpc", "grpc"), ("go.opentelemetry.io/otel", "otel"), ("golang.org/x/net", "x_net")):
         require(re.search(rf"(?m)^\s*{re.escape(module)} v{re.escape(dependencies[version])}(?:\s|$)", mod) is not None, f"{module} does not match inventory")
     for module, key in (("go.temporal.io/sdk", "go_sdk"), ("go.temporal.io/api", "api")):
         require(re.search(rf"(?m)^\s*{re.escape(module)} v{re.escape(dependencies['temporal'][key])}(?:\s|$)", mod) is not None,
@@ -77,7 +76,7 @@ def main() -> int:
     require(f"node-version: {inventory['toolchains']['node']}" in ci, "CI Node differs from inventory")
     require(f"@v{inventory['security_tools']['govulncheck']}" in ci, "CI vulnerability scanner differs from inventory")
     require(f"@v{inventory['security_tools']['gitleaks']}" in ci, "CI secret scanner differs from inventory")
-    for name, bases in (("runtime", ("go", "runtime")), ("managedworker", ("go", "worker")), ("intake", ("go", "python"))):
+    for name, bases in (("runtime", ("go", "runtime")), ("intake", ("go", "python"))):
         source = (ROOT / f"deploy/images/Dockerfile.{name}").read_text()
         for base in bases:
             require(inventory["build_bases"][base] in source, f"{name} {base} base differs from inventory")
@@ -94,10 +93,6 @@ def main() -> int:
     require("${POSTGRESQL_DATA_VOLUME:?" in compose, "PostgreSQL volume must be selected explicitly before migration")
     if int(dependencies["postgresql"].split(".")[0]) >= 18:
         require("temporal-postgresql-data:/var/lib/postgresql\n" in compose, "PostgreSQL 18+ volume layout differs from recipe")
-    frontend = dependencies["frontend"]
-    for package, key in (("vite", "vite"), ("lucide-react", "lucide"), ("jsdom", "jsdom"), ("react", "react"), ("tailwindcss", "tailwind")):
-        actual = npm_frontend.get(f"node_modules/{package}", {}).get("version")
-        require(actual == frontend[key], f"{package}: lockfile {actual}, inventory {frontend[key]}")
     opencode = npm_agent.get("node_modules/@opencode/cli", {})
     require(opencode.get("version") == dependencies["opencode"]["version"], "OpenCode version differs from inventory")
     require(opencode.get("integrity") == dependencies["opencode"]["npm_integrity"], "OpenCode package integrity differs from inventory")

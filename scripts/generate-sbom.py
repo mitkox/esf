@@ -49,7 +49,6 @@ def main():
     components = {}
     sources = (
         go_modules(),
-        npm_packages("internal/controlplane/web/package-lock.json"),
         npm_packages("agents/opencode/package-lock.json"),
         npm_packages("agents/pi/package-lock.json"),
         python_packages(),

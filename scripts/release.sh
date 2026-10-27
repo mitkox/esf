@@ -56,9 +56,6 @@ for target in "${targets[@]}"; do
 
   mkdir -p "$target_dir"
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-    go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=v$binary_release" \
-    -o "$target_dir/machinist" ./cmd/machinist
-  CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
     go build -buildvcs=false -trimpath -ldflags="-s -w -X github.com/mitkox/esf/internal/factory.Version=$binary_release -X main.buildCommit=$commit" \
     -o "$target_dir/factory" ./cmd/factory
   cp -L LICENSE README.md factory.example.toml "$target_dir/"
@@ -68,20 +65,14 @@ for target in "${targets[@]}"; do
   chmod 0644 "$target_dir/HARNESS2-LICENSE" "$target_dir/HARNESS2-NOTICE" "$target_dir/HARNESS2-UPSTREAM.json"
   touch -t 198001010000 "$target_dir/HARNESS2-LICENSE" "$target_dir/HARNESS2-NOTICE" "$target_dir/HARNESS2-UPSTREAM.json"
   chmod 0644 "$target_dir/LICENSE" "$target_dir/README.md" "$target_dir/factory.example.toml"
-  chmod 0755 "$target_dir/machinist" "$target_dir/factory"
-  touch -t 198001010000 "$target_dir/LICENSE" "$target_dir/README.md" "$target_dir/factory.example.toml" "$target_dir/machinist" "$target_dir/factory"
-  for component in factory machinist combined; do
-    archive="$output_dir/esf_${component}_${release_name}_${goos}_${goarch}.tar.gz"
-    case "$component" in
-      factory) files=(LICENSE HARNESS2-LICENSE HARNESS2-NOTICE HARNESS2-UPSTREAM.json README.md factory.example.toml factory) ;;
-      machinist) files=(LICENSE README.md machinist) ;;
-      combined) files=(LICENSE HARNESS2-LICENSE HARNESS2-NOTICE HARNESS2-UPSTREAM.json README.md factory.example.toml factory machinist) ;;
-    esac
-    COPYFILE_DISABLE=1 tar --format=ustar --owner=0 --group=0 --numeric-owner -C "$target_dir" -cf - "${files[@]}" | gzip -n > "$archive"
-  done
+  chmod 0755 "$target_dir/factory"
+  touch -t 198001010000 "$target_dir/LICENSE" "$target_dir/README.md" "$target_dir/factory.example.toml" "$target_dir/factory"
+  archive="$output_dir/esf_factory_${release_name}_${goos}_${goarch}.tar.gz"
+  files=(LICENSE HARNESS2-LICENSE HARNESS2-NOTICE HARNESS2-UPSTREAM.json README.md factory.example.toml factory)
+  COPYFILE_DISABLE=1 tar --format=ustar --owner=0 --group=0 --numeric-owner -C "$target_dir" -cf - "${files[@]}" | gzip -n > "$archive"
 done
 
-printf '{\n  "release": "%s",\n  "binary_release": "v%s",\n  "commit": "%s",\n  "go_toolchain": "%s",\n  "machinist_upstream": "39435164faf1ff7fad49e41c38a7eb1a00538f21",\n  "targets": ["linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64"]\n}\n' \
+printf '{\n  "release": "%s",\n  "binary_release": "v%s",\n  "commit": "%s",\n  "go_toolchain": "%s",\n  "targets": ["linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64"]\n}\n' \
   "$version" "$binary_release" "$commit" "$go_toolchain" > "$output_dir/release-manifest.json"
 cp release/inventory.json "$output_dir/dependency-inventory.json"
 python3 scripts/generate-sbom.py "$output_dir/sbom.cdx.json"

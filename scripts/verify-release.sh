@@ -37,33 +37,17 @@ for target in "${targets[@]}"; do
   target_dir="$verify_dir/${goos}_${goarch}"
 
   mkdir -p "$target_dir"
-  for component in factory machinist combined; do
-    archive="$release_dir/esf_${component}_${release_name}_${goos}_${goarch}.tar.gz"
-    test -f "$archive"
-    contents=$(tar -tzf "$archive" | LC_ALL=C sort)
-    case "$component" in
-      factory) expected=$(printf '%s\n' LICENSE HARNESS2-LICENSE HARNESS2-NOTICE HARNESS2-UPSTREAM.json README.md factory.example.toml factory | LC_ALL=C sort) ;;
-      machinist) expected=$(printf '%s\n' LICENSE README.md machinist | LC_ALL=C sort) ;;
-      combined) expected=$(printf '%s\n' LICENSE HARNESS2-LICENSE HARNESS2-NOTICE HARNESS2-UPSTREAM.json README.md factory.example.toml factory machinist | LC_ALL=C sort) ;;
-    esac
-    test "$contents" = "$expected"
-    tar -C "$target_dir" -xzf "$archive"
-  done
-  test -x "$target_dir/machinist"
+  archive="$release_dir/esf_factory_${release_name}_${goos}_${goarch}.tar.gz"
+  test -f "$archive"
+  contents=$(tar -tzf "$archive" | LC_ALL=C sort)
+  expected=$(printf '%s\n' LICENSE HARNESS2-LICENSE HARNESS2-NOTICE HARNESS2-UPSTREAM.json README.md factory.example.toml factory | LC_ALL=C sort)
+  test "$contents" = "$expected"
+  tar -C "$target_dir" -xzf "$archive"
   test -x "$target_dir/factory"
-  go version -m "$target_dir/machinist" | grep -F "GOOS=$goos"
-  go version -m "$target_dir/machinist" | grep -F "GOARCH=$goarch"
+  go version -m "$target_dir/factory" | grep -F "GOOS=$goos"
+  go version -m "$target_dir/factory" | grep -F "GOARCH=$goarch"
 
   if [[ "$target" == "$host_target" ]]; then
-    test "$("$target_dir/machinist" version)" = "v$binary_release"
     test "$("$target_dir/factory" version --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["release"])')" = "$binary_release"
-  fi
-  if [[ "$goos" == linux ]]; then
-    factory_bytes=$(stat -c%s "$release_dir/esf_factory_${release_name}_${goos}_${goarch}.tar.gz")
-    combined_bytes=$(stat -c%s "$release_dir/esf_combined_${release_name}_${goos}_${goarch}.tar.gz")
-    if (( factory_bytes * 100 > combined_bytes * 75 )); then
-      echo "factory-only archive exceeds 75% of combined: $target" >&2
-      exit 1
-    fi
   fi
 done

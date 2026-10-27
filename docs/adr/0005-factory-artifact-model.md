@@ -3,6 +3,9 @@
 - **Status:** Accepted
 - **Date:** 2026-09-19
 - **Deciders:** Factory engineering
+- **Update (0.6.2):** the artifact store package is now
+  `internal/factoryartifacts`; the Machinist store referenced in this record was
+  removed (see [ADR 0008](0008-remove-machinist.md)). The decision is unchanged.
 
 ## Context
 
@@ -33,7 +36,7 @@ Three facts force the design:
 Separate **workflow state** from **product evidence**, and store evidence in a
 dedicated, durable, domain-free artifact store.
 
-**Store** (`internal/artifacts`): bytes at validated relative paths, scoped per
+**Store** (`internal/factoryartifacts`): bytes at validated relative paths, scoped per
 run. It knows nothing about runs, states or manifests — which is what makes a
 future S3/MinIO backend a drop-in replacement. Every path is validated against
 traversal, and run IDs must be plain path segments. Opening a run store is
