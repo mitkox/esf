@@ -26,20 +26,22 @@ import (
 //
 // Constructing it validates configuration and connects nothing: Run connects.
 type Runtime struct {
-	Config    Config
-	Provider  sandbox.Provider
-	Repos     *repository.Provider
-	Harnesses *agentharness.Registry
-	Profiles  verification.Profiles
-	Artifacts artifacts.Factory
-	Redactor  *Redactor
-	Telemetry *Telemetry
-	Log       *slog.Logger
+	SecurityAssessor SecurityAssessmentExecutor
+	Config           Config
+	Provider         sandbox.Provider
+	Repos            *repository.Provider
+	Harnesses        *agentharness.Registry
+	Profiles         verification.Profiles
+	Artifacts        artifacts.Factory
+	Redactor         *Redactor
+	Telemetry        *Telemetry
+	Log              *slog.Logger
 }
 
 // RuntimeOptions configures construction.
 type RuntimeOptions struct {
-	Config Config
+	SecurityAssessor SecurityAssessmentExecutor
+	Config           Config
 	// Logger defaults to a text logger on stderr.
 	Logger *slog.Logger
 	// SandboxProvider overrides the default CubeSandbox provider. Tests inject
@@ -99,15 +101,16 @@ func NewRuntime(ctx context.Context, opts RuntimeOptions) (*Runtime, error) {
 	redactor := NewRedactor(collectSecrets(cfg, harnesses)...)
 
 	return &Runtime{
-		Config:    cfg,
-		Provider:  provider,
-		Repos:     repository.New(cfg.Repositories.Allowed, repository.WithLogger(log)),
-		Harnesses: harnesses,
-		Profiles:  cfg.VerificationProfiles(),
-		Artifacts: artifactFactory,
-		Redactor:  redactor,
-		Telemetry: telemetry,
-		Log:       log,
+		SecurityAssessor: opts.SecurityAssessor,
+		Config:           cfg,
+		Provider:         provider,
+		Repos:            repository.New(cfg.Repositories.Allowed, repository.WithLogger(log)),
+		Harnesses:        harnesses,
+		Profiles:         cfg.VerificationProfiles(),
+		Artifacts:        artifactFactory,
+		Redactor:         redactor,
+		Telemetry:        telemetry,
+		Log:              log,
 	}, nil
 }
 
@@ -128,15 +131,16 @@ func (r *Runtime) Close(ctx context.Context) error {
 // Activities builds the activity set for this runtime.
 func (r *Runtime) Activities() (*Activities, error) {
 	return NewActivities(ActivitiesOptions{
-		Provider:        r.Provider,
-		Repositories:    r.Repos,
-		Harnesses:       r.Harnesses,
-		Profiles:        r.Profiles,
-		ArtifactFactory: r.Artifacts,
-		Redactor:        r.Redactor,
-		Telemetry:       r.Telemetry,
-		Config:          r.Config,
-		Logger:          r.Log,
+		SecurityAssessor: r.SecurityAssessor,
+		Provider:         r.Provider,
+		Repositories:     r.Repos,
+		Harnesses:        r.Harnesses,
+		Profiles:         r.Profiles,
+		ArtifactFactory:  r.Artifacts,
+		Redactor:         r.Redactor,
+		Telemetry:        r.Telemetry,
+		Config:           r.Config,
+		Logger:           r.Log,
 	})
 }
 

@@ -339,6 +339,25 @@ func (s *FakeSandbox) ReadFile(_ context.Context, path string) ([]byte, error) {
 	return append([]byte(nil), data...), nil
 }
 
+func (s *FakeSandbox) ReadFileBounded(_ context.Context, path string, maxBytes int64) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if maxBytes <= 0 {
+		return nil, fmt.Errorf("fake: invalid file read limit")
+	}
+	if s.destroyed {
+		return nil, fmt.Errorf("fake: sandbox %s is destroyed", s.id)
+	}
+	data, ok := s.files[path]
+	if !ok {
+		return nil, fmt.Errorf("fake: file unavailable")
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("fake: file exceeds read limit")
+	}
+	return append([]byte(nil), data...), nil
+}
+
 func (s *FakeSandbox) Destroy(ctx context.Context) error {
 	s.mu.Lock()
 	s.destroyed = true

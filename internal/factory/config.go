@@ -28,11 +28,12 @@ const ConfigSchemaVersion = 1
 // Everything in this structure is OPERATOR policy. A task or API caller can
 // choose only: the task text, an approved repository, and an approved revision.
 type Config struct {
-	HarnessProfiles     map[string]string            `toml:"harness_profiles"`
-	Improvement         ImprovementConfig            `toml:"improvement"`
-	ImprovementPolicies map[string]ImprovementPolicy `toml:"improvement_policies"`
-	ImprovementSuites   map[string]string            `toml:"improvement_suites"`
-	SchemaVersion       int                          `toml:"schema_version"`
+	SecurityAssessmentProfiles map[string]SecurityAssessmentProfileConfig `toml:"security_assessment_profiles"`
+	HarnessProfiles            map[string]string                          `toml:"harness_profiles"`
+	Improvement                ImprovementConfig                          `toml:"improvement"`
+	ImprovementPolicies        map[string]ImprovementPolicy               `toml:"improvement_policies"`
+	ImprovementSuites          map[string]string                          `toml:"improvement_suites"`
+	SchemaVersion              int                                        `toml:"schema_version"`
 	// FactoryVersion overrides Version in evidence when set.
 	FactoryVersion string `toml:"factory_version"`
 
@@ -373,6 +374,15 @@ func (c Config) Validate() error {
 		return err
 	}
 	var problems []string
+	for _, name := range sortedKeys(c.SecurityAssessmentProfiles) {
+		if !securityName.MatchString(name) {
+			problems = append(problems, "invalid security assessment profile name")
+			continue
+		}
+		if _, err := c.SecurityAssessmentProfiles[name].load(); err != nil {
+			problems = append(problems, fmt.Sprintf("security assessment profile %q: %s", name, err))
+		}
+	}
 	if c.SchemaVersion != 0 && c.SchemaVersion != ConfigSchemaVersion {
 		problems = append(problems, fmt.Sprintf("unsupported configuration schema_version %d (supported: %d)", c.SchemaVersion, ConfigSchemaVersion))
 	}

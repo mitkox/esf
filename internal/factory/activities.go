@@ -136,28 +136,30 @@ func (a *Activities) CheckGateIntegrity(ctx context.Context, in CheckGateIntegri
 // sandbox calls. Temporal workflow code never performs these directly, which is
 // what makes the workflow deterministic and therefore durable.
 type Activities struct {
-	provider        sandbox.Provider
-	repos           *repository.Provider
-	harnesses       *agentharness.Registry
-	profiles        verification.Profiles
-	artifactFactory artifacts.Factory
-	redactor        *Redactor
-	telemetry       *Telemetry
-	cfg             Config
-	log             *slog.Logger
+	securityAssessor SecurityAssessmentExecutor
+	provider         sandbox.Provider
+	repos            *repository.Provider
+	harnesses        *agentharness.Registry
+	profiles         verification.Profiles
+	artifactFactory  artifacts.Factory
+	redactor         *Redactor
+	telemetry        *Telemetry
+	cfg              Config
+	log              *slog.Logger
 }
 
 // ActivitiesOptions configures the activity set.
 type ActivitiesOptions struct {
-	Provider        sandbox.Provider
-	Repositories    *repository.Provider
-	Harnesses       *agentharness.Registry
-	Profiles        verification.Profiles
-	ArtifactFactory artifacts.Factory
-	Redactor        *Redactor
-	Telemetry       *Telemetry
-	Config          Config
-	Logger          *slog.Logger
+	SecurityAssessor SecurityAssessmentExecutor
+	Provider         sandbox.Provider
+	Repositories     *repository.Provider
+	Harnesses        *agentharness.Registry
+	Profiles         verification.Profiles
+	ArtifactFactory  artifacts.Factory
+	Redactor         *Redactor
+	Telemetry        *Telemetry
+	Config           Config
+	Logger           *slog.Logger
 }
 
 // NewActivities builds the activity set.
@@ -187,15 +189,16 @@ func NewActivities(opts ActivitiesOptions) (*Activities, error) {
 		}
 	}
 	return &Activities{
-		provider:        opts.Provider,
-		repos:           opts.Repositories,
-		harnesses:       opts.Harnesses,
-		profiles:        opts.Profiles,
-		artifactFactory: opts.ArtifactFactory,
-		redactor:        opts.Redactor,
-		telemetry:       telemetry,
-		cfg:             opts.Config,
-		log:             log,
+		securityAssessor: opts.SecurityAssessor,
+		provider:         opts.Provider,
+		repos:            opts.Repositories,
+		harnesses:        opts.Harnesses,
+		profiles:         opts.Profiles,
+		artifactFactory:  opts.ArtifactFactory,
+		redactor:         opts.Redactor,
+		telemetry:        telemetry,
+		cfg:              opts.Config,
+		log:              log,
 	}, nil
 }
 
@@ -406,31 +409,32 @@ type DestroySandboxInput struct {
 
 // FinalizeInput writes the run manifest.
 type FinalizeInput struct {
-	Improvement             *ImprovementReceipt `json:"improvement,omitempty"`
-	Request                 RunRequest          `json:"request"`
-	Validate                ValidateOutput      `json:"validate"`
-	Intake                  *IntakeResult       `json:"intake,omitempty"`
-	SandboxID               string              `json:"sandbox_id"`
-	SandboxTemplate         string              `json:"sandbox_template"`
-	HarnessVersion          string              `json:"harness_version"`
-	AgentResult             agentharness.Result `json:"agent_result"`
-	AgentOutcome            Outcome             `json:"agent_outcome"`
-	AgentAttempt            int32               `json:"agent_attempt"`
-	VerificationResult      verification.Result `json:"verification_result"`
-	VerificationOutcome     Outcome             `json:"verification_outcome"`
-	Baseline                repository.Baseline `json:"baseline"`
-	Patch                   string              `json:"patch"`
-	PatchArtifact           string              `json:"patch_artifact"`
-	ResultingSHA            string              `json:"resulting_sha"`
-	VerificationMutatedTree bool                `json:"verification_mutated_tree"`
-	PostVerificationPatch   string              `json:"post_verification_patch"`
-	FactoryResult           RunState            `json:"factory_result"`
-	Cleanup                 CleanupResult       `json:"cleanup"`
-	WorkflowID              string              `json:"workflow_id"`
-	WorkflowRunID           string              `json:"workflow_run_id"`
-	StartedAt               time.Time           `json:"started_at"`
-	CompletedAt             time.Time           `json:"completed_at"`
-	Error                   string              `json:"error,omitempty"`
+	SecurityAssessment      *SecurityAssessmentSummary `json:"security_assessment,omitempty"`
+	Improvement             *ImprovementReceipt        `json:"improvement,omitempty"`
+	Request                 RunRequest                 `json:"request"`
+	Validate                ValidateOutput             `json:"validate"`
+	Intake                  *IntakeResult              `json:"intake,omitempty"`
+	SandboxID               string                     `json:"sandbox_id"`
+	SandboxTemplate         string                     `json:"sandbox_template"`
+	HarnessVersion          string                     `json:"harness_version"`
+	AgentResult             agentharness.Result        `json:"agent_result"`
+	AgentOutcome            Outcome                    `json:"agent_outcome"`
+	AgentAttempt            int32                      `json:"agent_attempt"`
+	VerificationResult      verification.Result        `json:"verification_result"`
+	VerificationOutcome     Outcome                    `json:"verification_outcome"`
+	Baseline                repository.Baseline        `json:"baseline"`
+	Patch                   string                     `json:"patch"`
+	PatchArtifact           string                     `json:"patch_artifact"`
+	ResultingSHA            string                     `json:"resulting_sha"`
+	VerificationMutatedTree bool                       `json:"verification_mutated_tree"`
+	PostVerificationPatch   string                     `json:"post_verification_patch"`
+	FactoryResult           RunState                   `json:"factory_result"`
+	Cleanup                 CleanupResult              `json:"cleanup"`
+	WorkflowID              string                     `json:"workflow_id"`
+	WorkflowRunID           string                     `json:"workflow_run_id"`
+	StartedAt               time.Time                  `json:"started_at"`
+	CompletedAt             time.Time                  `json:"completed_at"`
+	Error                   string                     `json:"error,omitempty"`
 
 	// ── AX-inspired fields ──────────────────────────────────────────────────
 	// Conditions are the per-step outcomes derived by the workflow.
@@ -1279,6 +1283,7 @@ func (a *Activities) FinalizeResult(ctx context.Context, in FinalizeInput) (Fina
 	}
 
 	manifest := RunManifest{
+		SecurityAssessment:   in.SecurityAssessment,
 		Improvement:          in.Improvement,
 		HarnessProfile:       in.Resources.HarnessProfile,
 		HarnessProfileDigest: in.Resources.HarnessProfileDigest,

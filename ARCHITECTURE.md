@@ -39,6 +39,26 @@ The Temporal-based factory in `internal/factory` sits beside Machinist:
   `Stater` capabilities. The factory records `SKIPPED` with a reason when a provider
   lacks one, so evidence never claims a cost was saved when it was not.
 
+### Optional candidate security assessment
+
+An explicitly scope-granted security profile can add advisory evidence after
+functional verification and before human review. The versioned workflow records
+only small references and summaries; activities capture bounded exact candidate
+bytes and own all allocation, transfer, assessment and teardown effects.
+
+`internal/securityassessment` drives a fixed OpenCyber stdio tool allowlist in a
+dedicated assessor Cube VM against a separate disposable target VM. A guarded
+factory-side endpoint binds the target instance, port and permitted requests.
+Control-plane credentials stay with the factory. Raw candidate and evidence
+bytes remain in private storage, outside ordinary run artifacts; exported
+evidence must match independently held identities and hashes.
+
+Coverage, assertion outcome, owned-resource cleanup and human review remain
+separate. Heartbeats deliver cancellation, and workflow progression waits for
+activity cleanup acknowledgment. The feature is disabled unless an operator
+supplies pinned qualification and executor configuration. See
+`docs/security-assessment.md` for the profile and evidence contracts.
+
 ## sf execution boundary
 
 `cmd/turn-executor` and `internal/turnexec` expose a private named-profile turn
