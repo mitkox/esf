@@ -3,7 +3,7 @@
 ## Requirements
 
 - Go 1.27.3 and Node.js 26.12.1, pinned in `.mise.toml`
-- Python 3.15.1 for the optional intake and brief lab tests
+- Python 3.15.2 for the optional intake and brief lab tests
 - `just` for Machinist commands and `make` for factory commands
 
 Run `mise install` to install the pinned local toolchains. CI checks the same
