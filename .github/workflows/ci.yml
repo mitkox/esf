@@ -26,18 +26,13 @@ jobs:
         with:
           node-version: 26.12.1
           cache: npm
-          cache-dependency-path: |
-            internal/controlplane/web/package-lock.json
-            agents/pi/package-lock.json
+          cache-dependency-path: agents/pi/package-lock.json
       - name: Test issue triage
         run: node --test .github/scripts/issue-triage.test.cjs
       - name: Confirm toolchain
         run: test "$(go env GOVERSION)" = "go1.27.3"
       - name: Scan source for secrets
         run: go run github.com/zricethezav/gitleaks/v8@v8.30.1 dir --redact --no-banner .
-      - name: Install frontend dependencies
-        working-directory: internal/controlplane/web
-        run: npm ci
       - name: Check frozen release inventory
         run: python3 scripts/verify-release-inventory.py
       - name: Test release qualification boundaries
@@ -59,22 +54,9 @@ jobs:
         run: |
           python3 scripts/generate-sbom.py /tmp/esf-ci-sbom.json
           python3 -c 'import json, uuid; b=json.load(open("/tmp/esf-ci-sbom.json")); assert b["bomFormat"] == "CycloneDX" and b["specVersion"] == "1.6" and b["serialNumber"].startswith("urn:uuid:"); uuid.UUID(b["serialNumber"][9:])'
-      - name: Audit frontend npm graph
-        working-directory: internal/controlplane/web
-        run: npm audit --audit-level=high
       - name: Audit OpenCode npm graph
         working-directory: agents/opencode
         run: npm audit --audit-level=high --package-lock-only
-      - name: Test frontend
-        working-directory: internal/controlplane/web
-        run: npm test
-      - name: Build frontend
-        working-directory: internal/controlplane/web
-        run: npm run build
-      - name: Check tracked frontend is current
-        run: |
-          git diff --exit-code -- internal/controlplane/web/dist
-          test -z "$(git status --porcelain --untracked-files=all -- internal/controlplane/web/dist)"
       - name: Check Go formatting
         shell: bash
         run: |
@@ -88,14 +70,12 @@ jobs:
         run: go test -race ./...
       - name: Test DSPy intake without credentials
         run: make test-python
-      - name: Build Machinist
+      - name: Build factory
         run: |
           mkdir -p bin
-          go build -trimpath -ldflags="-X main.version=ci" -o bin/machinist ./cmd/machinist
           go build -trimpath -o bin/factory ./cmd/factory
           test -x bin/factory
-          test -x bin/machinist
-          test "$(bin/machinist version)" = "ci"
+          test "$(bin/factory version)" != ""
 
   macos:
     name: macOS checks
@@ -113,14 +93,12 @@ jobs:
         run: test "$(go env GOVERSION)" = "go1.27.3"
       - name: Run Go tests with the race detector
         run: go test -race ./...
-      - name: Build Machinist
+      - name: Build factory
         run: |
           mkdir -p bin
-          go build -trimpath -ldflags="-X main.version=ci" -o bin/machinist ./cmd/machinist
           go build -trimpath -o bin/factory ./cmd/factory
           test -x bin/factory
-          test -x bin/machinist
-          test "$(bin/machinist version)" = "ci"
+          test "$(bin/factory version)" != ""
 
   check:
     name: check

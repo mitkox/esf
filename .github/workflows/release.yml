@@ -40,11 +40,6 @@ jobs:
         with:
           go-version: 1.27.3
           cache: true
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 26.12.1
-          cache: npm
-          cache-dependency-path: internal/controlplane/web/package-lock.json
       - name: Validate release version
         shell: bash
         run: |
@@ -76,15 +71,6 @@ jobs:
           ci_result=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs" \
             --jq '[.check_runs[] | select(.name == "check")] | max_by(.id).conclusion')
           test "$ci_result" = success
-      - name: Build and verify frontend
-        if: contains(env.RELEASE_VERSION, '-rc.')
-        working-directory: internal/controlplane/web
-        run: |
-          npm ci
-          npm test
-          npm run build
-          git diff --exit-code -- dist
-          test -z "$(git status --porcelain --untracked-files=all -- dist)"
       - name: Build release set
         if: contains(env.RELEASE_VERSION, '-rc.')
         run: bash scripts/release.sh "$RELEASE_VERSION" dist

@@ -1,9 +1,8 @@
 # Factory development entry points.
 #
-# The upstream Machinist project uses `just` (see Justfile); this Makefile adds
-# the factory-specific workflow on top and does not replace it.
-#
-# Everything here is runnable from a clean checkout on this host.
+# ESF's inherited Machinist CLI, control plane and web UI were removed in 0.6.2;
+# the factory is the only product surface. Everything here is runnable from a
+# clean checkout on this host.
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
@@ -33,28 +32,21 @@ help: ## Show this help
 build: ## Build the factory and discovery binaries into ./bin
 	@mkdir -p $(BIN_DIR)
 	$(GO) build -ldflags="-X github.com/mitkox/esf/internal/factory.Version=$(ESF_VERSION) -X main.buildCommit=$(ESF_COMMIT)" -o $(FACTORY) ./cmd/factory
-	$(GO) build -ldflags="-X main.version=v$(ESF_VERSION)" -o $(BIN_DIR)/machinist ./cmd/machinist
 	$(GO) build -o $(BIN_DIR)/cube-smoke ./tools/cube-smoke
 	$(GO) build -o $(BIN_DIR)/cube-netprobe ./tools/cube-netprobe
 	$(GO) build -o $(BIN_DIR)/cube-agent-spike ./tools/cube-agent-spike
 	@echo "built: $(FACTORY) $(BIN_DIR)/cube-smoke $(BIN_DIR)/cube-netprobe $(BIN_DIR)/cube-agent-spike"
 
 .PHONY: test
-test: ## Run Go, frontend, and optional Python unit tests
+test: ## Run Go, optional Python, and Temporal schema unit tests
 	$(GO) test ./... -count=1
-	$(MAKE) test-frontend test-python test-temporal-schema
+	$(MAKE) test-python test-temporal-schema
 
 .PHONY: test-temporal-schema
 test-temporal-schema: ## Check schema initialization and restored-database safety
 	sh deployments/dev/temporal/tests/setup-postgres-test.sh
 
-.PHONY: frontend test-frontend test-python
-frontend: ## Install frozen frontend dependencies and build the UI
-	cd internal/controlplane/web && npm ci && npm run build
-
-test-frontend: ## Run frontend tests against the frozen lockfile
-	cd internal/controlplane/web && npm ci && npm test
-
+.PHONY: test-python
 test-python: ## Run optional Python tool tests against uv.lock
 	@if command -v $(UV) >/dev/null && $(UV) python find $(PYTHON_VERSION) >/dev/null 2>&1; then \
 		$(UV) sync --locked --python $(PYTHON_VERSION) --reinstall-package esf-intake --reinstall-package esf-brief-lab && \

@@ -3,11 +3,6 @@
   "release_profile": "binary-preview",
   "qualification_mode": "companion-manifest",
   "baseline": "ba829056ab728b8e002dddcb702edc0be5b19a1d",
-  "machinist": {
-    "revision": "39435164faf1ff7fad49e41c38a7eb1a00538f21",
-    "schema": 5,
-    "qualification": "unit tests passed; deployment upgrade pending"
-  },
   "dependencies": {
     "cubesandbox": {
       "release": "0.7.3",
@@ -42,15 +37,7 @@
     },
     "grpc": "1.84.0",
     "otel": "1.47.0",
-    "sqlite": "1.61.0",
     "dspy": "3.4.1",
-    "frontend": {
-      "vite": "8.3.5",
-      "lucide": "1.62.0",
-      "jsdom": "30.1.3",
-      "react": "19.3.1",
-      "tailwind": "4.3.3"
-    },
     "postgresql": "18.6",
     "x_net": "0.61.0",
     "harness2": {
@@ -79,15 +66,12 @@
   "build_bases": {
     "go": "docker.io/library/golang@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f",
     "runtime": "gcr.io/distroless/static-debian13@sha256:15f8637509792e05b97d83451b0b6ccfa4abd548f997e406ac1e72c87fe1fa78",
-    "worker": "docker.io/library/debian@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad",
     "python": "docker.io/library/python@sha256:197f6622a70b727a4e61bdac13a73b4e2b914b896aa5a729ceb1f45a09bde5fa",
     "node": "docker.io/library/node@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec",
     "cube": "ghcr.io/tencentcloud/cubesandbox-base@sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472"
   },
   "images": {
     "factory": null,
-    "console": null,
-    "managedworker": null,
     "intake": null,
     "cube_template": null,
     "cube": null,

@@ -3,14 +3,14 @@
 The `Luna issue triage` GitHub Action runs when the repository owner opens an
 issue. It uses Codex with `gpt-6-luna` to choose `bug`, `enhancement`,
 `documentation`, or `needs-human`. Issues from other authors are skipped for
-this public-repository demo. No Machinist server or worker is involved.
+this public-repository demo. The demo is independent of the factory.
 
 ## Setup and demo
 
 1. Add `OPENAI_API_KEY` in repository Settings → Secrets and variables → Actions.
    Use a Platform API key with access to `gpt-6-luna`; usage is billed to that
    API project, separately from a ChatGPT subscription. Never commit the key.
-2. Confirm the four labels above exist. They already exist in owainlewis/machinist.
+2. Confirm the four labels above exist. Create them in `mitkox/esf` if needed.
 3. Merge the workflow through the normal pull-request process. The issue event
    uses the workflow on the default branch.
 4. As the repository owner, open an issue with a clear title and description.
@@ -30,7 +30,7 @@ For an existing issue, the repository owner can choose **Run workflow** and
 enter its issue number, or run:
 
 ```sh
-gh workflow run issue-triage.yml --repo owainlewis/machinist -f issue_number=487
+gh workflow run issue-triage.yml --repo mitkox/esf -f issue_number=487
 ```
 
 The manual trigger can classify issues from any author. Both triggers fetch the
@@ -44,6 +44,6 @@ workflow after fixing the cause. Reruns fetch the latest issue text; edits alone
 
 Run `node --test .github/scripts/issue-triage.test.cjs` for input handling,
 output validation, label application, duplicate handling, and failure cases.
-The tests run in CI and `just check`. A live model call requires the API secret
+The tests run in CI. A live model call requires the API secret
 and a new owner-authored issue after merge; unit tests do not prove model access
 or classification quality.

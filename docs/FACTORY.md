@@ -1,12 +1,11 @@
 # Factory architecture
 
-This repository is an **evolutionary fork of [Machinist](https://github.com/owainlewis/machinist)**
-that adds a self-hosted agentic software factory on top of it, using
+ESF is a self-hosted agentic software factory built on
 [CubeSandbox](https://github.com/TencentCloud/CubeSandbox) microVMs as the
-isolated execution fabric.
-
-Machinist's own single-process execution model, control plane and web UI are
-**unchanged**. The factory is a parallel control plane in the same module.
+isolated execution fabric. It began as a fork of
+[Machinist](https://github.com/owainlewis/machinist); the inherited CLI, control
+plane and web UI were removed in 0.6.2, so the factory described here is the only
+product surface. See [ADR 0008](adr/0008-remove-machinist.md).
 
 ## The vertical slice
 
@@ -23,7 +22,7 @@ Machinist's own single-process execution model, control plane and web UI are
           ↓
    Deterministic build + test       internal/verification
           ↓
-   Patch + evidence + artifacts     internal/artifacts
+   Patch + evidence + artifacts     internal/factoryartifacts
           ↓
      Verified result
 ```
@@ -37,7 +36,7 @@ Machinist's own single-process execution model, control plane and web UI are
 | Agents are replaceable | `internal/agentharness.Harness`; a request names a harness, never an executable |
 | Sandboxes are disposable | One microVM per run, destroyed on every exit path including cancellation |
 | Workflow state is durable | Temporal; workflow code performs no I/O |
-| Evidence is durable | `internal/artifacts` on the factory host — never only inside a microVM |
+| Evidence is durable | `internal/factoryartifacts` on the factory host — never only inside a microVM |
 | Deterministic tools decide | `internal/verification` reads exit codes only; the model never declares success |
 | Security from day one | Structured argv, allowlists, redaction, a microVM the agent cannot escape |
 | Every run is reproducible | Exact revision, baseline SHA, task hash, harness, template and gate results recorded |
@@ -57,10 +56,10 @@ An agent saying it succeeded is never enough.
 | Requirement | Notes |
 | --- | --- |
 | **An existing, running CubeSandbox** | Discovered, never installed or modified by this project |
-| Go | `go 1.26.6` (auto-downloaded by `GOTOOLCHAIN=auto`) |
+| Go | `go 1.27.3` (auto-downloaded by `GOTOOLCHAIN=auto`) |
 | Docker + Compose | For Temporal and PostgreSQL only |
 | Git | For repository preparation inside sandboxes |
-| A coding agent | `opencode2` v2.0.9 is pinned; **a model credential is required** (see below) |
+| A coding agent | `opencode2` with pinned `@opencode/cli` v2.1.4; **a model credential is required** (see below) |
 
 ## Setup
 
@@ -209,18 +208,17 @@ reach once it runs:
 | `factory cancel` / `halt` | available | A run that must be stopped now |
 
 `factory threats` aggregates this evidence across runs; `factory doctor` reports
-the posture. See [`docs/adr/0007-defense-in-depth.md`](docs/adr/0007-defense-in-depth.md).
+the posture. See [`adr/0007-defense-in-depth.md`](adr/0007-defense-in-depth.md).
 
 ## Documentation
 
 | Document | Contents |
 | --- | --- |
-| [`docs/upstream.md`](docs/upstream.md) | Upstream URLs, commits and pinned dependency versions |
-| [`docs/architecture/current-state.md`](docs/architecture/current-state.md) | What Machinist does today, analysed package by package |
-| [`docs/architecture/target-state.md`](docs/architecture/target-state.md) | The architecture this project implements, and its Phase 2 seams |
-| [`docs/adr/`](docs/adr/) | Architecture decision records, including defense in depth (0007) |
-| [`docs/operator-guide.md`](docs/operator-guide.md) | Run, inspect, cancel, harden, extend, and troubleshoot |
-| [`docs/backlog/phase-2.md`](docs/backlog/phase-2.md) | The prioritised Phase 2 backlog |
+| [`upstream.md`](upstream.md) | Fork history, attribution and retained upstream notice |
+| [`architecture/target-state.md`](architecture/target-state.md) | The architecture this project implements, and its Phase 2 seams |
+| [`adr/`](adr/) | Architecture decision records, including defense in depth (0007) and Machinist removal (0008) |
+| [`operator-guide.md`](operator-guide.md) | Run, inspect, cancel, harden, extend, and troubleshoot |
+| [`backlog/phase-2.md`](backlog/phase-2.md) | The prioritised Phase 2 backlog |
 
 ## A required credential
 
@@ -243,7 +241,3 @@ credential_mode = "cube_egress"                                  # recommended
 See the operator guide §8 for the trade-offs and rotation procedure. A missing
 CubeEgress credential fails the network-lockdown activity before the agent can
 run, and the sandbox is still destroyed.
-
----
-
-Machinist's original documentation follows.

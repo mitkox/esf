@@ -15,23 +15,6 @@ factory:
     limits: {cpu: "2", memory: 2Gi}
   nodeSelector: {kubernetes.io/os: linux}
 
-console:
-  enabled: false
-  image:
-    repository: ghcr.io/mitkox/esf-console
-    digest: ""
-  configSecret: "" # existing Secret containing machinist.toml; listen must be 127.0.0.1
-  factoryReadClaim: "" # optional factory RWO claim, mounted read-only on the same node
-  factoryReadTokenSecret: "" # optional separate read-only API token Secret
-  storage:
-    existingClaim: ""
-    storageClass: ""
-    size: 10Gi
-  resources:
-    requests: {cpu: 100m, memory: 128Mi}
-    limits: {cpu: "1", memory: 1Gi}
-  nodeSelector: {kubernetes.io/os: linux}
-
 networkPolicy:
   enabled: true
   # Explicit control/data/Temporal/OTLP CIDRs and ports are required for a

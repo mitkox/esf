@@ -1,26 +1,21 @@
 # Architecture
 
-Machinist owns staged jobs and their workflow steps. Temporal owns factory
-runs. A Machinist review does not approve factory decisions.
+The factory is a Temporal-coordinated software production system. A task is one
+activation of a durable `Change`; each run executes a coding agent in its own
+CubeSandbox microVM, verifies the result with deterministic gates, and preserves
+the patch and evidence on the factory host.
 
-- `config.toml` defines portable named commands, optional prompt templates, timeouts,
-  triggers, and server settings.
-- `worker.toml` defines approved executor argument arrays and logical repository paths.
-- `internal/runner` starts one process in one repository, writes the prompt to stdin,
-  streams both output channels, records artifacts and token usage, and terminates the
-  process tree on timeout or cancellation.
-- `internal/controlplane` stores jobs, step attempts, immutable shared artifacts,
-  review gates, and execution leases. It rejects stale completions and exposes
-  authenticated APIs and the web UI.
-- `internal/managedworker` resolves only worker-owned executor and repository names.
+```text
+Task → Temporal → CubeSandbox → coding agent → verification → patch + evidence
+```
 
-Single-command jobs keep their original semantics. Workflow jobs can advance
-through several steps, with separate attempts and review gates. Schema 2
-databases migrate to schema 5 with a consistent backup before migration.
+The `factory` CLI is the control plane and the security boundary. It accepts
+only an approved repository, an exact revision and task text; it never accepts
+an executable, a host path or an environment override. The factory has no HTTP
+API or web UI. (The separate private sf turn service below is not a second
+control plane.)
 
 ## The factory layer
-
-The Temporal-based factory in `internal/factory` sits beside Machinist:
 
 - `internal/factory/resources.go` resolves operator-declared resources
   (`[workspaces]`, `[models]`, `[egress]`, `[budgets]`, `[scopes]`) exactly once, in
@@ -38,6 +33,24 @@ The Temporal-based factory in `internal/factory` sits beside Machinist:
 - `internal/sandbox/lifecycle.go` declares the optional `Suspender`, `Previewer` and
   `Stater` capabilities. The factory records `SKIPPED` with a reason when a provider
   lacks one, so evidence never claims a cost was saved when it was not.
+- `internal/factoryartifacts` stores runs, changes, patches and evidence under
+  `.factory/`. Evidence is durable on the factory host, never only inside a microVM.
+- `internal/agentharness` resolves operator-registered harnesses; callers name a
+  harness, never an executable.
+- `internal/verification` executes the configured build and test gates and reads exit
+  codes only; the model never declares success.
+- `internal/repository` prepares the exact revision inside the sandbox.
+- `internal/threatmon` quarantines out-of-bounds agent behavior at execution time.
+
+The distinction that matters most:
+
+```text
+agent_result        = SUCCESS
+verification_result = FAILED
+factory_result      = VERIFICATION_FAILED
+```
+
+An agent saying it succeeded is never enough.
 
 ## sf execution boundary
 
@@ -53,3 +66,11 @@ Profiles are operator-owned and have immutable digest receipts. Compiled turns
 also require an exact policy digest. API clients cannot choose commands, host
 paths, templates or secrets. See `docs/sf-turn-executor.md` for supported
 constraints, deployment, cost evidence and retained live qualification limits.
+
+## History
+
+ESF began as a fork of [Machinist](https://github.com/owainlewis/machinist). The
+inherited `machinist` CLI, local control plane, SQLite store, managed worker and
+web UI were removed in 0.6.2; the factory architecture above is the only
+supported surface. See [ADR 0008](docs/adr/0008-remove-machinist.md) and
+[docs/upstream.md](docs/upstream.md).

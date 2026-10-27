@@ -59,7 +59,7 @@ Durable data, split by owner:
 | Store | Holds | Survives |
 | --- | --- | --- |
 | Temporal | Workflow state, retries, timers, history | Worker restart, host reboot |
-| Factory artifact store (`internal/artifacts`) | Patches, logs, verification evidence, manifests | Sandbox destruction, process restart |
+| Factory artifact store (`internal/factoryartifacts`) | Patches, logs, verification evidence, manifests | Sandbox destruction, process restart |
 | CubeSandbox | Nothing durable the factory depends on | — |
 
 **The Cube microVM remains ephemeral.** No artifact the factory needs is stored
@@ -74,11 +74,11 @@ only inside a sandbox.
 | `internal/agentharness` | Harness registry, provisioning, invocation, output capture | Decide policy, know about Temporal |
 | `internal/repository` | Repository policy, acquisition into a sandbox, diff extraction | Execute on the host |
 | `internal/verification` | Structured-argv gates, pass/fail from exit codes only | Accept a shell string |
-| `internal/artifacts` | Durable byte storage with path validation | Know about runs, states or manifests |
+| `internal/factoryartifacts` | Durable byte storage with path validation | Know about runs, states or manifests |
 | `internal/factory` | Policy, run identity, states, workflow, activities, CLI wiring | Contain vendor SDK types |
 
 The dependency graph is acyclic and points inward:
-`factory → {sandbox, agentharness, repository, verification, artifacts, cube}`.
+`factory → {sandbox, agentharness, repository, verification, factoryartifacts, cube}`.
 No lower layer imports `factory`.
 
 ## 3. The workflow
