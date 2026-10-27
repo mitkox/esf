@@ -13,7 +13,7 @@ Install:
 
 - Go 1.27.3
 - Node.js 26.12.1, plus npm
-- Python 3.15.1 and uv 0.13.5 for optional Python checks
+- Python 3.15.2 and uv 0.13.6 for optional Python checks
 - Git
 - `just` for repository shortcuts
 - the agent CLI needed for any real execution checks
