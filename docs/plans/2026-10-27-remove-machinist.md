@@ -1,8 +1,8 @@
 # Remove the inherited Machinist surface
 
-Status: implemented on branch `remove-machinist` (2026-10-27), pending review.
-Baseline: `fd52e72` (`origin/master`, "chore(deps): refresh ESF components and
-pinned build images (#49)").
+Status: implemented and independently reviewed on branch `remove-machinist`
+(2026-10-27); review fixes applied. Baseline: `fd52e72` (`origin/master`,
+"chore(deps): refresh ESF components and pinned build images (#49)").
 
 ## Goal
 
@@ -56,12 +56,17 @@ Run from a clean worktree based on `origin/master`:
   `python3 -m unittest discover -s scripts/tests`, SBOM generation.
 - `bash scripts/release.sh v0.6.2-test.1 DIR`, repeated into a second directory
   and compared with `diff -qr`; only `esf_factory_*` archives are produced.
+  `bash scripts/verify-release.sh` passes on the dry-run set (reviewer
+  reproduction).
 - `helm lint` and `helm template` with required dummy values; no console,
   managed-worker or other Machinist resources render.
 - `sh -n install.sh`, `shellcheck install.sh scripts/*.sh`; the removed
   component path fails with guidance.
 - Reference sweep for `machinist`, deleted package paths and deleted docs; only
   intentional attribution/migration/historical references remain.
+- Two independent reviews found no blocker or high-severity defect; findings
+  were addressed (pin-table note, host/cluster state guidance, archive vs image
+  wording, ADR path/percentage corrections, release-usage wording).
 
 The Go unit and race suites are authoritative in CI (Linux and macOS). They were
 not executed on the host, per the repository execution policy; all test packages

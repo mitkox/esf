@@ -4,6 +4,11 @@
 on 14 October 2026 and adds opt-in Claude Code and Codex CLI harnesses.
 OpenCode remains the automatic default.
 
+The table below records the 14 October checkpoint that opened this candidate.
+The current pinned inputs are recorded in `release/inventory.json`; the later
+refresh is recorded in the
+[27 October component record](../release/qualification/component-upgrade-2026-10-27.md).
+
 | Component | Previous pin | Candidate pin |
 | --- | --- | --- |
 | Go | 1.27.1 | 1.27.2 |
@@ -44,21 +49,26 @@ workflow, examples, skill and Machinist documentation. The `factory` CLI is the
 only supported control plane, and ESF now ships one factory archive per platform
 instead of factory/machinist/combined archives. The `console` and
 `managedworker` container images are discontinued, and the Helm chart no longer
-deploys a console.
+deploys a console. The intake and Cube-template images remain part of the
+release image set.
 
 The removal is recorded in [ADR 0008](adr/0008-remove-machinist.md). The factory
 had no code dependency on Machinist; the inherited model executed agents on the
-worker host outside Cube isolation, and its UI and managed queue were unused in
-ESF operations. Removing it shrinks the release, CI, documentation,
-qualification and security surface.
+worker host outside Cube isolation. The UI and managed queue were not on the
+factory execution path and were used only for a few demonstration jobs.
+Removing them shrinks the release, CI, documentation, qualification and security
+surface.
 
 Migration:
 
 - stop and disable `machinist-control-plane`/`machinist-worker` units;
-- remove `console` values and delete any console Deployment, PVC or Secret that
-  your installation manages outside the chart (expect `helm upgrade` to remove
-  chart-created resources);
-- archive or delete `~/.machinist`; the factory does not read it;
+- on Kubernetes, stop the old console and export/snapshot its console PVC (or
+  `console.storage.existingClaim`) before upgrading; PVC deletion is
+  irreversible. Then remove `console` values and delete any console Deployment
+  or Secret that your installation manages outside the chart (`helm upgrade`
+  removes resources created by earlier chart versions);
+- on a host install, archive or delete the Machinist service user's state,
+  normally `/home/machinist/.machinist`; the factory does not read it;
 - replace `machinist` commands with the `factory` equivalents and inspect
   evidence with `factory describe`, `status --watch`, `logs` and
   `get changes`;
@@ -105,8 +115,9 @@ See [the Temporal upgrade notes](../deployments/dev/temporal/README.md).
 
 The [existing qualification procedure](release-v0.6.0.md) applies to the exact
 0.6.2 commit and assets, except that console and managed-worker steps in older
-procedures no longer apply. The 0.6.2 asset set is factory-only: one archive per
-platform and the factory image. Hosted-provider inference, live provider
+procedures no longer apply. The 0.6.2 binary asset set is factory-only: four
+`esf_factory_*` archives. The intake and Cube-template images continue to be
+built and qualified separately. Hosted-provider inference, live provider
 header-injection qualification, and the production deployment matrix remain
 separate gates. This source version bump does not publish a release tag or
 qualify production.

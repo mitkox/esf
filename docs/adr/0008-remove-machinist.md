@@ -28,8 +28,9 @@ By 0.6.2 the two surfaces had become fully independent:
 
 Keeping the inherited app also carried costs disproportionate to that use:
 
-- roughly 39% of the Go code and the only embedded React/Vite frontend, with
-  Node/npm build, audit and dependabot machinery in CI;
+- roughly a third of the Go code (about 34% of the Go lines in the base tree)
+  and the only embedded React/Vite frontend, with Node/npm build, audit and
+  dependabot machinery in CI;
 - a SQLite dependency and schema migrations;
 - extra release archives (`machinist`, `combined`), container images (`console`,
   `managedworker`), Helm resources, systemd units and VM bootstrap scripting;

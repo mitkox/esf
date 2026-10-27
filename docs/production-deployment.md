@@ -258,8 +258,9 @@ default). Oversized writes fail explicitly; use `limits.command_output_bytes`
 for the separate bound applied before Cube command output reaches the SDK.
 
 Take an offline snapshot of the complete factory evidence and the matching
-configuration. For the default VM paths, run the following as root with a
-private destination directory:
+configuration (when upgrading from a Machinist release and preserving console
+state, also snapshot the console PVC). For the default VM paths, run the
+following as root with a private destination directory:
 
 ```sh
 install -d -m 0700 /var/backups/esf
@@ -274,7 +275,9 @@ drained point. Keep the payload keyring with the matching application backup.
 Run `factory config migrate --dry-run` and `factory doctor --profile production
 --output json` before starting the new worker. Install and verify the pinned agents with `factory agents verify`.
 Machinist state is not part of the factory: 0.6.2 neither reads nor migrates
-`~/.machinist` or a Machinist SQLite database.
+it. On a host install it lives under the Machinist service user's home,
+normally `/home/machinist/.machinist`; on Kubernetes it lived on the console
+PVC.
 
 To drill restoration, use a separate VM with no active services, copy the
 snapshot there, verify its checksum, inspect its member paths, and restore:
@@ -299,10 +302,13 @@ upgrading a host or cluster that still runs them:
 
 1. Stop and disable `machinist-control-plane` and `machinist-worker`, then
    remove their unit files and binaries.
-2. On Kubernetes, remove the `console` values and delete any console Deployment,
-   PVC or Secret that your installation manages outside the chart; `helm
-   upgrade` removes resources created by earlier versions of the chart.
-3. Archive or delete `~/.machinist`; the factory does not read that state.
+2. On Kubernetes, stop the old console and export/snapshot its console PVC (or
+   `console.storage.existingClaim`) before upgrading; PVC deletion is
+   irreversible. Then remove the `console` values and delete any console
+   Deployment or Secret that your installation manages outside the chart;
+   `helm upgrade` removes resources created by earlier chart versions.
+3. On a host install, archive or delete the Machinist service user's state,
+   normally `/home/machinist/.machinist`; the factory does not read that state.
 4. Run `factory doctor --profile production` and a disposable run to confirm the
    factory remains healthy.
 5. Install the factory archive only. `ESF_COMPONENT=machinist|combined` fails

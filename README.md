@@ -38,7 +38,7 @@ This is actively developed software. Review the [validated behavior and
 operational requirements](docs/production-readiness.md) before deployment.
 ESF produces changes for review; it does not decide what ships.
 ESF 0.6.2 is a release candidate. The
-[component upgrade record](release/qualification/component-upgrade-2026-10-14.md)
+[latest component refresh record](release/qualification/component-upgrade-2026-10-27.md)
 records its local validation. Production qualification requires a matching,
 attested companion manifest for its exact source and asset digests. The
 [release procedure](docs/release-v0.6.2.md) and
@@ -71,9 +71,10 @@ The example uses placeholder production endpoints and paths. Set these to
 your actual TLS-protected Cube and Temporal services, or loopback development
 services, before running `factory config validate`.
 
-The installer selects the factory archive; it is the only component ESF now
-ships. Install pinned agent binaries separately with
-`scripts/install-agents.sh`; `factory agents verify` checks configured digests.
+The installer selects factory-only binary archives. Install pinned agent
+binaries separately with `scripts/install-agents.sh`; `factory agents verify`
+checks configured digests. The intake and Cube-template container images are
+built and qualified separately.
 
 For local Temporal:
 

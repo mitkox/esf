@@ -11,9 +11,11 @@ Task → Temporal → CubeSandbox → coding agent → verification → patch + 
 
 The `factory` CLI is the control plane and the security boundary. It accepts
 only an approved repository, an exact revision and task text; it never accepts
-an executable, a host path or an environment override. The factory has no HTTP
-API or web UI. (The separate private sf turn service below is not a second
-control plane.)
+an executable, a host path or an environment override. The factory exposes no
+general-purpose control-plane HTTP API and no web UI. Two narrow surfaces are
+separate: the optional loopback-only `factory budget-gateway` for the Harness2
+model route (documented in `docs/harness-improvement.md`), and the private sf
+turn service described below.
 
 ## The factory layer
 

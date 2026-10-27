@@ -32,7 +32,7 @@ the Go unit and race suites remain CI-authoritative.
 | `gofmt -l` / `make lint` (gofmt, vet, shellcheck) | clean |
 | `python3 scripts/verify-release-inventory.py` | pass ("release inventory pins match lockfiles") |
 | `python3 -m unittest discover -s scripts/tests -p 'test_*.py'` | 3 tests pass (factory-only archive fixture) |
-| `python3 scripts/generate-sbom.py` | CycloneDX 1.6 document generated |
+| `python3 scripts/generate-sbom.py /tmp/sbom.cdx.json` | CycloneDX 1.6 document generated (334 components, no frontend/SQLite/Machinist packages) |
 | `bash scripts/release.sh v0.6.2-test.1 DIR` then repeat into `DIR-repeat` | pass; `diff -qr` clean; four `esf_factory_*` archives + manifest/inventory/SBOM/checksums only |
 | Archive contents | `LICENSE`, HARNESS2 license/notice/upstream, `README.md`, `factory.example.toml`, `factory` |
 | `helm lint deploy/helm/esf` | pass |
@@ -58,6 +58,24 @@ the Go unit and race suites remain CI-authoritative.
 
 ## Review
 
-Independent review: pending at time of writing; findings to be recorded with the
-candidate file list before merge. Merge and publication remain separate human
-approvals.
+Two independent reviews covered commit `370f7b1` (base `fd52e72`): a delegated
+reviewer and a separate `removal-reviewer` pass. Neither found a blocker or
+high-severity defect, and both independently reproduced the factory-only release
+dry-run and `scripts/verify-release.sh` pass. Review findings were addressed in
+a follow-up commit:
+
+- release notes now mark the component table as the 14 October checkpoint and
+  point to the current inventory and 27 October refresh record;
+- migration guidance distinguishes host state (`/home/machinist/.machinist`)
+  from cluster console PVC/Secret state and calls out the irreversible PVC
+  deletion step;
+- release notes distinguish the factory-only binary archive set from the intake
+  and Cube-template image set;
+- ARCHITECTURE qualifies the no-HTTP-API claim for the loopback budget gateway
+  and private sf turn service;
+- ADR 0005 points at `internal/factoryartifacts`; ADR 0008 uses a measured
+  "about a third" Go-code figure; release-note usage wording now matches ADR
+  0008.
+
+The Go unit and race suites, merge and publication remain separate CI/human
+gates.

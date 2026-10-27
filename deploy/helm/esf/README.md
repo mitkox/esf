@@ -2,8 +2,9 @@
 
 This chart runs one factory worker. CubeSandbox 0.7.3, Temporal 1.32.1, and
 PostgreSQL 18.6 are operator-managed dependencies. The chart deliberately has
-no public UI or Service: the factory is driven by the `factory` CLI, and
-Temporal's own UI provides workflow visibility.
+no public UI or Service: the factory is driven by the `factory` CLI. If the
+operator runs Temporal's UI, it provides workflow-state visibility; it does not
+replace the removed console's evidence view.
 
 Supply existing configuration Secrets and qualified image digests in
 `values.yaml`. Set `factory.storage.existingClaim` to a local or block-backed
@@ -27,9 +28,10 @@ rotating credentials; running pods retain their staged credential snapshot.
 
 1. Stop new submissions, allow active runs to finish, and verify sandbox
    cleanup. Scale this chart's workloads to zero.
-2. Take consistent snapshots of the factory PVC and the operator-managed
-   Temporal/PostgreSQL state. Save configuration, payload keys, image digests,
-   and the release inventory with the snapshot.
+2. Take consistent snapshots of the factory PVC (and, when upgrading from a
+   Machinist release you want to preserve, the console PVC) and the
+   operator-managed Temporal/PostgreSQL state. Save configuration, payload
+   keys, image digests, and the release inventory with the snapshot.
 3. For an existing CubeSandbox Kubernetes installation upgrading from a version before 0.7.2,
    follow the upstream node-drain procedure and acknowledge the host-network
    change with `hostNetworkChangeAck` before admitting ESF work.
@@ -45,11 +47,14 @@ ESF 0.6.2 removed the Machinist CLI, local control plane, web UI/console and
 managed worker. Before upgrading a chart from an earlier version:
 
 - remove the `console` section from your values file;
-- delete any console Deployment, PVC or Secret that your installation manages
+- before upgrading, stop the old console and export/snapshot its PVC (or
+  `console.storage.existingClaim`); deleting that PVC is irreversible;
+- delete any console Deployment or Secret that your installation manages
   outside this chart; `helm upgrade` removes resources created by earlier
   versions of the chart;
-- the factory does not read `~/.machinist` state, so archive or delete it
-  separately.
+- on a host install, archive or delete the Machinist service user's state
+  (normally `/home/machinist/.machinist`); it is not cluster state and the
+  factory does not read it.
 
 Rollback after a schema migration means scaling down, restoring the matching
 PVC and Temporal snapshots, and reinstalling the matching earlier images
