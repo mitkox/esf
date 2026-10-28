@@ -137,14 +137,31 @@ export function DispatchPage() {
   const effectiveHarness = harness || defaults.harness;
   const effectiveProfile = verification || defaults.verification;
 
+  const selectedScope = scopes.find((entry) => entry.name === effectiveScope) || null;
+  const scopeRepositories = selectedScope?.repositories || [];
+  const scopeHarnesses = selectedScope?.harnesses || [];
   const repositoryAllowed = repository
-    ? allowed.length === 0 || allowed.some((prefix) => repository.startsWith(prefix))
+    ? (allowed.length === 0 || allowed.some((prefix) => repository.startsWith(prefix))) &&
+      (scopeRepositories.length === 0 || scopeRepositories.some((prefix) => repository.startsWith(prefix)))
     : false;
+  const harnessAllowed = !effectiveHarness
+    ? false
+    : scopeHarnesses.length === 0 || scopeHarnesses.includes(effectiveHarness);
   const errors = {
-    repository: !repository ? "Repository is required." : repositoryAllowed ? "" : "Repository does not start with an allowed prefix.",
+    repository: !repository
+      ? "Repository is required."
+      : !repositoryAllowed
+        ? scopeRepositories.length > 0
+          ? `Repository is not allowed in scope ${effectiveScope}.`
+          : "Repository does not start with an allowed prefix."
+        : "",
     revision: !revision ? "Exact revision is required." : REVISION_PATTERN.test(revision) ? "" : "Use the full 40-character commit SHA.",
     task: task.trim().length === 0 ? "Task text is required." : task.trim().length < 12 ? "Describe the change and its acceptance criteria." : "",
-    harness: effectiveHarness ? "" : "No harness is configured.",
+    harness: !effectiveHarness
+      ? "No harness is configured."
+      : !harnessAllowed
+        ? `Harness is not allowed in scope ${effectiveScope}.`
+        : "",
     verification: effectiveProfile ? "" : "No verification profile is configured.",
   };
   const valid = Object.values(errors).every((error) => !error);

@@ -402,7 +402,7 @@ func TestRunDetailContainsEvidence(t *testing.T) {
 	if detail.Change == nil || detail.Change.ChangeID != "change-success" {
 		t.Fatalf("change = %+v", detail.Change)
 	}
-	if !strings.Contains(detail.Actions.ApproveCommand, "factory review run-success --approve") {
+	if detail.Actions.ApproveCommand != "" || detail.Actions.RejectCommand != "" || detail.Actions.CancelCommand != "" || detail.Actions.Describe == "" {
 		t.Fatalf("actions = %+v", detail.Actions)
 	}
 }
@@ -848,7 +848,7 @@ func TestShellArgQuotesUnsafeRunIDs(t *testing.T) {
 			t.Fatalf("shellArg(%q) = %q, want a single-quoted argument", value, got)
 		}
 	}
-	actions := runActions("demo$(id)")
+	actions := runActions("demo$(id)", factory.StateRunning)
 	if !strings.Contains(actions.CancelCommand, "'demo$(id)'") {
 		t.Fatalf("cancel command did not quote the run id: %q", actions.CancelCommand)
 	}
@@ -880,6 +880,24 @@ func TestArtifactTailStartsAtUTF8Boundary(t *testing.T) {
 	}
 	if !utf8.Valid(data) {
 		t.Fatalf("tail starts inside a rune and is not valid UTF-8")
+	}
+}
+
+func TestDetailHrefEncodesIDAsOneSegment(t *testing.T) {
+	cases := map[string]string{
+		"run-123":    "#/runs/run-123",
+		"demo%20run": "#/runs/demo%2520run",
+		"a b":        "#/runs/a%20b",
+		"a#b":        "#/runs/a%23b",
+		"a/b":        "#/runs/a%2Fb",
+	}
+	for id, want := range cases {
+		if got := detailHref("#/runs/", id); got != want {
+			t.Fatalf("detailHref(%q) = %q, want %q", id, got, want)
+		}
+	}
+	if got := detailHref("#/changes/", "demo%20run"); got != "#/changes/demo%2520run" {
+		t.Fatalf("change detail href = %q", got)
 	}
 }
 

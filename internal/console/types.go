@@ -341,14 +341,15 @@ type ReviewItem struct {
 
 // ReviewsResponse is the human review queue.
 type ReviewsResponse struct {
-	Items         []ReviewItem `json:"items"`
-	Page          PageMeta     `json:"page"`
-	Total         int          `json:"total"`
-	LiveAvailable bool         `json:"live_available"`
-	LiveError     string       `json:"live_error,omitempty"`
-	GeneratedAt   time.Time    `json:"generated_at"`
-	PendingReview int          `json:"pending_review"`
-	PausedRuns    int          `json:"paused_runs"`
+	Items           []ReviewItem `json:"items"`
+	Page            PageMeta     `json:"page"`
+	Total           int          `json:"total"`
+	LiveAvailable   bool         `json:"live_available"`
+	LiveError       string       `json:"live_error,omitempty"`
+	UnknownLiveRuns int          `json:"unknown_live_runs"`
+	GeneratedAt     time.Time    `json:"generated_at"`
+	PendingReview   int          `json:"pending_review"`
+	PausedRuns      int          `json:"paused_runs"`
 }
 
 // ── Security ────────────────────────────────────────────────────────────────

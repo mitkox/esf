@@ -197,7 +197,7 @@ func (s *Server) writeLiveRunDetail(response http.ResponseWriter, request *http.
 		Artifacts:    []ArtifactInfo{},
 		Audit:        []factory.AuditEntry{},
 		RelatedRuns:  []RunSummary{},
-		Actions:      runActions(runID),
+		Actions:      runActions(runID, status.State),
 		Warnings:     []string{"No durable manifest exists yet: this is live orchestration state queried from Temporal."},
 		Conditions:   status.Conditions,
 		Live: &LiveRun{
@@ -248,7 +248,7 @@ func (s *Server) buildRunDetail(request *http.Request, record *runRecord) RunDet
 		Artifacts:    []ArtifactInfo{},
 		Audit:        []factory.AuditEntry{},
 		RelatedRuns:  []RunSummary{},
-		Actions:      runActions(record.ID),
+		Actions:      runActions(record.ID, ""),
 		Warnings:     []string{},
 		Conditions:   append([]factory.Condition(nil), manifest.Conditions...),
 		Previews:     manifest.Previews,
@@ -836,23 +836,23 @@ func (s *Server) handleChangeDetail(response http.ResponseWriter, request *http.
 	}
 	summary.HasEvidence = len(summaries) > 0
 
-	livePaused := false
+	pausedRunID := ""
 	if live := s.live.openRuns(request.Context()); live.Available {
 		for _, run := range live.Runs {
-			if run.RunID == change.LastRunID && run.State == string(factory.StatePaused) {
-				livePaused = true
+			if run.ChangeID == changeID && run.State == string(factory.StatePaused) {
+				pausedRunID = run.RunID
 				break
 			}
 		}
 	}
 	review := ReviewContext{
 		GlobalEnabled: s.cfg.Factory.Review.Enabled,
-		Pending:       change.Status == factory.ChangeInReview,
-		Actionable:    change.Status == factory.ChangeInReview && livePaused,
+		Pending:       change.Status == factory.ChangeInReview || pausedRunID != "",
+		Actionable:    pausedRunID != "",
 	}
 	if review.Actionable {
-		review.ApproveCommand = "factory review " + shellArg(change.LastRunID) + " --approve"
-		review.RejectCommand = "factory review " + shellArg(change.LastRunID) + " --reject --note \"…\""
+		review.ApproveCommand = "factory review " + shellArg(pausedRunID) + " --approve"
+		review.RejectCommand = "factory review " + shellArg(pausedRunID) + " --reject --note \"…\""
 	} else if review.Pending {
 		review.Note = "This is a durable post-run review record: its activation has finished and no live workflow is paused, so there is no review gate to signal. Inspect the evidence here and manage the change through the factory CLI resources."
 	}
@@ -868,6 +868,10 @@ func (s *Server) handleChangeDetail(response http.ResponseWriter, request *http.
 		latest := runs[0].Manifest
 		review.Configured = latest.ReviewConfigured
 		review.LatestOutcome = latest.ReviewOutcome
+	}
+	if review.Actionable {
+		review.Configured = true
+		review.LatestOutcome = ""
 	}
 	warnings := []string{}
 	if len(summaries) == 0 {
@@ -960,7 +964,8 @@ func (s *Server) handleReviews(response http.ResponseWriter, request *http.Reque
 	pageItems, meta := paginate(items, offset, limit)
 	writeJSON(response, http.StatusOK, ReviewsResponse{
 		Items: pageItems, Page: meta, Total: len(items), LiveAvailable: live.Available, LiveError: live.Error,
-		GeneratedAt: now.UTC(), PendingReview: pendingReview, PausedRuns: pausedRuns,
+		UnknownLiveRuns: live.UnknownRuns,
+		GeneratedAt:     now.UTC(), PendingReview: pendingReview, PausedRuns: pausedRuns,
 	})
 }
 
@@ -1008,7 +1013,7 @@ func (s *Server) handleSearch(response http.ResponseWriter, request *http.Reques
 		scoredResults = append(scoredResults, scored{score: score, result: SearchResult{
 			Kind: "run", ID: record.ID, Title: record.ID, Status: string(manifest.FactoryResult),
 			Subtitle: strings.TrimSpace(strings.Join(nonEmpty(manifest.Repository, manifest.AgentHarness, manifest.Scope), " · ")),
-			Href:     "#/runs/" + record.ID,
+			Href:     detailHref("#/runs/", record.ID),
 		}})
 	}
 	for _, record := range orderedChanges {
@@ -1021,7 +1026,7 @@ func (s *Server) handleSearch(response http.ResponseWriter, request *http.Reques
 		scoredResults = append(scoredResults, scored{score: score, result: SearchResult{
 			Kind: "change", ID: change.ChangeID, Title: change.ChangeID, Status: string(change.Status),
 			Subtitle: strings.TrimSpace(strings.Join(nonEmpty(change.Repository, change.Scope, string(change.Status)), " · ")),
-			Href:     "#/changes/" + change.ChangeID,
+			Href:     detailHref("#/changes/", change.ChangeID),
 		}})
 	}
 	sort.SliceStable(scoredResults, func(i, j int) bool {

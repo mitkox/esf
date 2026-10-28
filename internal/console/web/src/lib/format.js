@@ -258,11 +258,13 @@ export function parseUnifiedDiff(text) {
   const result = { files: [], additions: 0, deletions: 0, binary: false };
   if (!text) return result;
   let file = null;
+  let inHunk = false;
   for (const line of String(text).split("\n")) {
     if (line.startsWith("diff --git ")) {
       const match = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
       file = { path: match ? match[2] : line.slice("diff --git ".length), additions: 0, deletions: 0, lines: [] };
       result.files.push(file);
+      inHunk = false;
       continue;
     }
     if (!file) continue;
@@ -270,10 +272,14 @@ export function parseUnifiedDiff(text) {
       result.binary = true;
       continue;
     }
-    if (line.startsWith("+++ ") || line.startsWith("--- ") || line.startsWith("index ")) {
+    // File headers only occur outside a hunk. Inside a hunk, "+++ x" and
+    // "--- x" are an added/removed line whose content itself starts with
+    // "++ " or "-- ".
+    if (!inHunk && (line.startsWith("+++ ") || line.startsWith("--- ") || line.startsWith("index "))) {
       continue;
     }
     if (line.startsWith("@@")) {
+      inHunk = true;
       file.lines.push({ type: "hunk", text: line });
       continue;
     }

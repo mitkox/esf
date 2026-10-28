@@ -13,6 +13,6 @@ export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   server: {
     // `make console-dev` proxies API calls to a local `factory console`.
-    proxy: { "/api": { target: "http://127.0.0.1:8787", changeOrigin: false } },
+    proxy: { "/api": { target: "http://127.0.0.1:7331", changeOrigin: false } },
   },
 });

@@ -134,3 +134,22 @@ test("parseUnifiedDiff detects binary patches", () => {
   assert.equal(parsed.binary, true);
   assert.equal(parsed.files.length, 1);
 });
+
+test("parseUnifiedDiff keeps changed lines that look like file headers", () => {
+  const diff = [
+    "diff --git a/scripts/run.sh b/scripts/run.sh",
+    "index 1111111..2222222 100644",
+    "--- a/scripts/run.sh",
+    "+++ b/scripts/run.sh",
+    "@@ -1 +1 @@",
+    "--- counter;", // removed line whose content starts with "-- "
+    "+++ counter;", // added line whose content starts with "++ "
+  ].join("\n");
+  const parsed = parseUnifiedDiff(diff);
+  assert.equal(parsed.additions, 1);
+  assert.equal(parsed.deletions, 1);
+  const types = parsed.files[0].lines.map((line) => line.type);
+  assert.deepEqual(types, ["hunk", "del", "add"]);
+  assert.equal(parsed.files[0].lines[1].text, "-- counter;");
+  assert.equal(parsed.files[0].lines[2].text, "++ counter;");
+});

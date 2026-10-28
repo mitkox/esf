@@ -23,7 +23,7 @@ import { AuditCard } from "@/components/runs/run-audit";
 import { OperatorCommandsCard } from "@/components/runs/run-commands";
 import { PreviewsCard, RelatedChangeCard, RelatedRunsCard } from "@/components/runs/run-related";
 import { ArtifactPreviewModal } from "@/components/runs/evidence-modal";
-import { downloadText } from "@/components/runs/utils";
+import { downloadBlob } from "@/components/runs/utils";
 
 const CONTAINER = "mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8";
 
@@ -135,8 +135,10 @@ export function RunDetailPage({ runID }) {
     if (!runID) return;
     setDownloading(true);
     try {
-      const text = patch.text || (await api.text(`/runs/${encodeURIComponent(runID)}/patch?download=true`));
-      downloadText(`${runID}.patch`, text);
+      // Fetch the raw bytes: the preview text is decoded UTF-8 and must never
+      // be reused for a deliverable download.
+      const { blob } = await api.blob(`/runs/${encodeURIComponent(runID)}/patch?download=true`);
+      downloadBlob(`${runID}.patch`, blob);
       toast({ tone: "success", title: "Patch downloaded", message: `${runID}.patch` });
     } catch (error) {
       toast({
