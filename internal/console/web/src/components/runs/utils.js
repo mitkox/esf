@@ -215,6 +215,19 @@ export function changeHref(changeID) {
 
 // Trigger a client-side download without a server round trip. The object URL is
 // revoked on the next tick so Chromium has captured it before cleanup.
+export function downloadBlob(filename, blob) {
+  const file = blob instanceof Blob ? blob : new Blob([blob ?? ""]);
+  const url = URL.createObjectURL(file);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 export function downloadText(filename, text) {
   const blob = new Blob([text ?? ""], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);

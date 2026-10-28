@@ -82,9 +82,39 @@ async function request(path, { params, method = "GET", signal, text = false, tok
   return response.json();
 }
 
+// requestBlob fetches raw bytes for deliverable downloads. Decoding a patch as
+// text and re-encoding it would silently replace invalid UTF-8 byte sequences,
+// changing the artifact an operator is about to apply.
+async function requestBlob(path, { params, signal } = {}) {
+  const headers = { Accept: "application/octet-stream" };
+  const bearer = getToken();
+  if (bearer) headers.Authorization = `Bearer ${bearer}`;
+  let response;
+  try {
+    response = await fetch(buildURL(path, params), { method: "GET", headers, signal, cache: "no-store" });
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    throw new ApiError("The console server could not be reached.", { code: "network" });
+  }
+  if (!response.ok) {
+    let body = {};
+    try {
+      body = await response.json();
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(body.error || `Request failed (HTTP ${response.status}).`, {
+      status: response.status,
+      code: body.code || "",
+    });
+  }
+  return { blob: await response.blob(), headers: response.headers };
+}
+
 export const api = {
   get: (path, params, options = {}) => request(path, { params, ...options }),
   text: (path, params, options = {}) => request(path, { params, text: true, ...options }),
+  blob: (path, params, options = {}) => requestBlob(path, { params, ...options }),
 };
 
 export function verifyToken(candidate) {
