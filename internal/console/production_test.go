@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net"
 	"net/http"
@@ -25,6 +26,11 @@ import (
 // localhost. It is test-only material written to a temporary directory.
 func writeTestCertificate(t *testing.T, dir string, keyPermissions os.FileMode) (string, string) {
 	t.Helper()
+	return writeTestCertificateWithValidity(t, dir, keyPermissions, time.Now().Add(-time.Hour), time.Now().Add(24*time.Hour))
+}
+
+func writeTestCertificateWithValidity(t *testing.T, dir string, keyPermissions os.FileMode, notBefore, notAfter time.Time) (string, string) {
+	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
@@ -32,8 +38,8 @@ func writeTestCertificate(t *testing.T, dir string, keyPermissions os.FileMode) 
 	template := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
 		Subject:               pkix.Name{CommonName: "console-test"},
-		NotBefore:             time.Now().Add(-time.Hour),
-		NotAfter:              time.Now().Add(24 * time.Hour),
+		NotBefore:             notBefore,
+		NotAfter:              notAfter,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
@@ -96,8 +102,24 @@ func TestLoadTLSConfigValidatesPairsAndKeyPermissions(t *testing.T) {
 	if err := os.Chmod(exposedKey, 0o644); err != nil {
 		t.Fatalf("chmod exposed key: %v", err)
 	}
-	if _, err := loadTLSConfig(certPath, exposedKey); err == nil || !strings.Contains(err.Error(), "world-accessible") {
-		t.Fatalf("expected a world-accessible key rejection, got %v", err)
+	if _, err := loadTLSConfig(certPath, exposedKey); err == nil || !strings.Contains(err.Error(), "readable outside its owner") {
+		t.Fatalf("expected a world-readable key rejection, got %v", err)
+	}
+
+	groupKey := filepath.Join(dir, "group.key")
+	if err := os.WriteFile(groupKey, data, 0o640); err != nil {
+		t.Fatalf("write group key: %v", err)
+	}
+	if err := os.Chmod(groupKey, 0o640); err != nil {
+		t.Fatalf("chmod group key: %v", err)
+	}
+	if _, err := loadTLSConfig(certPath, groupKey); err == nil {
+		t.Fatalf("expected a group-readable key rejection")
+	}
+
+	expiredCert, expiredKey := writeTestCertificateWithValidity(t, t.TempDir(), 0o600, time.Now().Add(-48*time.Hour), time.Now().Add(-24*time.Hour))
+	if _, err := loadTLSConfig(expiredCert, expiredKey); err == nil || !strings.Contains(err.Error(), "expired") {
+		t.Fatalf("expected an expired certificate rejection, got %v", err)
 	}
 }
 
@@ -133,10 +155,14 @@ func TestServeTLSProvidesTransportSecurityHeaders(t *testing.T) {
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{
-			MinVersion:         tls.VersionTLS12,
-			InsecureSkipVerify: true, // self-signed test certificate
-		}},
+		Transport: &http.Transport{
+			ForceAttemptHTTP2: true,
+			TLSClientConfig: &tls.Config{
+				MinVersion:         tls.VersionTLS12,
+				NextProtos:         []string{"h2", "http/1.1"},
+				InsecureSkipVerify: true, // self-signed test certificate
+			},
+		},
 	}
 	request, err := http.NewRequest(http.MethodGet, "https://"+address.String()+"/api/v1/console/healthz", nil)
 	if err != nil {
@@ -153,6 +179,21 @@ func TestServeTLSProvidesTransportSecurityHeaders(t *testing.T) {
 	if got := response.Header.Get("Strict-Transport-Security"); got != "max-age=31536000" {
 		t.Fatalf("Strict-Transport-Security = %q", got)
 	}
+	if response.ProtoMajor != 2 {
+		t.Fatalf("expected HTTP/2 negotiation, got %s", response.Proto)
+	}
+
+	// The server must refuse a TLS 1.1 handshake.
+	legacyDialer := &net.Dialer{Timeout: 5 * time.Second}
+	if conn, err := tls.DialWithDialer(legacyDialer, "tcp", address.String(), &tls.Config{
+		MinVersion:         tls.VersionTLS10,
+		MaxVersion:         tls.VersionTLS11,
+		InsecureSkipVerify: true,
+	}); err == nil {
+		conn.Close()
+		t.Fatalf("expected the TLS 1.1 handshake to be refused")
+	}
+
 	cancel()
 	if err := <-served; err != nil {
 		t.Fatalf("serve returned an error on shutdown: %v", err)
@@ -204,17 +245,83 @@ func TestAuthThrottleBlocksAfterRepeatedFailures(t *testing.T) {
 	}
 }
 
-func TestClientKeyUsesForwardedAddress(t *testing.T) {
+func TestClientKeyTrustsForwardedAddressOnlyFromLoopback(t *testing.T) {
 	request := &http.Request{RemoteAddr: "127.0.0.1:12345", Header: http.Header{}}
 	if got := clientKey(request); got != "127.0.0.1" {
 		t.Fatalf("clientKey = %q", got)
 	}
 	request.Header.Set("X-Forwarded-For", "203.0.113.9, 10.0.0.1")
 	if got := clientKey(request); got != "203.0.113.9" {
-		t.Fatalf("clientKey with XFF = %q", got)
+		t.Fatalf("clientKey with trusted XFF = %q", got)
 	}
 	request.Header.Set("X-Forwarded-For", strings.Repeat("a", 200))
 	if got := clientKey(request); len(got) != maxClientKeyLength {
 		t.Fatalf("clientKey should be bounded, got %d characters", len(got))
+	}
+
+	// A direct/non-loopback client cannot rotate its throttle key by forging
+	// the proxy header.
+	direct := &http.Request{RemoteAddr: "198.51.100.7:4444", Header: http.Header{}}
+	direct.Header.Set("X-Forwarded-For", "203.0.113.99")
+	if got := clientKey(direct); got != "198.51.100.7" {
+		t.Fatalf("non-loopback client key = %q, want the TCP peer", got)
+	}
+}
+
+func TestForgedForwardedHeaderCannotBypassThrottle(t *testing.T) {
+	root, clock := buildFixtureStore(t)
+	server, err := New(Config{
+		DataDir: root, ReadToken: testToken, Live: false, Now: clock.Now,
+		Static: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<html></html>")}},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer server.Close()
+	handler := server.Handler()
+
+	attempt := func(token, forwarded string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/console/overview", nil)
+		request.RemoteAddr = "198.51.100.7:4444" // non-loopback, so XFF is not trusted
+		request.Header.Set("Authorization", "Bearer "+token)
+		request.Header.Set("X-Forwarded-For", forwarded)
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		return recorder
+	}
+	for attemptIndex := 0; attemptIndex < authMaxFailures; attemptIndex++ {
+		// Rotate the spoofed header; the TCP peer is the real key.
+		if status := attempt("wrong-token", fmt.Sprintf("203.0.113.%d", attemptIndex)).Code; status != http.StatusUnauthorized {
+			t.Fatalf("attempt %d status = %d", attemptIndex+1, status)
+		}
+	}
+	if status := attempt(testToken, "203.0.113.250").Code; status != http.StatusTooManyRequests {
+		t.Fatalf("forged XFF bypassed the throttle: status = %d, want 429", status)
+	}
+}
+
+func TestAuthThrottleTableIsBounded(t *testing.T) {
+	clock := &testClock{current: time.Now()}
+	throttle := newAuthThrottle(clock.Now)
+	throttle.maxTracked = 2
+	throttle.fail("first")
+	throttle.fail("second")
+	throttle.fail("third") // over capacity -> shared overflow bucket
+	throttle.mu.Lock()
+	tracked := len(throttle.failures)
+	_, overflowed := throttle.failures[authOverflowKey]
+	throttle.mu.Unlock()
+	if tracked > throttle.maxTracked+1 {
+		t.Fatalf("throttle table grew past its bound: %d entries", tracked)
+	}
+	if !overflowed {
+		t.Fatalf("expected a shared overflow bucket")
+	}
+	// Rotating fresh keys cannot escape the shared bucket and then block it.
+	for index := 0; index < authMaxFailures; index++ {
+		throttle.fail(fmt.Sprintf("fresh-client-%d", index))
+	}
+	if allowed, _ := throttle.allow("another-fresh-client"); allowed {
+		t.Fatalf("overflow bucket remained unblocked")
 	}
 }

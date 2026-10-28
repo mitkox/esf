@@ -95,14 +95,7 @@ Examples:
 			if err != nil {
 				return err
 			}
-			// Environment defaults keep systemd/container secrets out of the
-			// process argument list; explicit flags win.
-			if strings.TrimSpace(tlsCertFile) == "" {
-				tlsCertFile = strings.TrimSpace(os.Getenv("FACTORY_CONSOLE_TLS_CERT_FILE"))
-			}
-			if strings.TrimSpace(tlsKeyFile) == "" {
-				tlsKeyFile = strings.TrimSpace(os.Getenv("FACTORY_CONSOLE_TLS_KEY_FILE"))
-			}
+			tlsCertFile, tlsKeyFile = resolveConsoleTLSFlags(tlsCertFile, tlsKeyFile)
 			scheme := "http"
 			if strings.TrimSpace(tlsCertFile) != "" || strings.TrimSpace(tlsKeyFile) != "" {
 				scheme = "https"
@@ -144,8 +137,8 @@ Examples:
 	command.Flags().StringVar(&environment, "environment", "", "environment name shown in the console (default: $FACTORY_ENVIRONMENT or self-hosted)")
 	command.Flags().StringVar(&dataDir, "data-dir", "", "artifact store root (default: factory storage.data_dir)")
 	command.Flags().StringVar(&refresh, "refresh", "", "evidence refresh interval, for example 15s (default 15s)")
-	command.Flags().StringVar(&tlsCertFile, "tls-cert-file", "", "PEM certificate (with --tls-key-file) to serve HTTPS")
-	command.Flags().StringVar(&tlsKeyFile, "tls-key-file", "", "PEM private key (0600) paired with --tls-cert-file")
+	command.Flags().StringVar(&tlsCertFile, "tls-cert-file", "", "PEM certificate (with --tls-key-file) to serve HTTPS (env FACTORY_CONSOLE_TLS_CERT_FILE)")
+	command.Flags().StringVar(&tlsKeyFile, "tls-key-file", "", "PEM private key (0600) paired with --tls-cert-file (env FACTORY_CONSOLE_TLS_KEY_FILE)")
 	return command
 }
 
@@ -202,4 +195,20 @@ func parseConsoleRefresh(raw string) (time.Duration, error) {
 		return 0, fmt.Errorf("--refresh must be at least 1s")
 	}
 	return duration, nil
+}
+
+// resolveConsoleTLSFlags applies the environment defaults for native TLS.
+// Explicit flags win so a service manager can override the environment
+// without rewriting the unit; both values are trimmed because systemd
+// EnvironmentFile entries often keep trailing whitespace.
+func resolveConsoleTLSFlags(certFlag, keyFlag string) (string, string) {
+	cert := strings.TrimSpace(certFlag)
+	if cert == "" {
+		cert = strings.TrimSpace(os.Getenv("FACTORY_CONSOLE_TLS_CERT_FILE"))
+	}
+	key := strings.TrimSpace(keyFlag)
+	if key == "" {
+		key = strings.TrimSpace(os.Getenv("FACTORY_CONSOLE_TLS_KEY_FILE"))
+	}
+	return cert, key
 }

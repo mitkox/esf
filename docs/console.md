@@ -41,7 +41,7 @@ Flags:
 | `--listen` | `127.0.0.1:7331` | Listen address. A non-loopback address requires a read token. |
 | `--read-token-file` | empty | Private, 0600 regular file containing a 32+ character token. |
 | `--tls-cert-file` | empty | PEM certificate that enables native HTTPS (requires `--tls-key-file`). |
-| `--tls-key-file` | empty | PEM private key, world-unreadable (0600 recommended), paired with the certificate. |
+| `--tls-key-file` | empty | PEM private key, mode 0600 (no group/other access), paired with the certificate. |
 | `--no-auth` | false | Disable auth. Only allowed on a loopback address; local evaluation only. |
 | `--live` | true | Enable bounded Temporal workflow queries and Cube sandbox inventory. |
 | `--environment` | `$FACTORY_ENVIRONMENT` or `self-hosted` | Badge shown in the UI. |
@@ -148,11 +148,15 @@ health claims: a reachable port is not the same as a healthy service.
   server refuses to start without one.
 - Constant-time token comparison; the token is never logged or placed in a URL.
 - Failed bearer attempts are throttled per client: 10 failures in 5 minutes
-  block the client for one minute (`429` with `Retry-After`). The client key is
-  the first `X-Forwarded-For` address when a trusted reverse proxy supplies it,
-  otherwise the TCP peer address.
-- Native TLS requires a certificate/key pair, refuses world-readable private
-  keys, enforces a TLS 1.2 floor, and adds HSTS when it terminates TLS.
+  block the client for one minute (`429` with `Retry-After`). The first
+  `X-Forwarded-For` address is used only when the TCP peer is loopback (a local
+  nginx/Tailscale proxy); direct and non-loopback clients are keyed by their
+  peer address, so forging the header cannot reset the counter. Throttle state
+  is bounded (4096 tracked clients plus a shared overflow bucket), so
+  unauthenticated traffic cannot grow it without limit.
+- Native TLS requires a certificate/key pair, refuses private keys readable by
+  group or other (mode 0600), enforces a TLS 1.2 floor, and adds HSTS when it
+  terminates TLS.
 - Strict Content Security Policy, `X-Frame-Options: DENY`, `no-referrer`,
   denied browser permissions, no CORS.
 - API responses are `Cache-Control: no-store`; hashed static assets are
@@ -180,6 +184,9 @@ server {
     proxy_pass http://127.0.0.1:7331;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto https;
+    # Overwrite, do not append: the console trusts X-Forwarded-For from its
+    # loopback proxy, so a client-supplied value must never survive.
+    proxy_set_header X-Forwarded-For $remote_addr;
   }
 }
 ```
@@ -199,8 +206,8 @@ local, and Tailscale terminates the publicly trusted certificate):
 tailscale serve --bg --https=443 http://127.0.0.1:7331
 
 # Public funnel, if the operator explicitly wants internet reachability.
-# Keep the bearer token, keep the auth throttle, and expect token-guessing
-# attempts in the logs.
+# Keep the bearer token and the auth throttle; Tailscale supplies
+# X-Forwarded-For and the console trusts it because the peer is loopback.
 tailscale funnel --bg --https=8443 http://127.0.0.1:7331
 ```
 
@@ -269,7 +276,7 @@ not a factory execution: it creates no sandbox and changes no run evidence.
 
 1. Generate a 32+ character token in a 0600 file; never reuse a password.
 2. Provision a certificate for the exact hostname (or terminate TLS in a
-   reverse proxy); keep the key 0600.
+   reverse proxy); keep the key 0600 (no group/other access).
 3. Bind the console to loopback. If a reverse proxy runs on another host, use
    Tailscale/WireGuard or a TLS tunnel rather than exposing the port directly.
 4. Restrict egress/ingress to the console port to operators; keep SSO at the

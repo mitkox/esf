@@ -75,3 +75,28 @@ func TestParseConsoleRefresh(t *testing.T) {
 		t.Fatalf("expected an error for a sub-second --refresh value")
 	}
 }
+
+func TestResolveConsoleTLSFlags(t *testing.T) {
+	t.Setenv("FACTORY_CONSOLE_TLS_CERT_FILE", " /env/console.crt ")
+	t.Setenv("FACTORY_CONSOLE_TLS_KEY_FILE", " /env/console.key ")
+
+	cert, key := resolveConsoleTLSFlags("", "")
+	if cert != "/env/console.crt" || key != "/env/console.key" {
+		t.Fatalf("environment defaults = %q, %q", cert, key)
+	}
+	cert, key = resolveConsoleTLSFlags("/flag/console.crt", "")
+	if cert != "/flag/console.crt" || key != "/env/console.key" {
+		t.Fatalf("flag precedence = %q, %q", cert, key)
+	}
+	cert, key = resolveConsoleTLSFlags("", "/flag/console.key")
+	if cert != "/env/console.crt" || key != "/flag/console.key" {
+		t.Fatalf("mixed precedence = %q, %q", cert, key)
+	}
+
+	t.Setenv("FACTORY_CONSOLE_TLS_CERT_FILE", "/env/console.crt")
+	t.Setenv("FACTORY_CONSOLE_TLS_KEY_FILE", "")
+	cert, key = resolveConsoleTLSFlags("", "")
+	if cert != "/env/console.crt" || key != "" {
+		t.Fatalf("half-configured TLS = %q, %q", cert, key)
+	}
+}

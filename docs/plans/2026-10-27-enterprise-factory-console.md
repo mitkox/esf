@@ -252,8 +252,10 @@ Design decisions that matter:
 - Production access is TLS-first: native HTTPS (`--tls-cert-file`/
   `--tls-key-file`, TLS 1.2 floor, HTTP/2, HSTS, world-readable-key refusal) or
   a terminating reverse proxy documented for nginx and Tailscale. Failed bearer
-  attempts are throttled per client (10 in 5 minutes, one-minute lockout) so a
-  publicly reachable console cannot be token-guessed indefinitely.
+  attempts are throttled per client (10 in 5 minutes, one-minute lockout;
+  X-Forwarded-For trusted only from a loopback proxy, with a bounded client
+  table and overflow bucket) so a publicly reachable console cannot be
+  token-guessed indefinitely or have its throttle state grown without limit.
 
 Local verification evidence (2026-10-27):
 

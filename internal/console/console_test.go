@@ -158,7 +158,7 @@ func newTestServer(t *testing.T, root string, clock *testClock, mutate func(*Con
 		ReadToken:   testToken,
 		Environment: "test",
 		Live:        false,
-		Version:     "0.6.2-test",
+		Version:     "0.7.0-test",
 		Now:         clock.Now,
 		Static: fstest.MapFS{
 			"index.html": &fstest.MapFile{Data: []byte("<!doctype html><html><body>console</body></html>")},

@@ -49,8 +49,11 @@ func loadTLSConfig(certFile, keyFile string) (*tls.Config, error) {
 	if !keyInfo.Mode().IsRegular() {
 		return nil, errors.New("console: TLS private key file must be a regular file")
 	}
-	if keyInfo.Mode().Perm()&0o007 != 0 {
-		return nil, fmt.Errorf("console: TLS private key %s is world-accessible (%04o); chmod 600 it", keyFile, keyInfo.Mode().Perm())
+	if keyInfo.Mode().Perm()&0o077 != 0 {
+		return nil, fmt.Errorf("console: TLS private key %s is readable outside its owner (%04o); chmod 600 it", keyFile, keyInfo.Mode().Perm())
+	}
+	if keyInfo.Size() == 0 || keyInfo.Size() > 1<<20 {
+		return nil, errors.New("console: TLS private key file is empty or unreasonably large")
 	}
 
 	pair, err := tls.LoadX509KeyPair(certFile, keyFile)

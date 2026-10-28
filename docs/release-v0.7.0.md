@@ -16,8 +16,10 @@ schema or the durable evidence layout.
   HSTS, and refusal of world-readable private keys. The console remains
   loopback-only by default and supports a TLS reverse proxy instead.
 - Brute-force protection: failed bearer attempts are throttled per client
-  (10 failures / 5 minutes, one-minute lockout) so an exposed console cannot be
-  token-guessed indefinitely.
+  (10 failures / 5 minutes, one-minute lockout; bounded client table with a
+  shared overflow bucket). X-Forwarded-For is honoured only from loopback
+  proxies, so a direct client cannot rotate the key by forging the header, and
+  unauthenticated traffic cannot grow the throttle without limit.
 - Evidence index, overview, runs, changes, review queue, security aggregate,
   operations and redacted configuration views; optional bounded live Temporal
   and CubeSandbox reads; gzip responses.

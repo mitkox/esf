@@ -45,8 +45,7 @@ work build on the
 [latest component refresh record](release/qualification/component-upgrade-2026-10-27.md).
 Production qualification requires a matching, attested companion manifest for
 its exact source and asset digests. The
-[release procedure](docs/release-v0.7.0.md) and
-[review record](docs/review-v0.6.0.md) track the remaining gates.
+[release procedure](docs/release-v0.7.0.md) tracks the remaining gates.
 
 > **Upgrading:** the factory now refuses to start when an egress policy leaves
 > public internet possible unless you set `hardening.acknowledge_open_egress =

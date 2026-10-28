@@ -16,8 +16,14 @@ const (
 	authFailureWindow = 5 * time.Minute
 	// authBlockDuration is the temporary lockout after too many failures.
 	authBlockDuration = time.Minute
-	// authMaxTrackedClients bounds the throttle's memory footprint.
+	// authMaxTrackedClients bounds the throttle's memory footprint. Once the
+	// table is full, new clients share an overflow bucket instead of inserting
+	// unbounded state.
 	authMaxTrackedClients = 4096
+	// authOverflowKey is the shared bucket for clients that arrive while the
+	// table is full. It still throttles them; it simply cannot identify them
+	// individually.
+	authOverflowKey = "__overflow__"
 )
 
 // authThrottle is a small, dependency-free per-client failure limiter in front
@@ -29,6 +35,7 @@ type authThrottle struct {
 	failures    map[string]*authFailure
 	now         func() time.Time
 	maxFailures int
+	maxTracked  int
 	window      time.Duration
 	cooldown    time.Duration
 }
@@ -47,6 +54,7 @@ func newAuthThrottle(now func() time.Time) *authThrottle {
 		failures:    map[string]*authFailure{},
 		now:         now,
 		maxFailures: authMaxFailures,
+		maxTracked:  authMaxTrackedClients,
 		window:      authFailureWindow,
 		cooldown:    authBlockDuration,
 	}
@@ -57,8 +65,8 @@ func newAuthThrottle(now func() time.Time) *authThrottle {
 func (t *authThrottle) allow(client string) (bool, time.Duration) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.pruneLocked()
-	state, ok := t.failures[client]
+	bucket := t.bucketLocked(client)
+	state, ok := t.failures[bucket]
 	if !ok {
 		return true, 0
 	}
@@ -67,7 +75,7 @@ func (t *authThrottle) allow(client string) (bool, time.Duration) {
 		return false, state.blockedUntil.Sub(now)
 	}
 	if !state.first.IsZero() && now.Sub(state.first) > t.window {
-		delete(t.failures, client)
+		delete(t.failures, bucket)
 	}
 	return true, 0
 }
@@ -76,11 +84,12 @@ func (t *authThrottle) allow(client string) (bool, time.Duration) {
 func (t *authThrottle) fail(client string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	bucket := t.bucketLocked(client)
 	now := t.now()
-	state, ok := t.failures[client]
+	state, ok := t.failures[bucket]
 	if !ok || (!state.first.IsZero() && now.Sub(state.first) > t.window) {
 		state = &authFailure{first: now}
-		t.failures[client] = state
+		t.failures[bucket] = state
 	}
 	state.count++
 	if state.count >= t.maxFailures {
@@ -95,13 +104,27 @@ func (t *authThrottle) reset(client string) {
 	delete(t.failures, client)
 }
 
-func (t *authThrottle) pruneLocked() {
-	if len(t.failures) < authMaxTrackedClients {
-		return
+// bucketLocked maps a client to the bucket that tracks it. Existing clients
+// keep their own bucket; once the table is full, new clients are aggregated
+// into a shared overflow bucket so the table cannot grow without bound.
+func (t *authThrottle) bucketLocked(client string) string {
+	if _, ok := t.failures[client]; ok {
+		return client
 	}
+	if len(t.failures) < t.maxTracked {
+		return client
+	}
+	t.pruneLocked()
+	if len(t.failures) < t.maxTracked {
+		return client
+	}
+	return authOverflowKey
+}
+
+func (t *authThrottle) pruneLocked() {
 	now := t.now()
 	for client, state := range t.failures {
-		if now.After(state.blockedUntil) && now.Sub(state.first) > t.window {
+		if now.Sub(state.first) > t.window && !now.Before(state.blockedUntil) {
 			delete(t.failures, client)
 		}
 	}
@@ -109,25 +132,38 @@ func (t *authThrottle) pruneLocked() {
 
 const maxClientKeyLength = 64
 
-// clientKey derives a bounded throttle key. A trusted reverse proxy (the
-// documented deployment) supplies X-Forwarded-For; otherwise the TCP peer
-// address is used. The header is only a grouping hint, never an authorization
-// input, and is bounded so it cannot grow the throttle's memory.
+// clientKey derives a bounded throttle key.
+//
+// X-Forwarded-For is honoured only when the TCP peer is loopback, i.e. when a
+// local reverse proxy (the documented nginx/Tailscale shapes) is the one
+// talking to the console. A direct or non-loopback client cannot rotate the
+// key by forging the header; it is keyed by its TCP peer address. The key is
+// length-bounded so a long header cannot grow the throttle's memory.
 func clientKey(request *http.Request) string {
-	if forwarded := request.Header.Get("X-Forwarded-For"); forwarded != "" {
-		first, _, _ := strings.Cut(forwarded, ",")
-		if key := strings.TrimSpace(first); key != "" {
-			return truncateClientKey(key)
+	host, _, err := net.SplitHostPort(request.RemoteAddr)
+	if err != nil || host == "" {
+		host = request.RemoteAddr
+	}
+	if host == "" {
+		return "unknown"
+	}
+	if isLoopbackHost(host) {
+		if forwarded := request.Header.Get("X-Forwarded-For"); forwarded != "" {
+			first, _, _ := strings.Cut(forwarded, ",")
+			if key := strings.TrimSpace(first); key != "" {
+				return truncateClientKey(key)
+			}
 		}
 	}
-	host, _, err := net.SplitHostPort(request.RemoteAddr)
-	if err == nil && host != "" {
-		return truncateClientKey(host)
+	return truncateClientKey(host)
+}
+
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
 	}
-	if request.RemoteAddr != "" {
-		return truncateClientKey(request.RemoteAddr)
-	}
-	return "unknown"
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func truncateClientKey(key string) string {
