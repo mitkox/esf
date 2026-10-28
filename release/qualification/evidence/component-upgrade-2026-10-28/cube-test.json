@@ -1,0 +1,91 @@
+{
+  "schema": "esf-cube-test/v1",
+  "template": "tpl-acd55ad29bc04f08b1d3db44",
+  "sandbox_id": "45399f5079cf470a86e720ce6c4bd606",
+  "source_sha256": "385740878d363c19b6bd2a12ba4cf3e336d654c4b4ab30b584a440571735c09d",
+  "python_runtime_sha256": "a6f43c94f713382b75f4f1ac62780ead0268e17039c4d1d2bb185ae957b23d7b",
+  "cleanup_verified": true,
+  "remaining_owned": 0,
+  "binaries": [
+    {
+      "binary": "cmd_factory.test",
+      "exit_code": 0
+    },
+    {
+      "binary": "internal_agentharness.test",
+      "exit_code": 0
+    },
+    {
+      "binary": "internal_console.test",
+      "exit_code": 0
+    },
+    {
+      "binary": "internal_factoryartifacts.test",
+      "exit_code": 0
+    },
+    {
+      "binary": "internal_factory.test",
+      "exit_code": 0
+    },
+    {
+      "binary": "internal_harnessprofile.test",
+      "exit_code": 0
+    },
+    {
+      "binary": "internal_inferencebudget.test",
+      "exit_code": 0
+    },
+    {
+      "binary": "internal_notify.test",
+      "exit_code": 0
+    },
+    {
+      "binary": "internal_repository.test",
+      "exit_code": 0
+    },
+    {
+      "binary": "internal_sandbox_cube.test",
+      "exit_code": 0
+    },
+    {
+      "binary": "internal_sandbox.test",
+      "exit_code": 0
+    },
+    {
+      "binary": "internal_threatmon.test",
+      "exit_code": 0
+    },
+    {
+      "binary": "internal_turnexec.test",
+      "exit_code": 0
+    },
+    {
+      "binary": "internal_verification.test",
+      "exit_code": 0
+    }
+  ],
+  "checks": [
+    {
+      "argv": [
+        "/workspace/python-runtime/bin/python3.12",
+        "scripts/verify-release-inventory.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "/workspace/python-runtime/bin/python3.12",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_*.py"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "all_exit_zero": true,
+  "note": "14 test binaries, 689 tests passed; release inventory and qualification unittest checks passed inside Cube"
+}

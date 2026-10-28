@@ -1,6 +1,6 @@
 [project]
 name = "esf-optional-tools"
-version = "0.7.0"
+version = "0.7.1"
 requires-python = ">=3.11,<3.16"
 dependencies = ["esf-intake", "esf-brief-lab"]
 

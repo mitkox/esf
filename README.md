@@ -40,12 +40,12 @@ factory is now the only product surface. See [upstream history](docs/upstream.md
 This is actively developed software. Review the [validated behavior and
 operational requirements](docs/production-readiness.md) before deployment.
 ESF produces changes for review; it does not decide what ships.
-ESF 0.7.0 is a release candidate. The enterprise console and production-TLS
+ESF 0.7.1 is a release candidate. The enterprise console and production-TLS
 work build on the
 [latest component refresh record](release/qualification/component-upgrade-2026-10-27.md).
 Production qualification requires a matching, attested companion manifest for
 its exact source and asset digests. The
-[release procedure](docs/release-v0.7.0.md) tracks the remaining gates.
+[release procedure](docs/release-v0.7.1.md) tracks the remaining gates.
 
 > **Upgrading:** the factory now refuses to start when an egress policy leaves
 > public internet possible unless you set `hardening.acknowledge_open_egress =
@@ -54,7 +54,7 @@ its exact source and asset digests. The
 
 ## Quick start
 
-Requirements for v0.7.0 development: Go 1.27.3, Node.js 26.12.1 (console, agent
+Requirements for v0.7.1 development: Go 1.27.3, Node.js 26.12.1 (console, agent
 and Pi packaging), Git, an existing CubeSandbox deployment with a READY
 template, and Temporal. Python tools use the frozen `uv.lock`; they are
 optional. Docker Compose can run the included local Temporal stack.

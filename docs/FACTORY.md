@@ -59,7 +59,7 @@ An agent saying it succeeded is never enough.
 | Go | `go 1.27.3` (auto-downloaded by `GOTOOLCHAIN=auto`) |
 | Docker + Compose | For Temporal and PostgreSQL only |
 | Git | For repository preparation inside sandboxes |
-| A coding agent | `opencode2` with pinned `@opencode/cli` v2.1.4; **a model credential is required** (see below) |
+| A coding agent | `opencode2` with pinned `@opencode/cli` v2.2.0; **a model credential is required** (see below) |
 
 ## Setup
 

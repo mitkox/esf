@@ -10,7 +10,7 @@ SHELL := /bin/bash
 GO ?= go
 UV ?= uv
 PYTHON_VERSION ?= 3.15.2
-ESF_VERSION ?= 0.7.0
+ESF_VERSION ?= 0.7.1
 ESF_COMMIT := $(shell git rev-parse HEAD)
 
 BIN_DIR    := bin

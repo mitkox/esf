@@ -176,7 +176,7 @@ verification and sandbox cleanup. Pi remains an opt-in candidate pending the
 HTTPS CubeEgress, failure, review, and recovery acceptance matrix described
 above. See [the component upgrade evidence](../release/qualification/component-upgrade-2026-10-06.md).
 
-The 0.7.0 candidate retains the 0.6.2 updates to Pi Durable, Pi AI, and Chord
+The 0.7.1 candidate retains the 0.6.2 updates to Pi Durable, Pi AI, and Chord
 1.4.0 and Node 26.12.1. Its rebuilt bundle and exported catalog passed the runner regressions
 in Cube. Earlier model-backed results apply to their recorded versions;
 model-backed and HTTPS credential-injection acceptance must be repeated for
