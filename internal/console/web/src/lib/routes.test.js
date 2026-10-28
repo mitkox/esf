@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { activeNavItem, hrefFor, NAV_GROUPS, routeFromHash } from "./routes.js";
+import { activeNavItem, hrefFor, NAV_GROUPS, routeFromHash } from "../routes.js";
 
 test("routeFromHash resolves every top-level view", () => {
   for (const view of ["overview", "dispatch", "runs", "changes", "reviews", "security", "operations", "settings"]) {
