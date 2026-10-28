@@ -1,4 +1,4 @@
-# ESF v0.6.2 Cube template recipe. Qualification is recorded separately.
+# ESF v0.7.0 Cube template recipe. Qualification is recorded separately.
 ARG NODE_BASE=docker.io/library/node@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec
 ARG DEBIAN_BASE=docker.io/library/debian@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
 ARG CUBE_BASE=ghcr.io/tencentcloud/cubesandbox-base@sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472

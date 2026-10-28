@@ -6,6 +6,7 @@ Start with the [factory overview](FACTORY.md), then use the
 ## Operating
 
 - [Factory architecture](FACTORY.md)
+- [Factory console](console.md) — read-only dashboard, TLS and exposure model
 - [Operator guide](operator-guide.md)
 - [Production deployment](production-deployment.md)
 - [Production readiness review](production-readiness.md)
@@ -33,7 +34,7 @@ Start with the [factory overview](FACTORY.md), then use the
 
 ## Releases
 
-- [ESF 0.6.2 release procedure](release-v0.6.2.md) (current candidate)
-- Historical: [0.6.1](release-v0.6.1.md), [0.6.0](release-v0.6.0.md),
-  [0.5.0](release-v0.5.0.md)
+- [ESF 0.7.0 release procedure](release-v0.7.0.md) (current candidate)
+- Historical: [0.6.2](release-v0.6.2.md), [0.6.1](release-v0.6.1.md),
+  [0.6.0](release-v0.6.0.md), [0.5.0](release-v0.5.0.md)
 - [0.6.0 review record](review-v0.6.0.md)

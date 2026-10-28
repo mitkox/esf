@@ -1,5 +1,5 @@
 {
-  "release": "v0.6.2",
+  "release": "v0.7.0",
   "release_profile": "binary-preview",
   "qualification_mode": "companion-manifest",
   "baseline": "ba829056ab728b8e002dddcb702edc0be5b19a1d",
@@ -79,7 +79,7 @@
     "postgresql": null
   },
   "templates": {
-    "recipe_sha256": "abd9b5792d297e35f0c04fcdaceed3b81f8eb62eb57c2a0573a5f567f32dac2c",
+    "recipe_sha256": "9c9ce786639dac0ea2c0a81ac10b00b034e9921a532b8e220a9c08740558bf37",
     "architecture": "linux/amd64",
     "git_package": null,
     "ca_certificates_package": null,

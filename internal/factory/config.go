@@ -18,7 +18,7 @@ import (
 
 // Version is the factory implementation version recorded in every run
 // manifest. It is what makes "which factory produced this patch?" answerable.
-var Version = "0.6.2"
+var Version = "0.7.0"
 
 // ConfigSchemaVersion changes only when the operator configuration format changes.
 const ConfigSchemaVersion = 1

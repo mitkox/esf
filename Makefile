@@ -10,7 +10,7 @@ SHELL := /bin/bash
 GO ?= go
 UV ?= uv
 PYTHON_VERSION ?= 3.15.2
-ESF_VERSION ?= 0.6.2
+ESF_VERSION ?= 0.7.0
 ESF_COMMIT := $(shell git rev-parse HEAD)
 
 BIN_DIR    := bin
@@ -21,6 +21,7 @@ COMPOSE    := docker compose --project-directory $(TEMPORAL_DIR)
 # Set Cube connection variables in your environment for live integration work.
 # A separately installed agent path is needed only by the legacy spike target.
 OPENCODE_BINARY ?= /opt/esf/agents/opencode2
+CONSOLE_WEB ?= internal/console/web
 
 .PHONY: help
 help: ## Show this help
@@ -38,9 +39,22 @@ build: ## Build the factory and discovery binaries into ./bin
 	@echo "built: $(FACTORY) $(BIN_DIR)/cube-smoke $(BIN_DIR)/cube-netprobe $(BIN_DIR)/cube-agent-spike"
 
 .PHONY: test
-test: ## Run Go, optional Python, and Temporal schema unit tests
+test: ## Run Go, console frontend, optional Python, and Temporal schema tests
 	$(GO) test ./... -count=1
-	$(MAKE) test-python test-temporal-schema
+	$(MAKE) test-console test-python test-temporal-schema
+
+.PHONY: console-frontend console-build test-console console-dev
+console-frontend: ## Install the frozen console frontend dependencies and build the embedded SPA
+	cd $(CONSOLE_WEB) && npm ci && npm run build
+
+test-console: ## Run console frontend unit tests against the frozen lockfile
+	cd $(CONSOLE_WEB) && npm ci && npm test
+
+console-build: ## Build the factory binary with the embedded console
+	$(MAKE) console-frontend build
+
+console-dev: ## Run the console SPA dev server against a loopback factory console
+	cd $(CONSOLE_WEB) && npm run dev
 
 .PHONY: test-temporal-schema
 test-temporal-schema: ## Check schema initialization and restored-database safety
