@@ -11,6 +11,10 @@ __pycache__/
 /agents/opencode/node_modules/
 /agents/pi/node_modules/
 
+# Factory console frontend dependencies and caches; dist/ is tracked.
+/internal/console/web/node_modules/
+/internal/console/web/.npm-cache/
+
 # Local agent/operator files: keep them out of the repository (AGENTS.md).
 /.rtk/
 /AGENTS.md

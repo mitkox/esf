@@ -26,9 +26,27 @@ jobs:
         with:
           node-version: 26.12.1
           cache: npm
-          cache-dependency-path: agents/pi/package-lock.json
+          cache-dependency-path: |
+            agents/pi/package-lock.json
+            internal/console/web/package-lock.json
       - name: Test issue triage
         run: node --test .github/scripts/issue-triage.test.cjs
+      - name: Install console dependencies
+        working-directory: internal/console/web
+        run: npm ci
+      - name: Test console frontend
+        working-directory: internal/console/web
+        run: npm test
+      - name: Build console frontend
+        working-directory: internal/console/web
+        run: npm run build
+      - name: Check tracked console dist is current
+        run: |
+          git diff --exit-code -- internal/console/web/dist
+          test -z "$(git status --porcelain --untracked-files=all -- internal/console/web/dist)"
+      - name: Audit console npm graph
+        working-directory: internal/console/web
+        run: npm audit --audit-level=high --package-lock-only
       - name: Confirm toolchain
         run: test "$(go env GOVERSION)" = "go1.27.3"
       - name: Scan source for secrets

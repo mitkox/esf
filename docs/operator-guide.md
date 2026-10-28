@@ -217,6 +217,26 @@ cat $R/changes.patch
 `not measured` / `not scanned` when a control is disabled, so a clean run is
 distinguishable from an unmonitored one.
 
+## 5b. Factory console (read-only dashboard)
+
+`factory console` serves an embedded, read-only dashboard over the durable
+evidence: overview, dispatch command composer, runs and patches, changes,
+review queue, security, operations and redacted settings. It never submits a
+run, approves a review or cancels a workflow.
+
+```sh
+make console-build
+openssl rand -hex 32 > ~/.config/esf/console.token && chmod 600 ~/.config/esf/console.token
+./bin/factory console --read-token-file ~/.config/esf/console.token \
+  --tls-cert-file ~/.config/esf/tls/console.crt \
+  --tls-key-file ~/.config/esf/tls/console.key
+```
+
+The listener is loopback-only by default; non-loopback binds require the read
+token. Native TLS enforces a TLS 1.2 floor and HSTS, refuses a world-readable
+key, and throttles repeated failed bearer attempts. A reverse proxy (nginx or
+Tailscale serve/funnel) works too. See the [console guide](console.md).
+
 ## 6. Cancelling a run
 
 ```bash

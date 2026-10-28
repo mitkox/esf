@@ -1,10 +1,10 @@
 # Deploying the factory worker
 
-The 0.6.2 candidate requires an attested companion qualification manifest for
+The 0.7.0 candidate requires an attested companion qualification manifest for
 the exact source and built assets before production use. This guide describes
 the deployment configuration; it does not qualify a deployment. Complete the
 live, security, backup, restore, migration, load and soak checks in the
-[release procedure](release-v0.6.2.md). Input versions remain recorded in the
+[release procedure](release-v0.7.0.md). Input versions remain recorded in the
 [release inventory](../release/inventory.json).
 
 The target deployment uses an operator-managed Temporal cluster, CubeSandbox,
@@ -314,7 +314,11 @@ upgrading a host or cluster that still runs them:
 5. Install the factory archive only. `ESF_COMPONENT=machinist|combined` fails
    with guidance.
 
-The console's read-only factory evidence view has no replacement; use
-`factory describe`, `status --watch`, `logs` and `get changes`, or Temporal's UI
-for workflow state. See [the 0.6.2 release notes](release-v0.6.2.md) and
+The Machinist control plane is gone, but the read-only operator console is not:
+`factory console` serves the enterprise dashboard over the same durable
+evidence (and optional bounded live Temporal/Cube reads). Keep it on loopback
+behind TLS, or let a reverse proxy terminate TLS; see the
+[console guide](console.md). CLI-first operators can continue to use
+`factory describe`, `status --watch`, `logs` and `get changes`. See
+[the 0.7.0 release notes](release-v0.7.0.md) and
 [ADR 0008](adr/0008-remove-machinist.md).

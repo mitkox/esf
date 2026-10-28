@@ -1,0 +1,380 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-security: var(--security);
+  --color-info: var(--info);
+  --color-ring: var(--ring);
+
+  --radius-panel: 0.875rem;
+  --shadow-panel: 0 1px 0 rgb(255 255 255 / 0.03), 0 18px 40px -24px rgb(0 0 0 / 0.7);
+}
+
+:root {
+  color-scheme: light;
+  --background: #f3f5f9;
+  --foreground: #0d1520;
+  --surface: #ffffff;
+  --surface-raised: #f8fafc;
+  --surface-overlay: #ffffff;
+  --muted: #edf1f7;
+  --muted-foreground: #5c6b80;
+  --border: #dde4ee;
+  --border-strong: #c6d1e0;
+  --primary: #3355d1;
+  --primary-foreground: #f7f9ff;
+  --accent: #0f766e;
+  --success: #067a55;
+  --warning: #a16207;
+  --danger: #be123c;
+  --security: #6d28d9;
+  --info: #0369a1;
+  --ring: #3355d1;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #070a10;
+  --foreground: #e7eef8;
+  --surface: #0c1119;
+  --surface-raised: #111827;
+  --surface-overlay: #151d2b;
+  --muted: #16202e;
+  --muted-foreground: #8d9bb0;
+  --border: #1e2938;
+  --border-strong: #2c3a50;
+  --primary: #7c9cff;
+  --primary-foreground: #071022;
+  --accent: #5eead4;
+  --success: #34d399;
+  --warning: #f5b84b;
+  --danger: #fb7185;
+  --security: #a78bfa;
+  --info: #38bdf8;
+  --ring: #7c9cff;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  background: var(--background);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.78em;
+  letter-spacing: -0.01em;
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent) transparent;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scroll-thin::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--muted) 85%, transparent);
+}
+
+.skeleton::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--foreground) 6%, transparent), transparent);
+  content: "";
+  animation: skeleton-sweep 1.6s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ===========================================================================
+   Console design system additions
+   ---------------------------------------------------------------------------
+   The token block above stays authoritative. Everything below only adds
+   layout chrome, density helpers and layered component classes. Component
+   classes live in @layer components so ordinary Tailwind utilities passed by
+   screens always win over a primitive's default styling.
+   =========================================================================== */
+
+@theme inline {
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1.0625rem;
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: 0.9375rem;
+
+  --shadow-popover: 0 2px 8px -3px rgb(0 0 0 / 0.28), 0 20px 48px -24px rgb(0 0 0 / 0.55);
+}
+
+:root {
+  --sidebar-width: 248px;
+  --topbar-height: 56px;
+  --content-max: 1600px;
+}
+
+@layer components {
+  /* Content frame. Screens own their own horizontal padding; the shell only
+     caps the reading width so a 4K display does not stretch evidence tables. */
+  .content-shell {
+    width: 100%;
+    max-width: var(--content-max);
+    margin-inline: auto;
+  }
+
+  /* Sticky top bar / drawer chrome: a tinted, blurred hairline surface. */
+  .chrome-blur {
+    background-color: color-mix(in srgb, var(--background) 84%, transparent);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    backdrop-filter: blur(16px) saturate(160%);
+  }
+
+  /* Restrained hero glow used once per surface (login, app frame). */
+  .glow-top {
+    background: radial-gradient(
+      58% 120% at 50% 0%,
+      color-mix(in srgb, var(--primary) 9%, transparent) 0%,
+      transparent 72%
+    );
+  }
+
+  .skip-link {
+    position: fixed;
+    left: 0.75rem;
+    top: 0.75rem;
+    z-index: 120;
+    transform: translateY(-200%);
+    border-radius: 0.6rem;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-overlay);
+    color: var(--foreground);
+    padding: 0.45rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    box-shadow: var(--shadow-popover);
+    transition: transform 120ms ease;
+  }
+
+  .skip-link:focus-visible {
+    transform: translateY(0);
+  }
+
+  .kbd {
+    display: inline-flex;
+    min-width: 1.35rem;
+    height: 1.3rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.375rem;
+    border: 1px solid var(--border);
+    border-bottom-color: var(--border-strong);
+    background: var(--surface-raised);
+    padding-inline: 0.3125rem;
+    color: var(--muted-foreground);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.02em;
+  }
+
+  .eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 650;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+
+  .grid-12 {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  /* Functional graph paper for chart containers; intentionally almost invisible. */
+  .chart-grid {
+    background-image:
+      linear-gradient(to right, color-mix(in srgb, var(--border) 48%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in srgb, var(--border) 48%, transparent) 1px, transparent 1px);
+    background-size: 2rem 2rem;
+    background-position: center;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Lightweight CSS tooltip used by Hint and icon-only controls. */
+  .hint {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .hint-tip {
+    pointer-events: none;
+    position: absolute;
+    z-index: 80;
+    width: max-content;
+    max-width: 15rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-overlay);
+    color: var(--foreground);
+    padding: 0.35rem 0.55rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1.35;
+    box-shadow: var(--shadow-popover);
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 120ms ease,
+      visibility 120ms ease;
+  }
+
+  .hint:hover .hint-tip,
+  .hint:focus-within .hint-tip {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  /* Shared overlay motion. Durations are neutralised by prefers-reduced-motion. */
+  .dialog-overlay {
+    animation: esf-fade-in 140ms ease-out;
+  }
+
+  .dialog-panel {
+    animation: esf-pop-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .toast-enter {
+    animation: esf-toast-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes esf-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes esf-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes esf-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
