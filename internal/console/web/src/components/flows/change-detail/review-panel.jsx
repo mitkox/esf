@@ -78,15 +78,23 @@ export function ReviewPanel({ change, review, latestRun }) {
           </p>
         )}
 
-        <div className="space-y-1.5">
-          <CommandRow label="Approve" command={review?.approve_command} tone="success" />
-          <CommandRow
-            label="Reject"
-            command={review?.reject_command}
-            tone="danger"
-            hint={pending ? "Replace the … placeholder with a decision note." : undefined}
-          />
-        </div>
+        {review?.actionable === false ? (
+          <p className="rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
+            <span className="font-semibold text-foreground">No live review gate.</span>{" "}
+            {review?.note ||
+              "The activation has finished and no workflow is paused, so the CLI review signal has nothing to answer."}
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            <CommandRow label="Approve" command={review?.approve_command} tone="success" />
+            <CommandRow
+              label="Reject"
+              command={review?.reject_command}
+              tone="danger"
+              hint={pending ? "Replace the … placeholder with a decision note." : undefined}
+            />
+          </div>
+        )}
 
         {latestNote ? (
           <div className="rounded-lg border border-border bg-surface-raised/40 px-2.5 py-2">

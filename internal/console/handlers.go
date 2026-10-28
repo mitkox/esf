@@ -823,11 +823,25 @@ func (s *Server) handleChangeDetail(response http.ResponseWriter, request *http.
 	}
 	summary.HasEvidence = len(summaries) > 0
 
+	livePaused := false
+	if live := s.live.openRuns(request.Context()); live.Available {
+		for _, run := range live.Runs {
+			if run.RunID == change.LastRunID && run.State == string(factory.StatePaused) {
+				livePaused = true
+				break
+			}
+		}
+	}
 	review := ReviewContext{
-		GlobalEnabled:  s.cfg.Factory.Review.Enabled,
-		Pending:        change.Status == factory.ChangeInReview,
-		ApproveCommand: "factory review " + change.LastRunID + " --approve",
-		RejectCommand:  "factory review " + change.LastRunID + " --reject --note \"…\"",
+		GlobalEnabled: s.cfg.Factory.Review.Enabled,
+		Pending:       change.Status == factory.ChangeInReview,
+		Actionable:    change.Status == factory.ChangeInReview && livePaused,
+	}
+	if review.Actionable {
+		review.ApproveCommand = "factory review " + change.LastRunID + " --approve"
+		review.RejectCommand = "factory review " + change.LastRunID + " --reject --note \"…\""
+	} else if review.Pending {
+		review.Note = "This is a durable post-run review record: its activation has finished and no live workflow is paused, so there is no review gate to signal. Inspect the evidence here and manage the change through the factory CLI resources."
 	}
 	// Effective configuration applies request > scope > global precedence.
 	configured := review.GlobalEnabled
@@ -877,11 +891,16 @@ func (s *Server) handleReviews(response http.ResponseWriter, request *http.Reque
 		}
 		pendingReview++
 		item := ReviewItem{
-			Kind:           "in_review",
-			WaitingSince:   change.UpdatedAt.UTC(),
-			WaitingMS:      millis(now.Sub(change.UpdatedAt)),
-			ApproveCommand: "factory review " + change.LastRunID + " --approve",
-			RejectCommand:  "factory review " + change.LastRunID + " --reject --note \"…\"",
+			Kind:         "in_review",
+			WaitingSince: change.UpdatedAt.UTC(),
+			WaitingMS:    millis(now.Sub(change.UpdatedAt)),
+		}
+		if paused, ok := livePaused[change.LastRunID]; ok && paused.RunID != "" {
+			item.Actionable = true
+			item.ApproveCommand = "factory review " + change.LastRunID + " --approve"
+			item.RejectCommand = "factory review " + change.LastRunID + " --reject --note \"…\""
+		} else {
+			item.Note = "Durable post-run review record: the activation completed and no live workflow is paused, so there is no gate to signal."
 		}
 		summary := summarizeChange(change)
 		item.Change = &summary
@@ -912,7 +931,7 @@ func (s *Server) handleReviews(response http.ResponseWriter, request *http.Reque
 			DurationMS: millis(now.Sub(run.StartedAt)), SandboxID: run.SandboxID,
 		}
 		items = append(items, ReviewItem{
-			Kind: "paused_run", Run: &summary, Live: &liveRun,
+			Kind: "paused_run", Run: &summary, Live: &liveRun, Actionable: true,
 			WaitingSince: run.StartedAt, WaitingMS: millis(now.Sub(run.StartedAt)),
 			ApproveCommand: "factory review " + run.RunID + " --approve",
 			RejectCommand:  "factory review " + run.RunID + " --reject --note \"…\"",

@@ -286,6 +286,8 @@ type ReviewContext struct {
 	Configured     bool   `json:"configured"`
 	GlobalEnabled  bool   `json:"global_enabled"`
 	Pending        bool   `json:"pending"`
+	Actionable     bool   `json:"actionable"`
+	Note           string `json:"note,omitempty"`
 	LatestOutcome  string `json:"latest_outcome,omitempty"`
 	ApproveCommand string `json:"approve_command"`
 	RejectCommand  string `json:"reject_command"`
@@ -328,6 +330,8 @@ type ReviewItem struct {
 	Change         *ChangeSummary        `json:"change,omitempty"`
 	WaitingSince   time.Time             `json:"waiting_since"`
 	WaitingMS      int64                 `json:"waiting_ms"`
+	Actionable     bool                  `json:"actionable"`
+	Note           string                `json:"note,omitempty"`
 	ApproveCommand string                `json:"approve_command"`
 	RejectCommand  string                `json:"reject_command"`
 	Previews       []factory.PreviewLink `json:"previews,omitempty"`

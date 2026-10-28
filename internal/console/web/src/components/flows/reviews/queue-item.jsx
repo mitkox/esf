@@ -166,13 +166,22 @@ export function ReviewQueueItem({ item, isOldest = false }) {
         </div>
 
         <div className="w-full shrink-0 space-y-1.5 border-t border-border pt-3 xl:w-[336px] xl:border-l xl:border-t-0 xl:pl-3 xl:pt-0 2xl:w-[380px]">
-          <CommandRow label="Approve" command={item?.approve_command} tone="success" />
-          <CommandRow
-            label="Reject"
-            command={item?.reject_command}
-            tone="danger"
-            hint={item?.kind === "in_review" ? "Replace the … placeholder with a decision note." : undefined}
-          />
+          {item?.actionable === false ? (
+            <p className="rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              <span className="font-semibold text-foreground">No live gate.</span>{" "}
+              {item?.note || "This durable record has no paused workflow to answer."}
+            </p>
+          ) : (
+            <>
+              <CommandRow label="Approve" command={item?.approve_command} tone="success" />
+              <CommandRow
+                label="Reject"
+                command={item?.reject_command}
+                tone="danger"
+                hint={item?.kind === "in_review" ? "Replace the … placeholder with a decision note." : undefined}
+              />
+            </>
+          )}
         </div>
       </div>
     </Card>
