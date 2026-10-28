@@ -135,7 +135,7 @@ export function RunDetailPage({ runID }) {
     if (!runID) return;
     setDownloading(true);
     try {
-      const text = patch.text || (await api.text(`/runs/${encodeURIComponent(runID)}/patch`));
+      const text = patch.text || (await api.text(`/runs/${encodeURIComponent(runID)}/patch?download=true`));
       downloadText(`${runID}.patch`, text);
       toast({ tone: "success", title: "Patch downloaded", message: `${runID}.patch` });
     } catch (error) {

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mitkox/esf/internal/factory"
 	"github.com/mitkox/esf/internal/threatmon"
@@ -473,8 +474,11 @@ func TestChangesAndReviews(t *testing.T) {
 	if len(detail.Runs) != 1 || detail.Runs[0].RunID != "run-success" {
 		t.Fatalf("change runs = %+v", detail.Runs)
 	}
-	if detail.Review.Pending != true || !strings.Contains(detail.Review.ApproveCommand, "factory review") {
-		t.Fatalf("review context = %+v", detail.Review)
+	if !detail.Review.Pending || detail.Review.Actionable {
+		t.Fatalf("durable review record should be pending but not actionable without a live gate: %+v", detail.Review)
+	}
+	if detail.Review.ApproveCommand != "" || detail.Review.RejectCommand != "" || detail.Review.Note == "" {
+		t.Fatalf("durable review record must withhold commands and explain why: %+v", detail.Review)
 	}
 
 	status, body, _ = request(t, server, http.MethodGet, "/api/v1/console/reviews", testToken)
@@ -488,6 +492,9 @@ func TestChangesAndReviews(t *testing.T) {
 	}
 	if reviews.Items[0].Kind != "in_review" || reviews.Items[0].Change == nil {
 		t.Fatalf("review item = %+v", reviews.Items[0])
+	}
+	if reviews.Items[0].Actionable || reviews.Items[0].Note == "" || reviews.Items[0].ApproveCommand != "" {
+		t.Fatalf("durable review item must not advertise a no-op command: %+v", reviews.Items[0])
 	}
 }
 
@@ -827,6 +834,52 @@ func TestQueryAndFacetBounds(t *testing.T) {
 	status, _, _ = request(t, server, http.MethodGet, "/api/v1/console/runs?window=all&"+states, testToken)
 	if status != http.StatusOK {
 		t.Fatalf("facet flood status = %d", status)
+	}
+}
+
+func TestShellArgQuotesUnsafeRunIDs(t *testing.T) {
+	if got := shellArg("run-safe_1.2"); got != "run-safe_1.2" {
+		t.Fatalf("safe id should stay readable, got %q", got)
+	}
+	unsafe := []string{"id with space", "id;rm -rf /", "id$(id)", "id'quote"}
+	for _, value := range unsafe {
+		got := shellArg(value)
+		if !strings.HasPrefix(got, "'") || !strings.HasSuffix(got, "'") {
+			t.Fatalf("shellArg(%q) = %q, want a single-quoted argument", value, got)
+		}
+	}
+	actions := runActions("demo$(id)")
+	if !strings.Contains(actions.CancelCommand, "'demo$(id)'") {
+		t.Fatalf("cancel command did not quote the run id: %q", actions.CancelCommand)
+	}
+}
+
+func TestArtifactTailStartsAtUTF8Boundary(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "large.log")
+	// Repeated 3-byte runes guarantee that a byte-offset tail starts mid-rune.
+	content := strings.Repeat("€", maxArtifactBytes/3+100)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open log: %v", err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		t.Fatalf("stat log: %v", err)
+	}
+	data, truncated, err := readArtifactContent(file, info.Size())
+	if err != nil {
+		t.Fatalf("readArtifactContent: %v", err)
+	}
+	if !truncated {
+		t.Fatalf("expected a truncated tail")
+	}
+	if !utf8.Valid(data) {
+		t.Fatalf("tail starts inside a rune and is not valid UTF-8")
 	}
 }
 

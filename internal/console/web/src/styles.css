@@ -1,4 +1,8 @@
-@import "tailwindcss";
+/* Scan only the SPA sources. Automatic detection would also scan the tracked
+   dist/ output, making each build depend on the previous build's chunk hashes. */
+@import "tailwindcss" source(none);
+@source "../index.html";
+@source "./**/*.{js,jsx}";
 
 @custom-variant dark (&:where(.dark, .dark *));
 

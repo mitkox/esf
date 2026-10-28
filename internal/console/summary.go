@@ -254,13 +254,27 @@ func summarizeChange(change factory.Change) ChangeSummary {
 // ── Actions (copyable CLI commands) ─────────────────────────────────────────
 
 func runActions(runID string) RunActions {
+	arg := shellArg(runID)
 	return RunActions{
-		ApproveCommand: fmt.Sprintf("factory review %s --approve", runID),
-		RejectCommand:  fmt.Sprintf("factory review %s --reject --note \"…\"", runID),
-		CancelCommand:  fmt.Sprintf("factory cancel %s", runID),
-		Describe:       fmt.Sprintf("factory describe runs %s", runID),
-		Logs:           fmt.Sprintf("factory logs %s", runID),
+		ApproveCommand: fmt.Sprintf("factory review %s --approve", arg),
+		RejectCommand:  fmt.Sprintf("factory review %s --reject --note \"…\"", arg),
+		CancelCommand:  fmt.Sprintf("factory cancel %s", arg),
+		Describe:       fmt.Sprintf("factory describe runs %s", arg),
+		Logs:           fmt.Sprintf("factory logs %s", arg),
 	}
+}
+
+// shellArg renders a value as one literal shell argument. Run IDs are normally
+// safe, but the factory accepts broader identifiers; quoting here keeps a
+// copy-pasted operator command from executing metacharacters.
+func shellArg(value string) string {
+	if value != "" && strings.IndexFunc(value, func(r rune) bool {
+		return !(r == '-' || r == '_' || r == '.' || r == '/' || r == ':' || r == '+' || r == '=' ||
+			(r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'))
+	}) == -1 {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
 // ── Facets ──────────────────────────────────────────────────────────────────

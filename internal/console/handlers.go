@@ -644,6 +644,11 @@ func (s *Server) handleRunPatch(response http.ResponseWriter, request *http.Requ
 		truncated = true
 	}
 	if truncated {
+		if request.URL.Query().Get("download") == "true" {
+			writeError(response, http.StatusRequestEntityTooLarge, "patch_too_large",
+				"The patch exceeds the console preview limit and cannot be downloaded through the console; retrieve the artifact from the factory host.")
+			return
+		}
 		response.Header().Set("X-Console-Truncated", "true")
 	}
 	response.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -714,7 +719,15 @@ func readArtifactContent(file *os.File, size int64) ([]byte, bool, error) {
 			return nil, false, err
 		}
 		data, err := io.ReadAll(io.LimitReader(file, maxArtifactBytes))
-		return data, true, err
+		if err != nil {
+			return nil, false, err
+		}
+		// The tail can start inside a multibyte rune. Skip continuation bytes
+		// so a valid UTF-8 log is not rejected as binary.
+		for len(data) > 0 && !utf8.RuneStart(data[0]) {
+			data = data[1:]
+		}
+		return data, true, nil
 	}
 	data, err := io.ReadAll(io.LimitReader(file, maxArtifactBytes+1))
 	return data, false, err
@@ -838,8 +851,8 @@ func (s *Server) handleChangeDetail(response http.ResponseWriter, request *http.
 		Actionable:    change.Status == factory.ChangeInReview && livePaused,
 	}
 	if review.Actionable {
-		review.ApproveCommand = "factory review " + change.LastRunID + " --approve"
-		review.RejectCommand = "factory review " + change.LastRunID + " --reject --note \"…\""
+		review.ApproveCommand = "factory review " + shellArg(change.LastRunID) + " --approve"
+		review.RejectCommand = "factory review " + shellArg(change.LastRunID) + " --reject --note \"…\""
 	} else if review.Pending {
 		review.Note = "This is a durable post-run review record: its activation has finished and no live workflow is paused, so there is no review gate to signal. Inspect the evidence here and manage the change through the factory CLI resources."
 	}
@@ -897,8 +910,8 @@ func (s *Server) handleReviews(response http.ResponseWriter, request *http.Reque
 		}
 		if paused, ok := livePaused[change.LastRunID]; ok && paused.RunID != "" {
 			item.Actionable = true
-			item.ApproveCommand = "factory review " + change.LastRunID + " --approve"
-			item.RejectCommand = "factory review " + change.LastRunID + " --reject --note \"…\""
+			item.ApproveCommand = "factory review " + shellArg(change.LastRunID) + " --approve"
+			item.RejectCommand = "factory review " + shellArg(change.LastRunID) + " --reject --note \"…\""
 		} else {
 			item.Note = "Durable post-run review record: the activation completed and no live workflow is paused, so there is no gate to signal."
 		}
@@ -933,8 +946,8 @@ func (s *Server) handleReviews(response http.ResponseWriter, request *http.Reque
 		items = append(items, ReviewItem{
 			Kind: "paused_run", Run: &summary, Live: &liveRun, Actionable: true,
 			WaitingSince: run.StartedAt, WaitingMS: millis(now.Sub(run.StartedAt)),
-			ApproveCommand: "factory review " + run.RunID + " --approve",
-			RejectCommand:  "factory review " + run.RunID + " --reject --note \"…\"",
+			ApproveCommand: "factory review " + shellArg(run.RunID) + " --approve",
+			RejectCommand:  "factory review " + shellArg(run.RunID) + " --reject --note \"…\"",
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].WaitingSince.Before(items[j].WaitingSince) })
