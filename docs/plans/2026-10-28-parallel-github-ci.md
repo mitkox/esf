@@ -81,6 +81,7 @@ All runs below are on draft PR #54 and ended with a green `check` gate.
 | [40644784628](https://github.com/mitkox/esf/actions/runs/40644784628) | parallel split, first run | 1m38s | Python 87s (uv cache miss) |
 | same run, rerun | parallel split, warm cache | 1m23s | Python 72s (Docker fallback) |
 | [40645297784](https://github.com/mitkox/esf/actions/runs/40645297784) | + pinned Python 3.15.2 for uv | 1m43s | macOS 91s |
+| [40645594342](https://github.com/mitkox/esf/actions/runs/40645594342) | final: validated, after cancellation test | 72s job execution | macOS 64s |
 
 Observations:
 
@@ -93,11 +94,16 @@ Observations:
   (`make test-python` now 12s).
 - With Python and Go off the tail, the unchanged macOS job is now the critical
   path (60-90s, run-to-run hosted variance included), so end-to-end time
-  approaches the macOS floor. Warm Linux-only wall time was ~1m23s; the
-  slowest observed end-to-end run was 1m43s, still 41% below the 2m54s
-  baseline.
+  approaches the macOS floor. The final run's job execution was 72s
+  (frontend 17s, Python 28s, security 32s, Pi 40s, Go 46s, macOS 64s,
+  `check` 3s) against a 2m54s baseline; its 2m05s run window includes 52s
+  waiting for the concurrency slot freed by the cancelled run.
 - Per-job durations are the stable comparison because GitHub-hosted scheduling
   varies: Linux critical path went 2m44s -> ~50s, Python 66s -> 12s.
+- Superseded-run cancellation is verified: two pushes a few seconds apart left
+  the first run `completed/cancelled` and queued the second. The
+  `cancel-in-progress` expression only cancels `pull_request` runs, so `master`
+  pushes are not cancelled.
 
 ## Rollback
 
