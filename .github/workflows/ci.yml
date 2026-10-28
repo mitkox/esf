@@ -9,11 +9,17 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request supersedes its previous run. Pushes to master
+# are never cancelled so every merged commit keeps a complete result.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  linux:
-    name: Linux checks
+  go:
+    name: Go checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -22,19 +28,56 @@ jobs:
         with:
           go-version: 1.27.3
           cache: true
+      - name: Confirm toolchain
+        run: test "$(go env GOVERSION)" = "go1.27.3"
+      - name: Check Go formatting
+        shell: bash
+        run: |
+          git ls-files -z '*.go' | xargs -0 -r gofmt -l | tee /tmp/unformatted-go-files
+          test ! -s /tmp/unformatted-go-files
+      - name: Run Go vet
+        run: go vet ./...
+      - name: Run Go tests with the race detector
+        run: go test -race ./...
+      - name: Build factory
+        run: |
+          mkdir -p bin
+          go build -trimpath -o bin/factory ./cmd/factory
+          test -x bin/factory
+          test "$(bin/factory version)" != ""
+
+  security:
+    name: Go security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.27.3
+          cache: true
+      - name: Scan source for secrets
+        run: go run github.com/zricethezav/gitleaks/v8@v8.30.1 dir --redact --no-banner .
+      - name: Check Go vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26.12.1
           cache: npm
-          cache-dependency-path: |
-            agents/pi/package-lock.json
-            internal/console/web/package-lock.json
+          cache-dependency-path: internal/console/web/package-lock.json
       - name: Test issue triage
         run: node --test .github/scripts/issue-triage.test.cjs
-      - name: Confirm toolchain
-        run: test "$(go env GOVERSION)" = "go1.27.3"
-      - name: Scan source for secrets
-        run: go run github.com/zricethezav/gitleaks/v8@v8.30.1 dir --redact --no-banner .
       - name: Install console dependencies
         working-directory: internal/console/web
         run: npm ci
@@ -51,14 +94,23 @@ jobs:
       - name: Audit console npm graph
         working-directory: internal/console/web
         run: npm audit --audit-level=high --package-lock-only
-      - name: Check frozen release inventory
-        run: python3 scripts/verify-release-inventory.py
-      - name: Test release qualification boundaries
-        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-      - name: Test Temporal restored-database safety
-        run: sh deployments/dev/temporal/tests/setup-postgres-test.sh
-      - name: Verify Pi candidate inventory
-        run: python3 scripts/verify-pi-inventory.py
+      - name: Audit OpenCode npm graph
+        working-directory: agents/opencode
+        run: npm audit --audit-level=high --package-lock-only
+
+  pi:
+    name: Pi runner checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.12.1
+          cache: npm
+          cache-dependency-path: agents/pi/package-lock.json
       - name: Build and test pinned Pi runner
         working-directory: agents/pi
         run: |
@@ -68,32 +120,34 @@ jobs:
           npm test
           npm audit --audit-level=high
           git diff --exit-code -- dist ../../internal/agentharness/pi-catalog.json
+
+  python:
+    name: Python checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: 0.13.6
+          enable-cache: true
+          cache-python: true
+      - name: Check frozen release inventory
+        run: python3 scripts/verify-release-inventory.py
+      - name: Test release qualification boundaries
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - name: Test Temporal restored-database safety
+        run: sh deployments/dev/temporal/tests/setup-postgres-test.sh
+      - name: Verify Pi candidate inventory
+        run: python3 scripts/verify-pi-inventory.py
       - name: Validate release SBOM
         run: |
           python3 scripts/generate-sbom.py /tmp/esf-ci-sbom.json
           python3 -c 'import json, uuid; b=json.load(open("/tmp/esf-ci-sbom.json")); assert b["bomFormat"] == "CycloneDX" and b["specVersion"] == "1.6" and b["serialNumber"].startswith("urn:uuid:"); uuid.UUID(b["serialNumber"][9:])'
-      - name: Audit OpenCode npm graph
-        working-directory: agents/opencode
-        run: npm audit --audit-level=high --package-lock-only
-      - name: Check Go formatting
-        shell: bash
-        run: |
-          git ls-files -z '*.go' | xargs -0 -r gofmt -l | tee /tmp/unformatted-go-files
-          test ! -s /tmp/unformatted-go-files
-      - name: Run Go vet
-        run: go vet ./...
-      - name: Check Go vulnerabilities
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
-      - name: Run Go tests with the race detector
-        run: go test -race ./...
       - name: Test DSPy intake without credentials
         run: make test-python
-      - name: Build factory
-        run: |
-          mkdir -p bin
-          go build -trimpath -o bin/factory ./cmd/factory
-          test -x bin/factory
-          test "$(bin/factory version)" != ""
 
   macos:
     name: macOS checks
@@ -122,15 +176,27 @@ jobs:
     name: check
     if: always()
     needs:
-      - linux
+      - go
+      - security
+      - frontend
+      - pi
+      - python
       - macos
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Require every platform check
         env:
-          LINUX_RESULT: ${{ needs.linux.result }}
+          GO_RESULT: ${{ needs.go.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          PI_RESULT: ${{ needs.pi.result }}
+          PYTHON_RESULT: ${{ needs.python.result }}
           MACOS_RESULT: ${{ needs.macos.result }}
         run: |
-          test "$LINUX_RESULT" = success
+          test "$GO_RESULT" = success
+          test "$SECURITY_RESULT" = success
+          test "$FRONTEND_RESULT" = success
+          test "$PI_RESULT" = success
+          test "$PYTHON_RESULT" = success
           test "$MACOS_RESULT" = success
