@@ -883,6 +883,24 @@ func TestArtifactTailStartsAtUTF8Boundary(t *testing.T) {
 	}
 }
 
+func TestDetailHrefEncodesIDAsOneSegment(t *testing.T) {
+	cases := map[string]string{
+		"run-123":    "#/runs/run-123",
+		"demo%20run": "#/runs/demo%2520run",
+		"a b":        "#/runs/a%20b",
+		"a#b":        "#/runs/a%23b",
+		"a/b":        "#/runs/a%2Fb",
+	}
+	for id, want := range cases {
+		if got := detailHref("#/runs/", id); got != want {
+			t.Fatalf("detailHref(%q) = %q, want %q", id, got, want)
+		}
+	}
+	if got := detailHref("#/changes/", "demo%20run"); got != "#/changes/demo%2520run" {
+		t.Fatalf("change detail href = %q", got)
+	}
+}
+
 func TestSummarizeRunOmitsZeroTimestamps(t *testing.T) {
 	summary := summarizeRun("run-notime", factory.RunManifest{RunID: "run-notime", FactoryResult: factory.StateInvalidRequest})
 	if summary.StartedAt != nil || summary.CompletedAt != nil {

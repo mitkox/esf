@@ -1008,7 +1008,7 @@ func (s *Server) handleSearch(response http.ResponseWriter, request *http.Reques
 		scoredResults = append(scoredResults, scored{score: score, result: SearchResult{
 			Kind: "run", ID: record.ID, Title: record.ID, Status: string(manifest.FactoryResult),
 			Subtitle: strings.TrimSpace(strings.Join(nonEmpty(manifest.Repository, manifest.AgentHarness, manifest.Scope), " · ")),
-			Href:     "#/runs/" + record.ID,
+			Href:     detailHref("#/runs/", record.ID),
 		}})
 	}
 	for _, record := range orderedChanges {
@@ -1021,7 +1021,7 @@ func (s *Server) handleSearch(response http.ResponseWriter, request *http.Reques
 		scoredResults = append(scoredResults, scored{score: score, result: SearchResult{
 			Kind: "change", ID: change.ChangeID, Title: change.ChangeID, Status: string(change.Status),
 			Subtitle: strings.TrimSpace(strings.Join(nonEmpty(change.Repository, change.Scope, string(change.Status)), " · ")),
-			Href:     "#/changes/" + change.ChangeID,
+			Href:     detailHref("#/changes/", change.ChangeID),
 		}})
 	}
 	sort.SliceStable(scoredResults, func(i, j int) bool {

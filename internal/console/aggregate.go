@@ -3,6 +3,7 @@ package console
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -554,7 +555,7 @@ func (s *Server) buildAttention(windowRuns []*runRecord, changes []*changeRecord
 				ID: "security:" + runID, Kind: "security_stop", Severity: "critical",
 				Title: "Security stop: " + humanRunState(manifest.FactoryResult), Detail: manifest.Repository,
 				RunID: runID, ChangeID: manifest.ChangeID, Repository: manifest.Repository,
-				At: runEventTime(manifest), Href: "#/runs/" + runID,
+				At: runEventTime(manifest), Href: detailHref("#/runs/", runID),
 			})
 		case isFailedState(manifest.FactoryResult):
 			severity := "warning"
@@ -569,7 +570,7 @@ func (s *Server) buildAttention(windowRuns []*runRecord, changes []*changeRecord
 				ID: "failed:" + runID, Kind: "failed_run", Severity: severity,
 				Title: "Run " + humanRunState(manifest.FactoryResult), Detail: detail,
 				RunID: runID, ChangeID: manifest.ChangeID, Repository: manifest.Repository,
-				At: runEventTime(manifest), Href: "#/runs/" + runID,
+				At: runEventTime(manifest), Href: detailHref("#/runs/", runID),
 			})
 		}
 		if len(manifest.BudgetExceeded) > 0 {
@@ -577,7 +578,7 @@ func (s *Server) buildAttention(windowRuns []*runRecord, changes []*changeRecord
 				ID: "budget:" + runID, Kind: "budget_exceeded", Severity: "warning",
 				Title: "Budget ceiling crossed", Detail: strings.Join(manifest.BudgetExceeded, "; "),
 				RunID: runID, ChangeID: manifest.ChangeID, Repository: manifest.Repository,
-				At: runEventTime(manifest), Href: "#/runs/" + runID,
+				At: runEventTime(manifest), Href: detailHref("#/runs/", runID),
 			})
 		}
 		cleanup := manifest.CleanupResult
@@ -662,4 +663,11 @@ func (s *Server) snapshot() ([]*runRecord, []*changeRecord, IndexInfo) {
 		s.log.Warn("console: evidence refresh failed", "error", err)
 	}
 	return s.index.snapshot()
+}
+
+// detailHref builds a frontend hash route with the ID encoded as one path
+// segment, matching the SPA's hrefFor/routeFromHash round-trip. Custom IDs can
+// contain %, # or spaces, which must not change the route.
+func detailHref(prefix, id string) string {
+	return prefix + url.PathEscape(id)
 }
