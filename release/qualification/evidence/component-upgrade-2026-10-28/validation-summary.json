@@ -1,0 +1,92 @@
+{
+  "schema": "esf-validation-summary/v1",
+  "candidate": "v0.7.1",
+  "baseline": "d8009eba4e9834bbd7d0f385d098e669c6670632",
+  "validated_at": "2026-10-28T16:35:00+02:00/2026-10-28T16:45:00+02:00",
+  "checks": {
+    "release_inventory": {
+      "status": "pass",
+      "detail": "scripts/verify-release-inventory.py exit 0"
+    },
+    "pi_inventory": {
+      "status": "pass",
+      "detail": "scripts/verify-pi-inventory.py exit 0"
+    },
+    "go_vet": {
+      "status": "pass"
+    },
+    "gofmt": {
+      "status": "pass",
+      "detail": "no unformatted tracked Go files"
+    },
+    "govulncheck": {
+      "status": "pass",
+      "detail": "No vulnerabilities found (govulncheck v1.9.0)"
+    },
+    "factory_version": {
+      "status": "pass",
+      "detail": "ESF 0.7.1 (d8009eb, go1.27.3)"
+    },
+    "cube_go_tests": {
+      "status": "pass",
+      "detail": "14 binaries / 689 tests / all exit 0 in template tpl-acd55ad29bc04f08b1d3db44",
+      "evidence": "cube-test.json"
+    },
+    "cube_release_checks": {
+      "status": "pass",
+      "detail": "verify-release-inventory.py + scripts/tests unittest inside Cube"
+    },
+    "agents_verify": {
+      "status": "pass",
+      "detail": "six agents: opencode2 87a4d6ac, claude 4f4178ce, codex c06a67fd, unreal d289aa20, pi 5e2a1d72, harness-opt-fix f343b3e1"
+    },
+    "factory_doctor": {
+      "status": "pass",
+      "detail": "all checks passed; warnings: open-egress ack, no alert webhook, require_non_root=false"
+    },
+    "cube_smoke": {
+      "status": "pass",
+      "detail": "template READY, zero sandbox leaks"
+    },
+    "acceptance_conformance": {
+      "status": "pass",
+      "detail": "PHASE 1 ACCEPTANCE TEST PASSED; all gates true; cleanup remaining=0",
+      "evidence": "acceptance.json"
+    },
+    "console_tests": {
+      "status": "pass",
+      "detail": "17/17 npm tests; tracked dist current"
+    },
+    "npm_audits": {
+      "status": "pass",
+      "detail": "console, agents/opencode and agents/pi: 0 vulnerabilities at audit-level=high"
+    },
+    "release_tree_secret_scan": {
+      "status": "pass",
+      "detail": "gitleaks v8.30.1 on the git ls-files release tree: no leaks; the full working-directory command flags only gitignored .factory/ and .rtk/ caches"
+    },
+    "cleanup": {
+      "status": "pass",
+      "detail": "factory sandboxes: none; Cube API health sandboxes:0; template READY"
+    }
+  },
+  "fixed_during_validation": [
+    {
+      "finding": "internal/factory/improvement_canary_test.go hardcoded the pre-2.2.0 OpenCode digest ff170110\u2026",
+      "fix": "updated canary profile digest to 87a4d6ac\u2026 and re-ran the suite green"
+    }
+  ],
+  "remaining_gates": [
+    "vm soak_24h",
+    "kubernetes soak_24h",
+    "performance matrix",
+    "image SBOM/vulnerability qualification",
+    "transitive license review",
+    "hosted-provider acceptance",
+    "production deployment",
+    "restore",
+    "temporal replay",
+    "migration drill"
+  ],
+  "qualification": "local candidate validation only; not production qualification and not human approval"
+}

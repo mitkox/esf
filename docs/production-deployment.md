@@ -1,10 +1,10 @@
 # Deploying the factory worker
 
-The 0.7.0 candidate requires an attested companion qualification manifest for
+The 0.7.1 candidate requires an attested companion qualification manifest for
 the exact source and built assets before production use. This guide describes
 the deployment configuration; it does not qualify a deployment. Complete the
 live, security, backup, restore, migration, load and soak checks in the
-[release procedure](release-v0.7.0.md). Input versions remain recorded in the
+[release procedure](release-v0.7.1.md). Input versions remain recorded in the
 [release inventory](../release/inventory.json).
 
 The target deployment uses an operator-managed Temporal cluster, CubeSandbox,
@@ -320,5 +320,5 @@ evidence (and optional bounded live Temporal/Cube reads). Keep it on loopback
 behind TLS, or let a reverse proxy terminate TLS; see the
 [console guide](console.md). CLI-first operators can continue to use
 `factory describe`, `status --watch`, `logs` and `get changes`. See
-[the 0.7.0 release notes](release-v0.7.0.md) and
+[the 0.7.1 release notes](release-v0.7.1.md) and
 [ADR 0008](adr/0008-remove-machinist.md).

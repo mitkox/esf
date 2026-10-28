@@ -12,7 +12,7 @@
   "dependencies": {
     "@fontsource-variable/manrope": "5.3.0",
     "clsx": "2.1.1",
-    "lucide-react": "1.57.0",
+    "lucide-react": "1.63.0",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
@@ -20,6 +20,6 @@
     "@tailwindcss/vite": "4.3.3",
     "@vitejs/plugin-react": "6.1.2",
     "tailwindcss": "4.3.3",
-    "vite": "8.3.4"
+    "vite": "8.3.5"
   }
 }

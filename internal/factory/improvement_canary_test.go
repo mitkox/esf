@@ -95,7 +95,7 @@ func TestOpenCode2ActuallyLoadsInstructionProfileAndSkill(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer s.Close()
-	p := harnessprofile.Profile{Schema: harnessprofile.Schema, Binding: harnessprofile.Binding{Scope: "default", Repository: "canary", Harness: "opencode2", Model: "fixture/canary", HarnessDigest: "sha256:ff17011078cfe1d2db04f429c65a5bf9dd86e232cc493c7a03730ecc12a000ff", Template: "cube-native-test"}, Upstream: harnessprofile.Upstream, Author: "canary", Components: map[string]string{"systemprompt.md": "ESF_PROFILE_SENTINEL: load the canary skill for this task.", "skills/canary/SKILL.md": "---\nname: canary\ndescription: native profile activation test\n---\nESF_SKILL_SENTINEL_d18c2b9e\n"}}
+	p := harnessprofile.Profile{Schema: harnessprofile.Schema, Binding: harnessprofile.Binding{Scope: "default", Repository: "canary", Harness: "opencode2", Model: "fixture/canary", HarnessDigest: "sha256:87a4d6ac3c1b5691d4fb5e88f473992016b37ede6611c5cb7092fcdb1d91fad0", Template: "cube-native-test"}, Upstream: harnessprofile.Upstream, Author: "canary", Components: map[string]string{"systemprompt.md": "ESF_PROFILE_SENTINEL: load the canary skill for this task.", "skills/canary/SKILL.md": "---\nname: canary\ndescription: native profile activation test\n---\nESF_SKILL_SENTINEL_d18c2b9e\n"}}
 	d, e := s.Put(p)
 	if e != nil {
 		t.Fatal(e)

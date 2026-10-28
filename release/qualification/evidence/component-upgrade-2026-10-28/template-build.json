@@ -1,0 +1,79 @@
+{
+  "schema": "esf-template-build/v1",
+  "baseline": "d8009eba4e9834bbd7d0f385d098e669c6670632",
+  "recipe_sha256": "a6e1ff689f30c8938a38d3019e16dd2aad5e1888f5be13dba3768f55b7ab9c2c",
+  "template_id": "tpl-acd55ad29bc04f08b1d3db44",
+  "alias": "esf-v071-native-20261028",
+  "status": "READY",
+  "image": "localhost:32000/esf-native@sha256:64c54a3ef330f8e179c7b417fa4d5df78d0802afcef9d4663f418eaab9287793",
+  "image_platform_manifest": "localhost:32000/esf-native@sha256:c17eec3f7ab9372b5bd8852b4fbf8dedbea23d9a25801248a7f7195ad2563f10",
+  "artifact_ext4_sha256": "796119d8aeb13c21028f1f1702fbc606c08709995f3465e0e70e86ed4589767b",
+  "layers": "18 layers pulled by CubeMaster, 494520775 bytes",
+  "payload": [
+    {
+      "component": "opencode2",
+      "version": "opencode v2.2.0",
+      "sha256_measured": "87a4d6ac3c1b5691d4fb5e88f473992016b37ede6611c5cb7092fcdb1d91fad0",
+      "sha256_expected": "87a4d6ac3c1b5691d4fb5e88f473992016b37ede6611c5cb7092fcdb1d91fad0",
+      "match": true
+    },
+    {
+      "component": "claude",
+      "version": "2.1.312 (Claude Code)",
+      "sha256_measured": "4f4178ce41d83e23341ebfbaecdbcf8ea6bf7baea0690025abe49eeec3a5d01d",
+      "sha256_expected": "4f4178ce41d83e23341ebfbaecdbcf8ea6bf7baea0690025abe49eeec3a5d01d",
+      "match": true
+    },
+    {
+      "component": "codex",
+      "version": "codex-cli 0.165.0",
+      "sha256_measured": "c06a67fd8ac76508dc78bd99ce20c9f317b8d568beda59485f3f4134df9962d5",
+      "sha256_expected": "c06a67fd8ac76508dc78bd99ce20c9f317b8d568beda59485f3f4134df9962d5",
+      "match": true
+    },
+    {
+      "component": "node",
+      "version": "v26.12.1",
+      "sha256_measured": "08f12d42fb304468e8ee86247fe686aae5b225836ea65e9d6566c11ae6ba2e8e",
+      "sha256_expected": "08f12d42fb304468e8ee86247fe686aae5b225836ea65e9d6566c11ae6ba2e8e",
+      "match": true
+    },
+    {
+      "component": "unreal-agent-runner",
+      "version": "0.3.1 (from base)",
+      "sha256_measured": "d289aa2046bb79d2b063679c6e0e6b714c759f8a5ed6f969d3b3ea1eeeec03ee",
+      "sha256_expected": "d289aa2046bb79d2b063679c6e0e6b714c759f8a5ed6f969d3b3ea1eeeec03ee",
+      "match": true
+    },
+    {
+      "component": "pi-runner.mjs",
+      "version": "pi v1 (unchanged)",
+      "sha256_measured": "5e2a1d725c3b5422265b3a6c9cfb90293856865184892894dc329f8ccaf89862",
+      "sha256_expected": "5e2a1d725c3b5422265b3a6c9cfb90293856865184892894dc329f8ccaf89862",
+      "match": true
+    },
+    {
+      "component": "python3",
+      "version": "Python 3.10.12",
+      "sha256_measured": null,
+      "sha256_expected": null,
+      "match": null
+    },
+    {
+      "component": "git",
+      "version": "git version 2.34.1",
+      "sha256_measured": null,
+      "sha256_expected": null,
+      "match": null
+    }
+  ],
+  "apt_packages": [
+    "ca-certificates=20260601~22.04.1",
+    "git=1:2.34.1-1ubuntu1.17",
+    "libatomic1:amd64=12.3.0-1ubuntu1~22.04.3",
+    "python3=3.10.6-1~22.04.1"
+  ],
+  "sandbox_id": "6cf73223af2b430eb867057bb25531e5",
+  "cleanup": "zero live sandboxes after payload verification (API health sandboxes:0)",
+  "built_at": "2026-10-28T14:34:08.524194+00:00"
+}

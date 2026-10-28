@@ -92,11 +92,14 @@ model-backed acceptance and production qualification.
 
 ## OpenCode Go with DeepSeek
 
-The local Linux/amd64 profile qualified Claude Code 2.1.300 and Codex 0.162.1
-with `deepseek-v4.1-flash` through OpenCode Go. The names `claude` and `codex`
-select the CLI harness; inference uses the selected DeepSeek model. Both run
-inside Cube, with the Go key injected by CubeEgress. This uses the Go API key,
-not a copied interactive Claude or Codex login session.
+The 0.7.0 local Linux/amd64 profile qualified Claude Code 2.1.300 and Codex
+0.162.1 with `deepseek-v4.1-flash` through OpenCode Go. The 0.7.1 candidate
+pins Claude Code 2.1.312 and Codex 0.165.0 and verifies both binary digests and
+CLI startup inside the rebuilt Cube template; model-backed acceptance for the
+refreshed pins remains a separate gate. The names `claude` and `codex` select
+the CLI harness; inference uses the selected DeepSeek model. Both run inside
+Cube, with the Go key injected by CubeEgress. This uses the Go API key, not a
+copied interactive Claude or Codex login session.
 
 For preinstalled, digest-pinned CLIs, replace the credential path below with
 an owner-only worker file and set each binary's measured SHA-256:
