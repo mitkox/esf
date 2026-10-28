@@ -300,6 +300,27 @@ func TestForgedForwardedHeaderCannotBypassThrottle(t *testing.T) {
 	}
 }
 
+func TestAuthThrottleResetClearsOverflowBucket(t *testing.T) {
+	clock := &testClock{current: time.Now()}
+	throttle := newAuthThrottle(clock.Now)
+	throttle.maxTracked = 1
+	throttle.fail("tracked")
+	throttle.fail("overflowed") // routed to the shared bucket
+	throttle.mu.Lock()
+	_, before := throttle.failures[authOverflowKey]
+	throttle.mu.Unlock()
+	if !before {
+		t.Fatalf("expected the second client to use the overflow bucket")
+	}
+	throttle.reset("overflowed")
+	throttle.mu.Lock()
+	_, after := throttle.failures[authOverflowKey]
+	throttle.mu.Unlock()
+	if after {
+		t.Fatalf("successful auth should clear the shared overflow bucket")
+	}
+}
+
 func TestAuthThrottleTableIsBounded(t *testing.T) {
 	clock := &testClock{current: time.Now()}
 	throttle := newAuthThrottle(clock.Now)

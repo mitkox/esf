@@ -98,10 +98,14 @@ func (t *authThrottle) fail(client string) {
 }
 
 // reset clears a client's failure state after a successful authentication.
+// A client that was aggregated into the shared overflow bucket also clears
+// that bucket: whoever proved possession of the token is at least as trusted
+// as the anonymous attempts it was aggregated with.
 func (t *authThrottle) reset(client string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	delete(t.failures, client)
+	delete(t.failures, authOverflowKey)
 }
 
 // bucketLocked maps a client to the bucket that tracks it. Existing clients
