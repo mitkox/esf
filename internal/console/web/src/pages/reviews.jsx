@@ -75,9 +75,12 @@ export function ReviewsPage() {
     [data],
   );
   const liveAvailable = Boolean(data?.live_available);
+  // Tab values are user-facing; API item kinds are `in_review` and
+  // `paused_run`. Normalise so "Paused runs" does not silently empty out.
+  const wantedKind = kind === "paused" ? "paused_run" : kind;
   const filtered = useMemo(
-    () => (kind === "all" ? items : items.filter((item) => item?.kind === kind)),
-    [items, kind],
+    () => (kind === "all" ? items : items.filter((item) => item?.kind === wantedKind)),
+    [items, kind, wantedKind],
   );
   const oldest = useMemo(() => queueOldest(items), [items]);
   const pageIndex = pager.pageIndex;
