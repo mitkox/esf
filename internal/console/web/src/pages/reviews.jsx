@@ -75,6 +75,7 @@ export function ReviewsPage() {
     [data],
   );
   const liveAvailable = Boolean(data?.live_available);
+  const unknownLiveRuns = Number(data?.unknown_live_runs) || 0;
   // Tab values are user-facing; API item kinds are `in_review` and
   // `paused_run`. Normalise so "Paused runs" does not silently empty out.
   const wantedKind = kind === "paused" ? "paused_run" : kind;
@@ -125,14 +126,14 @@ export function ReviewsPage() {
       {
         key: "live",
         label: "Live feed",
-        value: !data ? "—" : liveAvailable ? "Available" : "Unavailable",
-        tone: liveAvailable ? "success" : "muted",
+        value: !data ? "—" : liveAvailable ? unknownLiveRuns ? "Partial" : "Available" : "Unavailable",
+        tone: unknownLiveRuns ? "warning" : liveAvailable ? "success" : "muted",
         muted: !liveAvailable,
-        sub: liveAvailable ? "paused runs included" : "durable records only",
+        sub: liveAvailable ? unknownLiveRuns ? "some run states unknown" : "paused runs included" : "durable records only",
         hint: "Whether the console could query live orchestration state. Unavailable means paused runs may be missing from this queue.",
       },
     ],
-    [counts, liveAvailable, pageIndex, oldest, data],
+    [counts, liveAvailable, unknownLiveRuns, pageIndex, oldest, data],
   );
 
   const tabOptions = useMemo(
@@ -233,6 +234,13 @@ export function ReviewsPage() {
             </Notice>
           ) : null}
 
+          {unknownLiveRuns > 0 ? (
+            <Notice tone="warning" title="Live review coverage is incomplete" icon={<TriangleAlert />}>
+              Status is unknown for {pluralize(unknownLiveRuns, "live run")}. Additional review gates may be waiting;
+              the paused-run count includes confirmed gates only. Check the factory CLI before treating this queue as clear.
+            </Notice>
+          ) : null}
+
           {error && data ? (
             <Notice tone="warning" title="Refresh failed" icon={<TriangleAlert />}>
               {error.message} Showing the last queue snapshot
@@ -270,11 +278,11 @@ export function ReviewsPage() {
             ) : !data ? null : counts.all === 0 ? (
               <EmptyState
                 icon={<Inbox aria-hidden="true" />}
-                title="The review queue is clear"
+                title={liveAvailable && !unknownLiveRuns ? "The review queue is clear" : "No confirmed review items"}
                 description={
-                  liveAvailable
+                  liveAvailable && !unknownLiveRuns
                     ? "No change is awaiting a human decision and no live run is paused for review. New items appear here as soon as a run reaches its review gate."
-                    : "No durable change is awaiting a human decision. Live paused runs could not be checked because orchestration state is unavailable, so the queue may be incomplete."
+                    : "No durable change is awaiting a human decision. Some live run states could not be checked, so additional review gates may be waiting."
                 }
                 action={
                   <div className="flex flex-wrap items-center justify-center gap-2">

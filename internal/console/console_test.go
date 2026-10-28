@@ -402,7 +402,7 @@ func TestRunDetailContainsEvidence(t *testing.T) {
 	if detail.Change == nil || detail.Change.ChangeID != "change-success" {
 		t.Fatalf("change = %+v", detail.Change)
 	}
-	if !strings.Contains(detail.Actions.ApproveCommand, "factory review run-success --approve") {
+	if detail.Actions.ApproveCommand != "" || detail.Actions.RejectCommand != "" || detail.Actions.CancelCommand != "" || detail.Actions.Describe == "" {
 		t.Fatalf("actions = %+v", detail.Actions)
 	}
 }
@@ -848,7 +848,7 @@ func TestShellArgQuotesUnsafeRunIDs(t *testing.T) {
 			t.Fatalf("shellArg(%q) = %q, want a single-quoted argument", value, got)
 		}
 	}
-	actions := runActions("demo$(id)")
+	actions := runActions("demo$(id)", factory.StateRunning)
 	if !strings.Contains(actions.CancelCommand, "'demo$(id)'") {
 		t.Fatalf("cancel command did not quote the run id: %q", actions.CancelCommand)
 	}

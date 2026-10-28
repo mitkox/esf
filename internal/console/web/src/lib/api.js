@@ -5,6 +5,7 @@
 
 const TOKEN_KEY = "esf-console-token";
 const BASE = "/api/v1/console";
+let memoryToken = null;
 
 export class ApiError extends Error {
   constructor(message, { status = 0, code = "" } = {}) {
@@ -16,6 +17,7 @@ export class ApiError extends Error {
 }
 
 export function getToken() {
+  if (memoryToken !== null) return memoryToken;
   try {
     return sessionStorage.getItem(TOKEN_KEY) || "";
   } catch {
@@ -24,6 +26,7 @@ export function getToken() {
 }
 
 export function setToken(token) {
+  memoryToken = token || "";
   try {
     if (token) sessionStorage.setItem(TOKEN_KEY, token);
     else sessionStorage.removeItem(TOKEN_KEY);

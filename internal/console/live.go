@@ -34,19 +34,22 @@ type liveService struct {
 
 	snapshot   liveSnapshot
 	snapshotAt time.Time
+	runRefresh chan struct{}
 
-	provider     *cube.Provider
-	providerErr  error
-	providerAt   time.Time
-	sandboxCache sandboxSnapshot
-	sandboxAt    time.Time
+	provider       *cube.Provider
+	providerErr    error
+	providerAt     time.Time
+	sandboxCache   sandboxSnapshot
+	sandboxAt      time.Time
+	sandboxRefresh chan struct{}
 }
 
 type liveSnapshot struct {
-	Available bool
-	Error     string
-	CheckedAt time.Time
-	Runs      []LiveRun
+	Available   bool
+	Error       string
+	CheckedAt   time.Time
+	Runs        []LiveRun
+	UnknownRuns int
 }
 
 type sandboxSnapshot struct {
@@ -69,7 +72,7 @@ func newLiveService(cfg factory.Config, enabled bool, now func() time.Time) *liv
 	if now == nil {
 		now = time.Now
 	}
-	return &liveService{cfg: cfg, live: enabled, now: now}
+	return &liveService{cfg: cfg, live: enabled, now: now, runRefresh: make(chan struct{}, 1), sandboxRefresh: make(chan struct{}, 1)}
 }
 
 func (l *liveService) close() {
@@ -143,6 +146,12 @@ func (l *liveService) openRuns(ctx context.Context) liveSnapshot {
 	if !l.live {
 		return liveSnapshot{Error: "Live orchestration is disabled."}
 	}
+	select {
+	case l.runRefresh <- struct{}{}:
+		defer func() { <-l.runRefresh }()
+	case <-ctx.Done():
+		return liveSnapshot{Error: friendlyTemporalError(ctx.Err())}
+	}
 	l.mu.Lock()
 	if !l.snapshotAt.IsZero() && l.now().Sub(l.snapshotAt) < liveCacheAge {
 		snapshot := l.snapshot
@@ -179,7 +188,7 @@ func (l *liveService) openRuns(ctx context.Context) liveSnapshot {
 			Scope:      item.Scope,
 			Repository: item.Repository,
 			StartedAt:  item.StartedAt.UTC(),
-			State:      string(factory.StateRunning),
+			State:      "UNKNOWN",
 		}
 		if index < maxStatusQueries && enrichCtx.Err() == nil {
 			statusCtx, statusCancel := context.WithTimeout(enrichCtx, statusCallTimeout)
@@ -206,7 +215,13 @@ func (l *liveService) openRuns(ctx context.Context) liveSnapshot {
 		runs = append(runs, live)
 	}
 	sort.Slice(runs, func(a, b int) bool { return runs[a].StartedAt.Before(runs[b].StartedAt) })
-	return l.storeSnapshot(liveSnapshot{Available: true, CheckedAt: l.now().UTC(), Runs: runs})
+	unknown := 0
+	for _, run := range runs {
+		if run.QueryError != "" {
+			unknown++
+		}
+	}
+	return l.storeSnapshot(liveSnapshot{Available: true, CheckedAt: l.now().UTC(), Runs: runs, UnknownRuns: unknown})
 }
 
 func (l *liveService) storeSnapshot(snapshot liveSnapshot) liveSnapshot {
@@ -242,6 +257,12 @@ func (l *liveService) runStatus(ctx context.Context, runID string) (*factory.Run
 func (l *liveService) sandboxes(ctx context.Context) sandboxSnapshot {
 	if !l.live {
 		return sandboxSnapshot{Error: "Live sandbox inventory is disabled."}
+	}
+	select {
+	case l.sandboxRefresh <- struct{}{}:
+		defer func() { <-l.sandboxRefresh }()
+	case <-ctx.Done():
+		return sandboxSnapshot{Error: ctx.Err().Error()}
 	}
 	l.mu.Lock()
 	if !l.sandboxAt.IsZero() && l.now().Sub(l.sandboxAt) < sandboxCacheAge {

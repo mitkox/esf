@@ -253,15 +253,20 @@ func summarizeChange(change factory.Change) ChangeSummary {
 
 // ── Actions (copyable CLI commands) ─────────────────────────────────────────
 
-func runActions(runID string) RunActions {
+func runActions(runID string, state factory.RunState) RunActions {
 	arg := shellArg(runID)
-	return RunActions{
-		ApproveCommand: fmt.Sprintf("factory review %s --approve", arg),
-		RejectCommand:  fmt.Sprintf("factory review %s --reject --note \"…\"", arg),
-		CancelCommand:  fmt.Sprintf("factory cancel %s", arg),
-		Describe:       fmt.Sprintf("factory describe runs %s", arg),
-		Logs:           fmt.Sprintf("factory logs %s", arg),
+	actions := RunActions{
+		Describe: fmt.Sprintf("factory describe runs %s", arg),
+		Logs:     fmt.Sprintf("factory logs %s", arg),
 	}
+	if state == factory.StateRunning || state == factory.StatePaused || state == factory.StateRequested {
+		actions.CancelCommand = fmt.Sprintf("factory cancel %s", arg)
+	}
+	if state == factory.StatePaused {
+		actions.ApproveCommand = fmt.Sprintf("factory review %s --approve", arg)
+		actions.RejectCommand = fmt.Sprintf("factory review %s --reject --note \"…\"", arg)
+	}
+	return actions
 }
 
 // shellArg renders a value as one literal shell argument. Run IDs are normally

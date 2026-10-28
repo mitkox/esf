@@ -101,6 +101,8 @@ func (s *Server) overviewKPIs(windowRuns, previousRuns []*runRecord, changes []*
 	kpis.InFlight = InFlightKPI{Value: len(live.Runs), Paused: pausedLive, Available: live.Available}
 	if !live.Available {
 		kpis.InFlight.Note = live.Error
+	} else if live.UnknownRuns > 0 {
+		kpis.InFlight.Note = fmt.Sprintf("%d live run state(s) are unknown; paused count includes confirmed gates only.", live.UnknownRuns)
 	}
 
 	pending := 0
@@ -117,6 +119,9 @@ func (s *Server) overviewKPIs(windowRuns, previousRuns []*runRecord, changes []*
 		}
 	}
 	kpis.Reviews = ReviewsKPI{Value: pending, OldestWaitMS: millis(oldestWait), PausedLive: pausedLive, Note: "All retained changes · not filtered by the window"}
+	if live.UnknownRuns > 0 {
+		kpis.Reviews.Note += fmt.Sprintf("; %d live run state(s) unknown, additional gates may be waiting", live.UnknownRuns)
+	}
 	return kpis
 }
 
@@ -459,6 +464,10 @@ func (s *Server) buildHealth(info IndexInfo, live liveSnapshot, probes []Probe, 
 		if live.Available {
 			liveState = "ok"
 			liveDetail = fmt.Sprintf("%d open run(s)", len(live.Runs))
+			if live.UnknownRuns > 0 {
+				liveState = "warn"
+				liveDetail += fmt.Sprintf("; %d run state(s) unknown, review coverage incomplete", live.UnknownRuns)
+			}
 		} else {
 			liveState = "warn"
 			liveDetail = live.Error
@@ -507,6 +516,17 @@ func (s *Server) buildHealth(info IndexInfo, live liveSnapshot, probes []Probe, 
 		reviewState = "warn"
 		reviewDetail = fmt.Sprintf("%d change(s) awaiting a human decision.", pendingReviews)
 	}
+	for _, run := range live.Runs {
+		if run.State == string(factory.StatePaused) {
+			reviewState = "warn"
+			reviewDetail = "Live runs are paused for human review; inspect the review queue."
+			break
+		}
+	}
+	if live.UnknownRuns > 0 || (s.cfg.Live && !live.Available) {
+		reviewState = "warn"
+		reviewDetail = "Live review coverage is incomplete; additional gates may be waiting."
+	}
 	checks = append(checks, HealthCheck{ID: "reviews", Label: "Human review", State: reviewState, Detail: reviewDetail})
 
 	status := "operational"
@@ -544,6 +564,13 @@ func shortAge(d time.Duration) string {
 func (s *Server) buildAttention(windowRuns []*runRecord, changes []*changeRecord, live liveSnapshot) []AttentionItem {
 	items := []AttentionItem{}
 	add := func(item AttentionItem) { items = append(items, item) }
+	if live.UnknownRuns > 0 {
+		add(AttentionItem{
+			ID: "review-coverage", Kind: "review_pending", Severity: "warning",
+			Title: "Live review coverage incomplete", Detail: fmt.Sprintf("%d live run state(s) unknown; additional gates may be waiting.", live.UnknownRuns),
+			At: s.now().UTC(), Href: "#/reviews",
+		})
+	}
 
 	for _, record := range windowRuns {
 		manifest := record.Manifest
