@@ -17,7 +17,7 @@ import (
 	"github.com/mitkox/esf/internal/threatmon"
 )
 
-const testToken = "0123456789abcdef0123456789abcdef"
+const testToken = "0123456789abcdef0123456789abcdef" // gitleaks:allow (fixed test credential)
 
 type testClock struct {
 	current time.Time
