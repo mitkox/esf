@@ -128,10 +128,16 @@ When `--live=true`:
 
 - Temporal is queried for running workflows. A workflow that has no durable
   manifest yet can still be opened from the run URL; its detail page labels the
-  state as live and shows the workflow's own conditions query.
+  state as live and shows the workflow's own conditions query. A run paused at
+  the human-review gate has already written its task, verification, patch and
+  artifacts, so those are served before the final manifest appears.
 - CubeSandbox is queried for the live sandbox inventory. A factory-owned sandbox
-  is flagged as a **leak** when its run has durable evidence but no open
-  workflow, which is exactly the condition that should never happen.
+  is flagged as a **leak** only when its run has a durable manifest with a
+  verified cleanup but no open workflow. Factory-owned sandboxes without a
+  durable manifest are left unclassified instead of being called leaks:
+  harness-improvement workflows and their stage-specific sandbox run IDs are
+  outside the console's visibility query, so a live experiment could otherwise
+  look like a leak.
 
 Both calls are bounded (6 second ceiling), cached (5–20 seconds) and fail
 independently. An unreachable backend degrades the relevant card to

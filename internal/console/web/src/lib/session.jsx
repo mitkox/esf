@@ -17,7 +17,11 @@ export function SessionProvider({ children }) {
       setState({
         status: "unauthenticated",
         session: null,
-        error: error?.status === 401 ? "That access token was rejected." : error?.message || "Unable to verify the session.",
+        error: token
+          ? error?.status === 401
+            ? "That access token was rejected."
+            : error?.message || "Unable to verify the session."
+          : "",
       });
     }
   }, []);
@@ -25,7 +29,11 @@ export function SessionProvider({ children }) {
   useEffect(() => {
     const token = getToken();
     if (!token) {
-      setState({ status: "unauthenticated", session: null, error: "" });
+      // With --no-auth (or a reverse proxy that injects credentials) the
+      // server accepts session discovery without a bearer token. Probe it so
+      // a fresh browser does not get stuck on the login form; fall back to
+      // the form only when the server rejects the anonymous session.
+      load("");
       return;
     }
     load(token);

@@ -122,13 +122,17 @@ func summarizeHardening(hardening *factory.HardeningEvidence) HardeningSummary {
 	if hardening == nil {
 		return HardeningSummary{}
 	}
-	summary := HardeningSummary{Measured: true}
+	summary := HardeningSummary{}
 	if hardening.Behavior != nil {
+		summary.Measured = true
+		summary.BehaviorMeasured = true
 		summary.Findings = len(hardening.Behavior.Findings)
 		summary.MaxSeverity = string(hardening.Behavior.MaxSeverity)
 		summary.Tripped = hardening.Behavior.Tripped
 	}
 	if hardening.EgressProbe != nil {
+		summary.Measured = true
+		summary.EgressMeasured = true
 		summary.EgressViolations = len(hardening.EgressProbe.Violations)
 	}
 	if hardening.GateIntegrity != nil {

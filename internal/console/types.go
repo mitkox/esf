@@ -78,6 +78,8 @@ type CleanupSummary struct {
 // "not measured", never as "clean".
 type HardeningSummary struct {
 	Measured         bool     `json:"measured"`
+	BehaviorMeasured bool     `json:"behavior_measured"`
+	EgressMeasured   bool     `json:"egress_measured"`
 	Tripped          bool     `json:"tripped"`
 	Findings         int      `json:"findings"`
 	MaxSeverity      string   `json:"max_severity,omitempty"`

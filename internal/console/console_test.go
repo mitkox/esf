@@ -673,6 +673,21 @@ func TestLoopbackListenerRules(t *testing.T) {
 	}
 }
 
+func TestSummarizeHardeningDistinguishesUnmeasuredControls(t *testing.T) {
+	empty := summarizeHardening(&factory.HardeningEvidence{})
+	if empty.Measured || empty.BehaviorMeasured || empty.EgressMeasured {
+		t.Fatalf("missing hardening evidence must not be measured: %+v", empty)
+	}
+	egressOnly := summarizeHardening(&factory.HardeningEvidence{EgressProbe: &factory.EgressProbeResult{}})
+	if !egressOnly.Measured || !egressOnly.EgressMeasured || egressOnly.BehaviorMeasured {
+		t.Fatalf("egress-only evidence should not imply a behavior scan: %+v", egressOnly)
+	}
+	behavior := summarizeHardening(&factory.HardeningEvidence{Behavior: &threatmon.Report{}})
+	if !behavior.Measured || !behavior.BehaviorMeasured {
+		t.Fatalf("recorded behavior scan should be measured: %+v", behavior)
+	}
+}
+
 func TestSecurityEmptyWindowEmitsArrays(t *testing.T) {
 	root, clock := buildFixtureStore(t)
 	server := newTestServer(t, root, clock, nil)

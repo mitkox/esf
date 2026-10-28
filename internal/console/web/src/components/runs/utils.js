@@ -104,6 +104,14 @@ export function securityMeta(hardening, runState = "") {
       detail: "No hardening evidence is recorded for this run; this is not a clean result.",
     };
   }
+  if (hardening.behavior_measured !== true && !hardening.tripped) {
+    return {
+      tone: "warning",
+      label: "Behavior not measured",
+      detail:
+        "Other hardening controls ran, but the behavior scan is absent (the monitor may be disabled). This is not a clean scan.",
+    };
+  }
   const findings = Number(hardening.findings) || 0;
   const egressViolations = Number(hardening.egress_violations) || 0;
   const modifiedGates = Array.isArray(hardening.gate_modified) ? hardening.gate_modified.length : 0;

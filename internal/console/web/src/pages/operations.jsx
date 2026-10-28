@@ -671,6 +671,7 @@ export function OperationsPage() {
                 Live CubeSandbox query, bounded and cached by the console · checked{" "}
                 {timeAgoOr(live.checked_at, "time not reported")}
                 {attributionAvailable ? "" : " · workflow attribution unavailable"}
+                {live.note ? ` · ${live.note}` : ""}
               </CardFooter>
             </Card>
 

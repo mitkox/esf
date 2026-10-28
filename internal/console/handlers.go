@@ -1,6 +1,7 @@
 package console
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -188,7 +189,7 @@ func (s *Server) writeLiveRunDetail(response http.ResponseWriter, request *http.
 			break
 		}
 	}
-	writeJSON(response, http.StatusOK, RunDetail{
+	detail := RunDetail{
 		Run:          summary,
 		Manifest:     nil,
 		Verification: VerificationDetail{Available: false},
@@ -207,7 +208,34 @@ func (s *Server) writeLiveRunDetail(response http.ResponseWriter, request *http.
 			StartedAt: status.StartedAt.UTC(), Repository: summary.Repository, Harness: summary.AgentHarness,
 		},
 		GeneratedAt: s.now().UTC(),
-	})
+	}
+	// A run paused at the human-review gate has already written its task,
+	// verification and patch evidence; the final manifest only appears after
+	// the decision. Expose what exists now so reviewers can inspect it.
+	runDir := filepath.Join(s.root, "runs", runID)
+	if task, absent := readTaskDetail(runDir); !absent {
+		detail.Task = task
+	}
+	if verification, absent := readVerificationDetail(runDir); !absent {
+		detail.Verification = verification
+	} else if status.VerifyOutcome != "" {
+		detail.Warnings = append(detail.Warnings, "verification/result.json is not available yet for this live run.")
+	}
+	detail.Patch = readPatchDetail(runDir, factory.ArtifactPatch)
+	detail.Artifacts = listArtifacts(runDir)
+	detail.Audit = readAuditEntries(s.root, runID)
+	writeJSON(response, http.StatusOK, detail)
+}
+
+// runEvidenceAvailable reports whether a run has durable evidence or is a live
+// workflow. It lets the patch/artifact endpoints serve evidence a paused run
+// has already written, before its final manifest exists.
+func (s *Server) runEvidenceAvailable(ctx context.Context, runID string) bool {
+	if _, ok := s.index.run(runID); ok {
+		return true
+	}
+	_, err := s.live.runStatus(ctx, runID)
+	return err == nil
 }
 
 func (s *Server) buildRunDetail(request *http.Request, record *runRecord) RunDetail {
@@ -585,7 +613,7 @@ func (s *Server) handleRunPatch(response http.ResponseWriter, request *http.Requ
 		return
 	}
 	_, _, _ = s.snapshot()
-	if _, ok := s.index.run(runID); !ok {
+	if !s.runEvidenceAvailable(request.Context(), runID) {
 		writeError(response, http.StatusNotFound, "not_found", "Run evidence is unavailable.")
 		return
 	}
@@ -641,7 +669,7 @@ func (s *Server) handleRunArtifact(response http.ResponseWriter, request *http.R
 		return
 	}
 	_, _, _ = s.snapshot()
-	if _, ok := s.index.run(runID); !ok {
+	if !s.runEvidenceAvailable(request.Context(), runID) {
 		writeError(response, http.StatusNotFound, "not_found", "Run evidence is unavailable.")
 		return
 	}
@@ -801,14 +829,17 @@ func (s *Server) handleChangeDetail(response http.ResponseWriter, request *http.
 		ApproveCommand: "factory review " + change.LastRunID + " --approve",
 		RejectCommand:  "factory review " + change.LastRunID + " --reject --note \"…\"",
 	}
+	// Effective configuration applies request > scope > global precedence.
+	configured := review.GlobalEnabled
 	if scopeReview, ok := s.cfg.Factory.Scopes[change.Scope]; ok && scopeReview.Review != nil {
-		review.Configured = review.GlobalEnabled || *scopeReview.Review
-	} else {
-		review.Configured = review.GlobalEnabled
+		configured = *scopeReview.Review
 	}
+	review.Configured = configured
 	if len(runs) > 0 {
+		// The latest manifest records the gate that actually applied (including
+		// request-level overrides), so it wins over current config inference.
 		latest := runs[0].Manifest
-		review.Configured = review.Configured || latest.ReviewConfigured
+		review.Configured = latest.ReviewConfigured
 		review.LatestOutcome = latest.ReviewOutcome
 	}
 	warnings := []string{}
