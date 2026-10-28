@@ -38,8 +38,8 @@ upstream advisory with no upgrade path.
 
 Project execution used disposable local Cube microVMs. The primary validation
 sandbox was `45399f5079cf470a86e720ce6c4bd606` in template
-`tpl-acd55ad29bc04f08b1d3db44`; the acceptance sandbox was
-`bd21a58aa09a4b88a8963ee4d6cfb85b`.
+`tpl-acd55ad29bc04f08b1d3db44`; the acceptance run used the committed 0.7.1
+build (commit `d8fddb7`) and sandbox `8338564fe3904ec4a0a00ddccb12094a`.
 
 - In-Cube Go tests: 14 compiled test binaries, 689 tests passed, every run exit
   0, including the native-client canary after its stale OpenCode digest fixture
@@ -53,16 +53,18 @@ sandbox was `45399f5079cf470a86e720ce6c4bd606` in template
   committed tracked `dist`, and `npm audit --audit-level=high` reported zero
   vulnerabilities for the console, OpenCode and Pi npm graphs.
 - Acceptance: `PHASE 1 ACCEPTANCE TEST: PASSED` for run
-  `run-86427a478f705eb4dfd0a9aa` on the new template — all gates passed, a
-  verified patch was produced, and cleanup reported zero remaining sandboxes.
-  The egress probe reported `Unknown/ProbeInconclusive` because the local
-  profile acknowledges open egress; it is not a denial-path failure.
+  `run-e0e3bd6f6ec0826ce1e00484` with the committed 0.7.1 build on the new
+  template — the deterministic gates passed, a verified patch was produced,
+  and cleanup reported zero remaining sandboxes. The egress probe reported
+  `Unknown/ProbeInconclusive` because the local profile acknowledges open
+  egress; it is not a denial-path failure.
 - `factory agents verify` matched all six template binaries, `factory doctor`
   passed with three known hardening warnings, and `make cube-smoke` passed
   against the new template.
-- Secret scan: the `git ls-files` release tree scanned clean. The
-  working-directory-wide scanner command reports only gitignored `.factory/`
-  run artifacts and `.rtk/` caches, which cannot be part of the release.
+- Secret scan: the `git ls-files` release tree scanned clean (exit 0). A
+  working-directory-wide scanner run reports 164 findings, all inside
+  gitignored `.factory/` run artifacts and `.rtk/` caches, which cannot be part
+  of the release.
 - Owned sandboxes were destroyed; final `factory sandboxes` is empty and the
   Cube API reports zero sandboxes. The new template remains READY.
 

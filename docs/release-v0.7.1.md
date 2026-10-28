@@ -64,9 +64,12 @@ Pi inventory checks, the console build with 17 frontend tests and zero npm
 audit findings, 689 Go tests executed in disposable Cube microVMs through
 `tools/cube-test`, the release inventory and qualification checks inside Cube,
 `factory agents verify` against the rebuilt template, a conformance acceptance
-run that passed all gates with verified sandbox cleanup, and `factory doctor` /
-`make cube-smoke` on the new template. GitHub CI remains authoritative for the
-unit suites.
+run with the committed build that passed the deterministic gates with verified
+sandbox cleanup (its egress probe is inconclusive because the local profile
+acknowledges open egress), and `factory doctor` / `make cube-smoke` on the new
+template. The `git ls-files` release tree is secret-scan clean; the only
+scanner hits in a full working-directory scan are gitignored local caches.
+GitHub CI remains authoritative for the unit suites.
 
 The following remain separate gates and are **not** claimed by this candidate:
 the 24-hour VM and Kubernetes soak, the concurrency 1/4/8 performance matrix,

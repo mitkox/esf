@@ -1,8 +1,9 @@
 {
   "schema": "esf-acceptance/v1",
-  "run_id": "run-86427a478f705eb4dfd0a9aa",
-  "workflow_id": "factory-run-run-86427a478f705eb4dfd0a9aa",
-  "factory_version": "0.7.0",
+  "run_id": "run-e0e3bd6f6ec0826ce1e00484",
+  "workflow_id": "factory-run-run-e0e3bd6f6ec0826ce1e00484",
+  "factory_version": "0.7.1",
+  "factory_commit": "d8fddb7f992a27f66d36e735a933cd97e8fd5154",
   "cube_version": "0.7.3",
   "agent_harness": "conformance",
   "agent_result": "SUCCESS",
@@ -83,13 +84,14 @@
   ],
   "cleanup": {
     "attempted": true,
-    "duration": 80528114,
-    "finished_at": "2026-10-28T14:38:46.158431599Z",
+    "duration": 89661550,
+    "finished_at": "2026-10-28T14:53:14.233598714Z",
     "outcome": "SUCCESS",
     "remaining_sandboxes": 0,
-    "sandbox_id": "bd21a58aa09a4b88a8963ee4d6cfb85b",
+    "sandbox_id": "8338564fe3904ec4a0a00ddccb12094a",
     "verified": true
   },
   "patch": "diff --git a/greeting.py b/greeting.py\nindex 7c9a7a2..fd4a8b9 100644\n--- a/greeting.py\n+++ b/greeting.py\n@@ -12,7 +12,7 @@ reproducible.\n \n def greeting() -> str:\n     \"\"\"Return the current greeting.\"\"\"\n-    return \"hello\"\n+    return \"hello factory\"\n \n \n if __name__ == \"__main__\":\n",
-  "egress_note": "EgressVerified=Unknown/ProbeInconclusive because the local profile sets acknowledge_open_egress; this is not a denial-path failure"
+  "egress_note": "EgressVerified=Unknown/ProbeInconclusive because the local profile sets acknowledge_open_egress; the deterministic gates still passed and this is not a denial-path failure",
+  "execution_note": "Executed by the committed 0.7.1 build (commit d8fddb7) after the stale local worker was stopped; the earlier local attempt was served by a pre-existing 0.7.0 worker and is not used as evidence"
 }
