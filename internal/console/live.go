@@ -101,7 +101,9 @@ func (l *liveService) temporalClient(ctx context.Context) (temporalclient.Client
 		client temporalclient.Client
 		err    error
 	}
-	results := make(chan dialResult, 1)
+	// Unbuffered: if the caller times out first, the dial goroutine cannot
+	// park a connected client in a buffered channel; it closes it instead.
+	results := make(chan dialResult)
 	go func() {
 		client, err := factory.NewTemporalClient(l.cfg, nil)
 		select {
