@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible problem in Machinist
+description: Report a reproducible problem in ESF
 title: "bug: "
 labels:
   - bug
@@ -29,9 +29,9 @@ body:
   - type: input
     id: version
     attributes:
-      label: Machinist version
-      description: Run `machinist version`, or provide the commit SHA.
-      placeholder: v0.1.0 or abc1234
+      label: ESF version
+      description: Run `factory version`, or provide the commit SHA.
+      placeholder: v0.7.1 or abc1234
     validations:
       required: true
   - type: input
@@ -39,7 +39,7 @@ body:
     attributes:
       label: Environment
       description: Include the operating system and relevant Go, Git, and agent CLI versions.
-      placeholder: macOS 15, Go 1.26.6, Git 2.x, Codex 0.x
+      placeholder: Ubuntu 24.04, Go 1.27.3, Git 2.x, Codex 0.x
     validations:
       required: true
   - type: textarea

@@ -1,6 +1,5 @@
 /bin/
 /.factory/
-/.machinist/
 *.tmp
 __pycache__/
 *.py[cod]
@@ -9,11 +8,12 @@ __pycache__/
 /tools/intake/dist/
 /tools/brief_lab/build/
 /tools/brief_lab/dist/
-internal/controlplane/web/node_modules/
 /agents/opencode/node_modules/
 /agents/pi/node_modules/
-!internal/controlplane/web/dist/
-!internal/controlplane/web/dist/**
+
+# Factory console frontend dependencies and caches; dist/ is tracked.
+/internal/console/web/node_modules/
+/internal/console/web/.npm-cache/
 
 # Local agent/operator files: keep them out of the repository (AGENTS.md).
 /.rtk/

@@ -129,8 +129,8 @@ def verify_qualification(root: Path, inventory: dict, manifest_path: Path,
         require(distribution == inventory["release"] or
                 re.fullmatch(re.escape(inventory["release"]) + r"-rc\.[1-9][0-9]*", distribution),
                 "release assets distribution version mismatch")
-        expected = {f"esf_{component}_{distribution.removeprefix('v')}_{platform}.tar.gz"
-                    for component in ("factory", "machinist", "combined") for platform in PLATFORMS}
+        expected = {f"esf_factory_{distribution.removeprefix('v')}_{platform}.tar.gz"
+                    for platform in PLATFORMS}
         expected.update(("release-manifest.json", "dependency-inventory.json", "sbom.cdx.json", "checksums.txt"))
         require(expected <= artifacts, "qualification does not bind the complete release set")
         require((assets / "dependency-inventory.json").read_bytes() ==

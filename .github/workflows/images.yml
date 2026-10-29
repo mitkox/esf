@@ -25,8 +25,6 @@ jobs:
       matrix:
         include:
           - {component: factory, file: deploy/images/Dockerfile.runtime, target: factory, platforms: "linux/amd64,linux/arm64"}
-          - {component: console, file: deploy/images/Dockerfile.runtime, target: console, platforms: "linux/amd64,linux/arm64"}
-          - {component: managedworker, file: deploy/images/Dockerfile.managedworker, target: managedworker, platforms: "linux/amd64,linux/arm64"}
           - {component: intake, file: deploy/images/Dockerfile.intake, target: intake, platforms: "linux/amd64,linux/arm64"}
           - {component: cube-template, file: deploy/cube/Dockerfile, target: cube-template, platforms: "linux/amd64"}
     permissions:

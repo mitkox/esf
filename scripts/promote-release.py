@@ -37,8 +37,8 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     source_name, final_name = source_version[1:], final_version[1:]
     archives = sorted(source.glob(f"esf_*_{source_name}_*.tar.gz"))
-    if len(archives) != 12:
-        raise SystemExit(f"expected 12 qualified RC archives, got {len(archives)}")
+    if len(archives) != 4:
+        raise SystemExit(f"expected 4 qualified RC archives, got {len(archives)}")
     for archive in archives:
         destination = output / archive.name.replace(f"_{source_name}_", f"_{final_name}_")
         shutil.copyfile(archive, destination)

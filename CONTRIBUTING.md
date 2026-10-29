@@ -1,7 +1,8 @@
 # Contributing
 
-ESF builds on Machinist and uses Go for the CLI, control plane, and workers, plus React and Vite
-for the embedded browser interface.
+ESF is a self-hosted software factory written in Go. The factory CLI, Temporal
+workflow, CubeSandbox execution and verification gates are the product surface;
+there is no browser interface or separate control-plane service.
 
 Before starting a change, search existing issues and keep the scope focused. Do
 not include credentials, private repository data, or sensitive task content.
@@ -12,49 +13,34 @@ Report vulnerabilities through [SECURITY.md](SECURITY.md), not a public issue.
 Install:
 
 - Go 1.27.3
-- Node.js 26.12.1, plus npm
+- Node.js 26.12.1, plus npm, for the optional Pi runner and agent packaging
 - Python 3.15.2 and uv 0.13.6 for optional Python checks
 - Git
-- `just` for repository shortcuts
 - the agent CLI needed for any real execution checks
 
-Build the factory with `go build -o bin/factory ./cmd/factory`.
-Build the inherited Machinist CLI and its embedded frontend:
-
-```sh
-just build
-```
-
-The binary is written to `bin/machinist`.
+Build the factory with `go build -o bin/factory ./cmd/factory` or `make build`.
 
 ## Checks
 
-Run the complete project check before opening a pull request:
+Run the project checks before opening a pull request:
 
 ```sh
-just check
+make lint
+make test
+go test -race ./...
 ```
 
 CI separately proves that Go formatting is current without changing files,
 runs `go vet`, runs the Go suite with the race detector on Linux and macOS,
-tests and builds the frontend, confirms the tracked frontend bundle is current,
-and builds the `factory` and `machinist` executables.
-
-The frontend bundle under `internal/controlplane/web/dist` is committed because
-it is embedded into the Go binary. If frontend source changes, rebuild and
-commit the generated assets:
-
-```sh
-cd internal/controlplane/web
-npm ci
-npm test
-npm run build
-```
+validates the frozen release inventory and SBOM, runs the release-qualification
+and script tests, and builds the factory executable.
 
 ## Dependency updates
 
-Dependabot checks Go and npm dependencies each week and GitHub Actions each
-month. Review upstream release notes and keep each manifest and lockfile in sync.
+Dependabot checks Go, agent npm packages and Python dependencies on a schedule,
+and GitHub Actions monthly. Review upstream release notes and keep each
+manifest and lockfile in sync with `release/inventory.json`; run
+`python3 scripts/verify-release-inventory.py` after changing a pin.
 
 Workflow actions must use a full commit SHA followed by a version comment, for
 example `owner/action@0123456789abcdef0123456789abcdef01234567 # v1.2.3`.
@@ -66,7 +52,7 @@ Do not replace a pinned SHA with a mutable tag.
 - Include tests for changed behavior.
 - Update `ARCHITECTURE.md` when current boundaries or contracts change.
 - Use Conventional Commit messages.
-- Explain what was verified, including browser checks for UI work.
+- Explain what was verified.
 - Do not commit credentials, local configuration, databases, or run artifacts.
 
 Changes to `master` must go through a pull request and pass the required `check`

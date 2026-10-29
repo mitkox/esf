@@ -1,10 +1,10 @@
 # Deploying the factory worker
 
-The 0.6.2 candidate requires an attested companion qualification manifest for
+The 0.7.1 candidate requires an attested companion qualification manifest for
 the exact source and built assets before production use. This guide describes
 the deployment configuration; it does not qualify a deployment. Complete the
 live, security, backup, restore, migration, load and soak checks in the
-[release procedure](release-v0.6.2.md). Input versions remain recorded in the
+[release procedure](release-v0.7.1.md). Input versions remain recorded in the
 [release inventory](../release/inventory.json).
 
 The target deployment uses an operator-managed Temporal cluster, CubeSandbox,
@@ -236,25 +236,13 @@ against retained histories before attempting a rolling upgrade across versions.
 
 See [the readiness review](production-readiness.md) for executed validation.
 
-## v0.5.0 VM upgrade and rollback
+## Upgrade, migration and rollback
 
-The optional console factory view is read-only. Configure Machinist with
-`[factory_read] root = "/var/lib/factory"` and a private
-`token_file = "/etc/machinist/factory-read-token"` holding at least 32 random
-characters. The token has a separate identity from the worker token and grants
-no factory-write authority. Give only the Machinist control-plane account read
-access to the factory evidence tree, for example through a dedicated read-only
-ACL or a systemd drop-in with `SupplementaryGroups=factory`. The console
-remains bound to loopback.
-Its patch downloads require the read token and use attachment headers; previews
-are rendered as text.
+Use local or block-backed storage for the factory evidence tree. NFS and other
+shared network filesystems are unsupported. Before changing the factory binary,
+stop new submissions, wait for active factory runs to reach a terminal state,
+and reconcile sandbox cleanup. Then stop `factory-worker`.
 
-The console stores a disposable `factory-read-index.sqlite` beside its
-Machinist database. It rebuilds the index from ordinary factory manifests at
-startup and refreshes it when the runs or changes directory changes. Paginated
-views read the index while individual manifests remain the source of truth.
-If the index is damaged, stop the console, remove only that index file, and
-restart it.
 Use `factory storage usage --output json` to measure the durable evidence tree
 and its run count before sizing or restoring the volume. This command reads
 metadata only and leaves evidence intact.
@@ -269,39 +257,36 @@ Set `limits.artifact_bytes` to cap each durable artifact write (32 MiB by
 default). Oversized writes fail explicitly; use `limits.command_output_bytes`
 for the separate bound applied before Cube command output reaches the SDK.
 
-Use local or block-backed storage for the factory and Machinist SQLite files.
-NFS and other shared network filesystems are unsupported. Before changing
-either binary, stop new submissions, wait for active factory runs to reach a
-terminal state, and reconcile sandbox cleanup. Then stop
-`factory-worker`, `machinist-worker`, and `machinist-control-plane`.
-
-Take an offline snapshot of the complete factory and Machinist state and the
-matching configuration. For the default VM paths, run the following as root
-with a private destination directory:
+Take an offline snapshot of the complete factory evidence and the matching
+configuration (when upgrading from a Machinist release and preserving console
+state, also snapshot the console PVC). For the default VM paths, run the
+following as root with a private destination directory:
 
 ```sh
 install -d -m 0700 /var/backups/esf
-tar --numeric-owner -C / -czf /var/backups/esf/pre-v0.5.0.tar.gz \
-  var/lib/factory home/machinist/.machinist etc/factory
+tar --numeric-owner -C / -czf /var/backups/esf/pre-upgrade.tar.gz \
+  var/lib/factory etc/factory
 cd /var/backups/esf
-sha256sum pre-v0.5.0.tar.gz > pre-v0.5.0.tar.gz.sha256
+sha256sum pre-upgrade.tar.gz > pre-upgrade.tar.gz.sha256
 ```
 
 Back up Temporal with the operator's supported database procedure at the same
 drained point. Keep the payload keyring with the matching application backup.
 Run `factory config migrate --dry-run` and `factory doctor --profile production
 --output json` before starting the new worker. Install and verify the pinned agents with `factory agents verify`.
-Machinist creates its own schema-2 backup before migrating to schema 5 and
-refuses unknown populated databases.
+Machinist state is not part of the factory: 0.6.2 neither reads nor migrates
+it. On a host install it lives under the Machinist service user's home,
+normally `/home/machinist/.machinist`; on Kubernetes it lived on the console
+PVC.
 
 To drill restoration, use a separate VM with no active services, copy the
 snapshot there, verify its checksum, inspect its member paths, and restore:
 
 ```sh
 cd /var/backups/esf
-sha256sum -c pre-v0.5.0.tar.gz.sha256
-tar -tzf pre-v0.5.0.tar.gz
-tar --numeric-owner -C / -xzf pre-v0.5.0.tar.gz
+sha256sum -c pre-upgrade.tar.gz.sha256
+tar -tzf pre-upgrade.tar.gz
+tar --numeric-owner -C / -xzf pre-upgrade.tar.gz
 ```
 
 Restore the matching Temporal snapshot and the matching older ESF binaries
@@ -309,3 +294,31 @@ before starting services. Never restore over a running service.
 After any schema upgrade, rollback requires this matching snapshot; replacing
 only the binary can corrupt or reject migrated state. Preserve the snapshot
 through the full retention and audit review period.
+
+### Removing Machinist
+
+ESF 0.6.2 removed the Machinist CLI, local control plane and console. When
+upgrading a host or cluster that still runs them:
+
+1. Stop and disable `machinist-control-plane` and `machinist-worker`, then
+   remove their unit files and binaries.
+2. On Kubernetes, stop the old console and export/snapshot its console PVC (or
+   `console.storage.existingClaim`) before upgrading; PVC deletion is
+   irreversible. Then remove the `console` values and delete any console
+   Deployment or Secret that your installation manages outside the chart;
+   `helm upgrade` removes resources created by earlier chart versions.
+3. On a host install, archive or delete the Machinist service user's state,
+   normally `/home/machinist/.machinist`; the factory does not read that state.
+4. Run `factory doctor --profile production` and a disposable run to confirm the
+   factory remains healthy.
+5. Install the factory archive only. `ESF_COMPONENT=machinist|combined` fails
+   with guidance.
+
+The Machinist control plane is gone, but the read-only operator console is not:
+`factory console` serves the enterprise dashboard over the same durable
+evidence (and optional bounded live Temporal/Cube reads). Keep it on loopback
+behind TLS, or let a reverse proxy terminate TLS; see the
+[console guide](console.md). CLI-first operators can continue to use
+`factory describe`, `status --watch`, `logs` and `get changes`. See
+[the 0.7.1 release notes](release-v0.7.1.md) and
+[ADR 0008](adr/0008-remove-machinist.md).

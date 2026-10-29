@@ -1,5 +1,5 @@
-ARG GO_BUILDER=docker.io/library/golang@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f
-ARG PYTHON_BASE=docker.io/library/python@sha256:197f6622a70b727a4e61bdac13a73b4e2b914b896aa5a729ceb1f45a09bde5fa
+ARG GO_BUILDER=docker.io/library/golang@sha256:b76020929b709ddb6202afc05410a0faefae20ae05e27ad548b3870092688a69
+ARG PYTHON_BASE=docker.io/library/python@sha256:c4158543ecb725b99e57d129dfd43d761d4c43e4577b5e23326aabb223cf7f4e
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS build
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -7,7 +7,7 @@ RUN go mod download
 COPY . .
 ARG TARGETOS
 ARG TARGETARCH
-ARG ESF_VERSION=0.6.2
+ARG ESF_VERSION=0.7.1
 ARG ESF_COMMIT
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -buildvcs=false -trimpath \

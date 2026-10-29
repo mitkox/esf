@@ -83,10 +83,7 @@ func BuildThreatReport(factory artifacts.Factory, limit int) (ThreatReport, erro
 	if err != nil {
 		return ThreatReport{}, err
 	}
-	report := ThreatReport{}
-	tallies := map[string]*RuleTally{}
-	var observations []EgressObservation
-
+	identified := make([]IdentifiedManifest, 0, len(ids))
 	for _, runID := range ids {
 		manifest, err := ReadManifest(factory, runID)
 		if err != nil {
@@ -95,6 +92,34 @@ func BuildThreatReport(factory artifacts.Factory, limit int) (ThreatReport, erro
 			// rather than failing the whole report.
 			continue
 		}
+		identified = append(identified, IdentifiedManifest{RunID: runID, Manifest: manifest})
+	}
+	return AggregateThreatReport(identified, limit), nil
+}
+
+// IdentifiedManifest pairs a run manifest with the run ID it was stored under.
+//
+// The manifest normally carries its RunID; the pair exists because a partially
+// written or historical record may not, and the directory name is still the
+// identity an operator can act on.
+type IdentifiedManifest struct {
+	RunID    string
+	Manifest RunManifest
+}
+
+// AggregateThreatReport builds the cross-run report from already loaded
+// manifests.
+//
+// It is the same aggregation BuildThreatReport uses, exposed so a caller that
+// already holds a manifest index (for example the factory console) does not
+// re-read the artifact store on every refresh.
+func AggregateThreatReport(manifests []IdentifiedManifest, limit int) ThreatReport {
+	report := ThreatReport{}
+	tallies := map[string]*RuleTally{}
+	var observations []EgressObservation
+
+	for _, identified := range manifests {
+		manifest := identified.Manifest
 		report.Runs++
 		entry := ThreatEntry{
 			RunID:      manifest.RunID,
@@ -102,7 +127,7 @@ func BuildThreatReport(factory artifacts.Factory, limit int) (ThreatReport, erro
 			FinishedAt: manifest.CompletedAt,
 		}
 		if entry.RunID == "" {
-			entry.RunID = runID
+			entry.RunID = identified.RunID
 		}
 		if h := manifest.Hardening; h != nil {
 			if h.Behavior != nil {
@@ -185,5 +210,5 @@ func BuildThreatReport(factory artifacts.Factory, limit int) (ThreatReport, erro
 	if limit > 0 && len(report.Entries) > limit {
 		report.Entries = report.Entries[:limit]
 	}
-	return report, nil
+	return report
 }

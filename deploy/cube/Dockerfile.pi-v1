@@ -1,7 +1,7 @@
 # Extend an operator-selected, digest-pinned ESF template; historical templates
 # and release inventories retain their original contents.
 ARG ESF_TEMPLATE_BASE
-ARG NODE_BASE=docker.io/library/node@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec
+ARG NODE_BASE=docker.io/library/node@sha256:94816674c62774da0d099a947bf4613b9e1972a2733abd0d0cd80e795f8411d0
 FROM ${NODE_BASE} AS node-runtime
 FROM ${ESF_TEMPLATE_BASE} AS pi-template-v1
 COPY --from=node-runtime /usr/local/bin/node /opt/esf/agents/node

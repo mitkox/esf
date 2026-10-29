@@ -2,9 +2,9 @@
 
 set -eu
 
-repository=${ESF_REPOSITORY:-${MACHINIST_REPOSITORY:-mitkox/esf}}
-version=${ESF_VERSION:-${MACHINIST_VERSION:-}}
-install_dir=${ESF_INSTALL_DIR:-${MACHINIST_INSTALL_DIR:-}}
+repository=${ESF_REPOSITORY:-mitkox/esf}
+version=${ESF_VERSION:-}
+install_dir=${ESF_INSTALL_DIR:-}
 component=${ESF_COMPONENT:-factory}
 
 fail() {
@@ -15,7 +15,12 @@ fail() {
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v tar >/dev/null 2>&1 || fail "tar is required"
 command -v gh >/dev/null 2>&1 || fail "GitHub CLI is required to verify release provenance"
-case $component in factory|machinist|combined) ;; *) fail "ESF_COMPONENT must be factory, machinist, or combined" ;; esac
+case $component in
+  factory) ;;
+  machinist|combined)
+    fail "the Machinist component was removed in ESF 0.6.2; install the factory archive (the default) and use the factory command" ;;
+  *) fail "ESF_COMPONENT must be factory" ;;
+esac
 
 case $(uname -s) in
   Linux) os=linux ;;
@@ -49,7 +54,7 @@ if [ -z "$install_dir" ]; then
 fi
 
 release_name=${version#v}
-archive_name="esf_${component}_${release_name}_${os}_${arch}.tar.gz"
+archive_name="esf_factory_${release_name}_${os}_${arch}.tar.gz"
 release_url="https://github.com/$repository/releases/download/$version"
 temporary_dir=$(mktemp -d)
 trap 'rm -rf "$temporary_dir"' EXIT HUP INT TERM
@@ -74,11 +79,7 @@ gh attestation verify "$temporary_dir/$archive_name" -R "$repository" \
   --signer-workflow "$repository/.github/workflows/release.yml" \
   --source-ref "refs/tags/$version" >/dev/null || fail "release provenance verification failed"
 
-case $component in
-  factory) binaries='factory' ;;
-  machinist) binaries='machinist' ;;
-  combined) binaries='factory machinist' ;;
-esac
+binaries='factory'
 for binary in $binaries; do
   tar -xzf "$temporary_dir/$archive_name" -C "$temporary_dir" "$binary" || fail "archive lacks $binary"
 done
@@ -89,8 +90,8 @@ for binary in $binaries; do
   mv -f "$staged" "$install_dir/$binary"
 done
 
-printf 'installed ESF %s %s to %s\n' "$component" "$version" "$install_dir"
+printf 'installed ESF factory %s to %s\n' "$version" "$install_dir"
 case ":$PATH:" in
   *":$install_dir:"*) ;;
-  *) printf 'add %s to PATH before running machinist\n' "$install_dir" ;;
+  *) printf 'add %s to PATH before running factory\n' "$install_dir" ;;
 esac

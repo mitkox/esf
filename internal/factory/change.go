@@ -149,8 +149,8 @@ func (s *ChangeStore) Root() string { return s.root }
 
 // pathFor validates the change ID and returns its document path.
 //
-// The guard mirrors internal/artifacts: a change ID is a plain path segment, so
-// a caller can never escape the store.
+// The guard mirrors the evidence store's path validation: a change ID is a
+// plain path segment, so a caller can never escape the store.
 func (s *ChangeStore) pathFor(changeID string) (string, error) {
 	if changeID == "" {
 		return "", errors.New("change store: change id is required")

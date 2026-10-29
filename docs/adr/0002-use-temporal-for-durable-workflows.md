@@ -3,6 +3,9 @@
 - **Status:** Accepted
 - **Date:** 2026-09-19
 - **Deciders:** Factory engineering
+- **Update (0.6.2):** The Machinist control plane referenced below was removed;
+  see [ADR 0008](0008-remove-machinist.md). The comparisons are retained as the
+  design rationale that led to this decision.
 
 ## Context
 

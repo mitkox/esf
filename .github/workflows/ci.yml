@@ -9,11 +9,17 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request supersedes its previous run. Push runs are keyed
+# by run id so no master run can cancel or queue behind another.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  linux:
-    name: Linux checks
+  go:
+    name: Go checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -22,30 +28,76 @@ jobs:
         with:
           go-version: 1.27.3
           cache: true
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 26.12.1
-          cache: npm
-          cache-dependency-path: |
-            internal/controlplane/web/package-lock.json
-            agents/pi/package-lock.json
-      - name: Test issue triage
-        run: node --test .github/scripts/issue-triage.test.cjs
       - name: Confirm toolchain
         run: test "$(go env GOVERSION)" = "go1.27.3"
       - name: Scan source for secrets
         run: go run github.com/zricethezav/gitleaks/v8@v8.30.1 dir --redact --no-banner .
-      - name: Install frontend dependencies
-        working-directory: internal/controlplane/web
+      - name: Check Go vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: Check Go formatting
+        shell: bash
+        run: |
+          git ls-files -z '*.go' | xargs -0 -r gofmt -l | tee /tmp/unformatted-go-files
+          test ! -s /tmp/unformatted-go-files
+      - name: Run Go vet
+        run: go vet ./...
+      - name: Run Go tests with the race detector
+        run: go test -race ./...
+      - name: Build factory
+        run: |
+          mkdir -p bin
+          go build -trimpath -o bin/factory ./cmd/factory
+          test -x bin/factory
+          test "$(bin/factory version)" != ""
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.12.1
+          cache: npm
+          cache-dependency-path: internal/console/web/package-lock.json
+      - name: Test issue triage
+        run: node --test .github/scripts/issue-triage.test.cjs
+      - name: Install console dependencies
+        working-directory: internal/console/web
         run: npm ci
-      - name: Check frozen release inventory
-        run: python3 scripts/verify-release-inventory.py
-      - name: Test release qualification boundaries
-        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
-      - name: Test Temporal restored-database safety
-        run: sh deployments/dev/temporal/tests/setup-postgres-test.sh
-      - name: Verify Pi candidate inventory
-        run: python3 scripts/verify-pi-inventory.py
+      - name: Test console frontend
+        working-directory: internal/console/web
+        run: npm test
+      - name: Build console frontend
+        working-directory: internal/console/web
+        run: npm run build
+      - name: Check tracked console dist is current
+        run: |
+          git diff --exit-code -- internal/console/web/dist
+          test -z "$(git status --porcelain --untracked-files=all -- internal/console/web/dist)"
+      - name: Audit console npm graph
+        working-directory: internal/console/web
+        run: npm audit --audit-level=high --package-lock-only
+      - name: Audit OpenCode npm graph
+        working-directory: agents/opencode
+        run: npm audit --audit-level=high --package-lock-only
+
+  pi:
+    name: Pi runner checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.12.1
+          cache: npm
+          cache-dependency-path: agents/pi/package-lock.json
       - name: Build and test pinned Pi runner
         working-directory: agents/pi
         run: |
@@ -55,47 +107,38 @@ jobs:
           npm test
           npm audit --audit-level=high
           git diff --exit-code -- dist ../../internal/agentharness/pi-catalog.json
+
+  python:
+    name: Python checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: 0.13.6
+          checksum: f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645
+          enable-cache: true
+          cache-suffix: v2
+          cache-python: true
+      - name: Install Python for uv
+        run: uv python install 3.15.2
+      - name: Check frozen release inventory
+        run: python3 scripts/verify-release-inventory.py
+      - name: Test release qualification boundaries
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - name: Test Temporal restored-database safety
+        run: sh deployments/dev/temporal/tests/setup-postgres-test.sh
+      - name: Verify Pi candidate inventory
+        run: python3 scripts/verify-pi-inventory.py
       - name: Validate release SBOM
         run: |
           python3 scripts/generate-sbom.py /tmp/esf-ci-sbom.json
           python3 -c 'import json, uuid; b=json.load(open("/tmp/esf-ci-sbom.json")); assert b["bomFormat"] == "CycloneDX" and b["specVersion"] == "1.6" and b["serialNumber"].startswith("urn:uuid:"); uuid.UUID(b["serialNumber"][9:])'
-      - name: Audit frontend npm graph
-        working-directory: internal/controlplane/web
-        run: npm audit --audit-level=high
-      - name: Audit OpenCode npm graph
-        working-directory: agents/opencode
-        run: npm audit --audit-level=high --package-lock-only
-      - name: Test frontend
-        working-directory: internal/controlplane/web
-        run: npm test
-      - name: Build frontend
-        working-directory: internal/controlplane/web
-        run: npm run build
-      - name: Check tracked frontend is current
-        run: |
-          git diff --exit-code -- internal/controlplane/web/dist
-          test -z "$(git status --porcelain --untracked-files=all -- internal/controlplane/web/dist)"
-      - name: Check Go formatting
-        shell: bash
-        run: |
-          git ls-files -z '*.go' | xargs -0 -r gofmt -l | tee /tmp/unformatted-go-files
-          test ! -s /tmp/unformatted-go-files
-      - name: Run Go vet
-        run: go vet ./...
-      - name: Check Go vulnerabilities
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
-      - name: Run Go tests with the race detector
-        run: go test -race ./...
       - name: Test DSPy intake without credentials
         run: make test-python
-      - name: Build Machinist
-        run: |
-          mkdir -p bin
-          go build -trimpath -ldflags="-X main.version=ci" -o bin/machinist ./cmd/machinist
-          go build -trimpath -o bin/factory ./cmd/factory
-          test -x bin/factory
-          test -x bin/machinist
-          test "$(bin/machinist version)" = "ci"
 
   macos:
     name: macOS checks
@@ -113,28 +156,35 @@ jobs:
         run: test "$(go env GOVERSION)" = "go1.27.3"
       - name: Run Go tests with the race detector
         run: go test -race ./...
-      - name: Build Machinist
+      - name: Build factory
         run: |
           mkdir -p bin
-          go build -trimpath -ldflags="-X main.version=ci" -o bin/machinist ./cmd/machinist
           go build -trimpath -o bin/factory ./cmd/factory
           test -x bin/factory
-          test -x bin/machinist
-          test "$(bin/machinist version)" = "ci"
+          test "$(bin/factory version)" != ""
 
   check:
     name: check
     if: always()
     needs:
-      - linux
+      - go
+      - frontend
+      - pi
+      - python
       - macos
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Require every platform check
         env:
-          LINUX_RESULT: ${{ needs.linux.result }}
+          GO_RESULT: ${{ needs.go.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          PI_RESULT: ${{ needs.pi.result }}
+          PYTHON_RESULT: ${{ needs.python.result }}
           MACOS_RESULT: ${{ needs.macos.result }}
         run: |
-          test "$LINUX_RESULT" = success
+          test "$GO_RESULT" = success
+          test "$FRONTEND_RESULT" = success
+          test "$PI_RESULT" = success
+          test "$PYTHON_RESULT" = success
           test "$MACOS_RESULT" = success

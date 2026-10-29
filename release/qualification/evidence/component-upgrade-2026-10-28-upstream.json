@@ -1,0 +1,114 @@
+{
+  "schema": "esf-component-upgrade/v1",
+  "baseline": "d8009eba4e9834bbd7d0f385d098e669c6670632",
+  "candidate": "v0.7.1",
+  "queried_at": "2026-10-28T16:05:00+02:00/2026-10-28T16:25:00+02:00",
+  "sources": {
+    "npm": "https://registry.npmjs.org/",
+    "github": "https://api.github.com/",
+    "go_proxy": "https://proxy.golang.org/",
+    "pypi": "https://pypi.org/pypi/",
+    "python_releases": "https://www.python.org/api/v2/downloads/release/?is_published=true&pre_release=false",
+    "node_releases": "https://nodejs.org/dist/index.json",
+    "kubernetes_stable": "https://dl.k8s.io/release/stable.txt",
+    "docker_hub": "https://hub.docker.com/v2/repositories/",
+    "ghcr": "https://ghcr.io/v2/",
+    "gcr": "https://gcr.io/v2/",
+    "osv": "https://api.osv.dev/v1/query"
+  },
+  "upgrades": {
+    "python": {"previous": "3.14.7", "candidate": "3.14.10", "line": "3.14", "url": "https://www.python.org/downloads/release/python-31410/"},
+    "grpc": {"previous": "1.84.0", "candidate": "1.85.0", "url": "https://proxy.golang.org/google.golang.org/grpc/@latest", "security": "no advisory for 1.84.0; features/bugfixes only"},
+    "x_net": {"previous": "0.61.0", "candidate": "0.62.0", "url": "https://pkg.go.dev/vuln/GO-2026-6860", "security": "GO-2026-6860 and GO-2026-6866 (x/net/html) fixed; not import-reachable"},
+    "opencode": {
+      "previous": "2.1.4",
+      "candidate": "2.2.0",
+      "npm_integrity": "sha512-05wLSq/M/vqw32uZnrNUGnhSpcpXlF+4OfvKzGghtbPYyF7kB82qfIRSIZQk3vFBIH32HWu8UQCai38b7J36kw==",
+      "linux_amd64_npm_integrity": "sha512-ComUyKWDToJMBEI1IdxiCGSSdJ0BhXYPoOkb+o2BozDERtTg51UWiomfkiwMIJ3qgR1p/9Itdt/c8oVINUKNmg==",
+      "baseline_tarball_sha256": "bc14a6fbe6d2a107897206110323f7a171e99bf77007a753fb3c040aead185df",
+      "linux_amd64_binary_sha256": "87a4d6ac3c1b5691d4fb5e88f473992016b37ede6611c5cb7092fcdb1d91fad0",
+      "url": "https://registry.npmjs.org/@opencode/cli",
+      "notes": "npm dist-tag latest; headless run --format json and provider URL fixes; no breaking changes affecting ESF's run invocation"
+    },
+    "claude": {
+      "previous": "2.1.300 deployed / 2.1.311 inventory",
+      "candidate": "2.1.312",
+      "archive_url": "https://github.com/anthropics/claude-code/releases/download/v2.1.312/claude-linux-x64.tar.gz",
+      "archive_sha256": "d9324231c4e3dfe342e853f56c752348ae060f9f221cdf4b0f90ef1dc47ee907",
+      "binary_sha256": "4f4178ce41d83e23341ebfbaecdbcf8ea6bf7baea0690025abe49eeec3a5d01d",
+      "url": "https://api.github.com/repos/anthropics/claude-code/releases/latest",
+      "notes": "headless -p fix for invalid command names; no flag/contract changes"
+    },
+    "codex": {
+      "previous": "0.162.1 deployed / 0.164.0 inventory",
+      "candidate": "0.165.0",
+      "archive_url": "https://github.com/openai/codex/releases/download/rust-v0.165.0/codex-x86_64-unknown-linux-musl.tar.gz",
+      "archive_sha256": "be635d3486a5bd060d0fff582ae6d30160280c31344dd85719707fa920e187f0",
+      "binary_sha256": "c06a67fd8ac76508dc78bd99ce20c9f317b8d568beda59485f3f4134df9962d5",
+      "url": "https://api.github.com/repos/openai/codex/releases/latest",
+      "notes": "no published checksum for the raw standalone asset; GitHub per-asset digest matched; no exec --json contract changes"
+    },
+    "kubectl": {"previous": "1.37.1", "candidate": "1.37.2", "url": "https://dl.k8s.io/release/stable.txt"},
+    "lucide_react": {"previous": "1.57.0", "candidate": "1.63.0", "url": "https://registry.npmjs.org/lucide-react"},
+    "vite": {"previous": "8.3.4", "candidate": "8.3.5", "url": "https://registry.npmjs.org/vite"},
+    "boto3_botocore": {"previous": "1.43.119", "candidate": "1.43.120", "url": "https://pypi.org/pypi/boto3/json"},
+    "pydantic_settings": {"previous": "2.16.1", "candidate": "2.16.2", "url": "https://pypi.org/pypi/pydantic-settings/json"}
+  },
+  "unchanged_current": {
+    "go": "1.27.3",
+    "node": "26.12.1",
+    "uv": "0.13.6",
+    "mise": "2026.10.21",
+    "helm": "4.3.1",
+    "postgresql": "18.6",
+    "dspy": "3.4.1",
+    "unreal": "0.3.1",
+    "cubesandbox": "0.7.3",
+    "cubesandbox_go_sdk": "v0.7.3",
+    "temporal_server": "1.32.1",
+    "temporal_ui": "2.57.0",
+    "temporal_go_sdk": "1.50.0",
+    "temporal_api": "1.64.0",
+    "pi_durable": "1.4.0",
+    "certifi": "2026.10.23",
+    "filelock": "4.2.4"
+  },
+  "constraint_blocked": [
+    {"package": "litellm", "locked": "1.103.9", "latest": "1.106.5", "reason": "litellm >=1.104 requires filelock<4.0, conflicting with root filelock>=4.2.1 security minimum"},
+    {"package": "openai", "locked": "2.54.0", "latest": "3.40.0", "reason": "litellm pins openai<3.0.0"},
+    {"package": "importlib-metadata", "locked": "8.9.0", "latest": "10.1.0", "reason": "litellm pins importlib-metadata<9.0.0"},
+    {"package": "python-dateutil", "locked": "2.9.0.post0", "latest": "3.0.0", "reason": "botocore pins python-dateutil<3.0.0"}
+  ],
+  "known_unfixed": [
+    {"package": "diskcache", "version": "5.6.3", "advisory": "CVE-2025-69872 / GHSA-w8v5-vhqr-4h9v / PYSEC-2026-2447", "impact": "pickle deserialization via attacker-writable cache directory; no fixed release exists", "mitigation": "trusted/private dspy cache directories; caching can be disabled"}
+  ],
+  "images": {
+    "node": {"tag": "26.12.1-slim", "digest": "sha256:94816674c62774da0d099a947bf4613b9e1972a2733abd0d0cd80e795f8411d0"},
+    "debian": {"tag": "trixie-slim", "digest": "sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31"},
+    "golang": {"tag": "1.27.3", "digest": "sha256:b76020929b709ddb6202afc05410a0faefae20ae05e27ad548b3870092688a69"},
+    "python": {"tag": "3.15.2-slim", "digest": "sha256:c4158543ecb725b99e57d129dfd43d761d4c43e4577b5e23326aabb223cf7f4e"},
+    "cube": {"digest": "sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472", "status": "unchanged; current"},
+    "runtime": {"digest": "sha256:15f8637509792e05b97d83451b0b6ccfa4abd548f997e406ac1e72c87fe1fa78", "status": "unchanged; current"},
+    "temporal_server": {"tag": "1.32.1", "digest": "sha256:acecbab5b0b8ae9cf4012b508866ca97feda3709577bf157b537239f40029049", "status": "current"},
+    "temporal_admin_tools": {"tag": "1.32.1", "digest": "sha256:9ef0dc5b063bf4ffd5c1512de72e0e73e225bd2c7006a18ce69bd592a8862a83", "status": "current"},
+    "temporal_ui": {"tag": "2.57.0", "digest": "sha256:d944f959d0923c35cd991a17a0edbe087770eff843724b181933e0cfdd563ab2", "status": "current"},
+    "postgresql": {"tag": "18.6-alpine", "digest": "sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5", "status": "current"}
+  },
+  "local_template": {
+    "recipe_sha256": "a6e1ff689f30c8938a38d3019e16dd2aad5e1888f5be13dba3768f55b7ab9c2c",
+    "image": "localhost:32000/esf-native@sha256:64c54a3ef330f8e179c7b417fa4d5df78d0802afcef9d4663f418eaab9287793",
+    "template_id": "tpl-acd55ad29bc04f08b1d3db44",
+    "alias": "esf-v071-native-20261028",
+    "status": "READY",
+    "artifact_ext4_sha256": "796119d8aeb13c21028f1f1702fbc606c08709995f3465e0e70e86ed4589767b",
+    "payload_sha256": {
+      "opencode2": "87a4d6ac3c1b5691d4fb5e88f473992016b37ede6611c5cb7092fcdb1d91fad0",
+      "claude": "4f4178ce41d83e23341ebfbaecdbcf8ea6bf7baea0690025abe49eeec3a5d01d",
+      "codex": "c06a67fd8ac76508dc78bd99ce20c9f317b8d568beda59485f3f4134df9962d5",
+      "node": "08f12d42fb304468e8ee86247fe686aae5b225836ea65e9d6566c11ae6ba2e8e",
+      "unreal_agent_runner": "d289aa2046bb79d2b063679c6e0e6b714c759f8a5ed6f969d3b3ea1eeeec03ee",
+      "pi_runner": "5e2a1d725c3b5422265b3a6c9cfb90293856865184892894dc329f8ccaf89862"
+    }
+  },
+  "remaining_gates": ["vm soak_24h", "kubernetes soak_24h", "performance matrix", "image SBOM/vulnerability qualification", "transitive license review", "hosted-provider acceptance", "production deployment", "restore", "temporal replay", "migration drill"]
+}

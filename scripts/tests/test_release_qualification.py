@@ -34,9 +34,8 @@ class QualificationBoundaryTests(unittest.TestCase):
             release = {"release": "v0.6.0-rc.1", "binary_release": "v0.6.0", "commit": commit}
             (assets / "release-manifest.json").write_text(json.dumps(release))
             (assets / "dependency-inventory.json").write_bytes((root / "release/inventory.json").read_bytes())
-            for component in ("factory", "machinist", "combined"):
-                for platform in PLATFORMS:
-                    (assets / f"esf_{component}_0.6.0-rc.1_{platform}.tar.gz").write_bytes(b"synthetic boundary fixture")
+            for platform in PLATFORMS:
+                (assets / f"esf_factory_0.6.0-rc.1_{platform}.tar.gz").write_bytes(b"synthetic boundary fixture")
             for name in ("sbom.cdx.json", "checksums.txt"):
                 (assets / name).write_text("synthetic boundary fixture")
             (root / "evidence").mkdir()

@@ -1,18 +1,13 @@
 {
-  "release": "v0.6.2",
+  "release": "v0.7.1",
   "release_profile": "binary-preview",
   "qualification_mode": "companion-manifest",
   "baseline": "ba829056ab728b8e002dddcb702edc0be5b19a1d",
-  "machinist": {
-    "revision": "39435164faf1ff7fad49e41c38a7eb1a00538f21",
-    "schema": 5,
-    "qualification": "unit tests passed; deployment upgrade pending"
-  },
   "dependencies": {
     "cubesandbox": {
       "release": "0.7.3",
       "go_sdk": "v0.7.3",
-      "qualification": "Go SDK lifecycle compatibility passed against local 0.7.2 stack; 0.7.3 deployment qualification pending"
+      "qualification": "Go SDK lifecycle compatibility passed against local 0.7.3 stack; production deployment qualification pending"
     },
     "temporal": {
       "server": "1.32.1",
@@ -24,13 +19,13 @@
     },
     "opencode": {
       "package": "@opencode/cli",
-      "version": "2.1.4",
-      "npm_integrity": "sha512-vtHFa/1frSylpx1cZRuzmM2ecHWn6YB8cNvhw8eWKPvSFvDnckZXugDbi3LJYD9TGjRx2U6JRo725qwqtwMUfQ==",
-      "linux_amd64_binary_sha256": "ca9b3ee262e33bb4e7aa0e1230dc61086a474c8c8016b980081d0719712fd2e7",
+      "version": "2.2.0",
+      "npm_integrity": "sha512-05wLSq/M/vqw32uZnrNUGnhSpcpXlF+4OfvKzGghtbPYyF7kB82qfIRSIZQk3vFBIH32HWu8UQCai38b7J36kw==",
+      "linux_amd64_binary_sha256": "87a4d6ac3c1b5691d4fb5e88f473992016b37ede6611c5cb7092fcdb1d91fad0",
       "license": "MIT",
       "qualification": "candidate; refreshed package integrity verified; Cube and provider validation recorded separately",
       "linux_amd64_package": "@opencode/cli-linux-x64-baseline",
-      "linux_amd64_npm_integrity": "sha512-0/H4wRDAW4hA5IWN440XwDrRATbvT3cno+UUsqFynTu0TeGXNADjK2AZfvhNTfyJaVyCa+v7VhB+r7ghuMa5EQ=="
+      "linux_amd64_npm_integrity": "sha512-ComUyKWDToJMBEI1IdxiCGSSdJ0BhXYPoOkb+o2BozDERtTg51UWiomfkiwMIJ3qgR1p/9Itdt/c8oVINUKNmg=="
     },
     "unreal": {
       "release": "0.3.1",
@@ -40,19 +35,11 @@
       "license": "MIT",
       "qualification": "release checksums and local-model factory acceptance passed; hosted-provider qualification pending"
     },
-    "grpc": "1.84.0",
+    "grpc": "1.85.0",
     "otel": "1.47.0",
-    "sqlite": "1.61.0",
     "dspy": "3.4.1",
-    "frontend": {
-      "vite": "8.3.5",
-      "lucide": "1.62.0",
-      "jsdom": "30.1.3",
-      "react": "19.3.1",
-      "tailwind": "4.3.3"
-    },
     "postgresql": "18.6",
-    "x_net": "0.61.0",
+    "x_net": "0.62.0",
     "harness2": {
       "repository": "https://github.com/google-research/harness2",
       "version": "0.1.0",
@@ -72,22 +59,19 @@
     "go": "1.27.3",
     "node": "26.12.1",
     "python_optional": "3.15.2",
-    "kubernetes_qualification": "1.37.1",
+    "kubernetes_qualification": "1.37.2",
     "helm_qualification": "4.3.1",
     "uv": "0.13.6"
   },
   "build_bases": {
-    "go": "docker.io/library/golang@sha256:9048d5e7751706200eb1719c7dae0436950d362f29a1da91fa05e5c63867c60f",
+    "go": "docker.io/library/golang@sha256:b76020929b709ddb6202afc05410a0faefae20ae05e27ad548b3870092688a69",
     "runtime": "gcr.io/distroless/static-debian13@sha256:15f8637509792e05b97d83451b0b6ccfa4abd548f997e406ac1e72c87fe1fa78",
-    "worker": "docker.io/library/debian@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad",
-    "python": "docker.io/library/python@sha256:197f6622a70b727a4e61bdac13a73b4e2b914b896aa5a729ceb1f45a09bde5fa",
-    "node": "docker.io/library/node@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec",
+    "python": "docker.io/library/python@sha256:c4158543ecb725b99e57d129dfd43d761d4c43e4577b5e23326aabb223cf7f4e",
+    "node": "docker.io/library/node@sha256:94816674c62774da0d099a947bf4613b9e1972a2733abd0d0cd80e795f8411d0",
     "cube": "ghcr.io/tencentcloud/cubesandbox-base@sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472"
   },
   "images": {
     "factory": null,
-    "console": null,
-    "managedworker": null,
     "intake": null,
     "cube_template": null,
     "cube": null,
@@ -95,7 +79,7 @@
     "postgresql": null
   },
   "templates": {
-    "recipe_sha256": "abd9b5792d297e35f0c04fcdaceed3b81f8eb62eb57c2a0573a5f567f32dac2c",
+    "recipe_sha256": "a6e1ff689f30c8938a38d3019e16dd2aad5e1888f5be13dba3768f55b7ab9c2c",
     "architecture": "linux/amd64",
     "git_package": null,
     "ca_certificates_package": null,
@@ -121,18 +105,18 @@
     "claude": {
       "type": "claude",
       "credential_mode": "cube_egress",
-      "tested_cli_version": "2.1.311",
+      "tested_cli_version": "2.1.312",
       "installation": "operator-provisioned standalone binary or complete runtime in a pinned Cube template",
-      "qualification": "candidate; official archive digest verified; CLI startup and provider qualification recorded separately",
-      "linux_amd64_binary_sha256": "86dc1fcc69498159eaf15f446613e847010f9036bfbbdffd4c49350be8489ada"
+      "qualification": "candidate; official archive digest verified; CLI startup verified in Cube; provider qualification pending",
+      "linux_amd64_binary_sha256": "4f4178ce41d83e23341ebfbaecdbcf8ea6bf7baea0690025abe49eeec3a5d01d"
     },
     "codex": {
       "type": "codex",
       "credential_mode": "cube_egress",
-      "tested_cli_version": "0.164.0",
+      "tested_cli_version": "0.165.0",
       "installation": "operator-provisioned standalone binary or complete runtime in a pinned Cube template",
-      "qualification": "candidate; official archive digest verified; CLI startup and provider qualification recorded separately",
-      "linux_amd64_binary_sha256": "b93f6811d3f653f0fb83be4050d857fb9abbb111dfa2ce160563327daff7f306"
+      "qualification": "candidate; official archive digest verified; CLI startup verified in Cube; provider qualification pending",
+      "linux_amd64_binary_sha256": "c06a67fd8ac76508dc78bd99ce20c9f317b8d568beda59485f3f4134df9962d5"
     }
   },
   "service_images": {

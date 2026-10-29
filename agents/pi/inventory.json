@@ -16,7 +16,7 @@
     "path": "/opt/esf/agents/node",
     "version": "26.12.1",
     "license": "MIT",
-    "image": "docker.io/library/node@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec",
+    "image": "docker.io/library/node@sha256:94816674c62774da0d099a947bf4613b9e1972a2733abd0d0cd80e795f8411d0",
     "sha256": "08f12d42fb304468e8ee86247fe686aae5b225836ea65e9d6566c11ae6ba2e8e"
   },
   "package_lock_sha256": "0ebb286a05905a6fcff53f4844b6576f2401e85b4c073a0a13f66d9f5de69436",
