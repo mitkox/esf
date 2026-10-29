@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -228,7 +229,10 @@ func newIntegrationFixture(t *testing.T, provider sandbox.Provider, localPaths .
 
 func integrationFixtureRepo(t *testing.T) (string, string) {
 	t.Helper()
-	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("resolve fixture directory: %v", err)
+	}
 	run := func(args ...string) {
 		cmd := execGit(t, dir, args...)
 		if cmd != "" {

@@ -3,12 +3,41 @@ package factory
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	artifacts "github.com/mitkox/esf/internal/factoryartifacts"
 	"github.com/mitkox/esf/internal/repository"
 	"github.com/mitkox/esf/internal/sandbox"
 )
+
+func TestFixtureRepoResolvesTemporaryDirectorySymlinks(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(t.TempDir(), "tmp")
+	if err := os.Symlink(root, alias); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", alias)
+	t.Run("canonical fixture", func(t *testing.T) {
+		dir := newFixtureRepo(t)
+		canonical, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if dir != canonical {
+			t.Fatalf("fixture path = %q, want canonical path %q", dir, canonical)
+		}
+		if err := repository.New(nil, repository.WithLocalPaths([]string{dir})).Validate(repository.Request{
+			Kind: repository.SourceLocal, LocalPath: dir, Revision: "HEAD",
+		}); err != nil {
+			t.Fatalf("canonical fixture rejected: %v", err)
+		}
+	})
+}
 
 func TestDirectActivityRejectsUnregisteredHostRepository(t *testing.T) {
 	cfg := piFactoryConfig(t)

@@ -179,7 +179,10 @@ func runWorkflowOpts(t *testing.T, fake sandbox.Provider, req RunRequest, opts w
 // must be a genuine repository even though the sandbox is fake.
 func newFixtureRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("resolve fixture directory: %v", err)
+	}
 	commands := [][]string{
 		{"init", "-q"},
 		{"config", "user.email", "factory@test"},
