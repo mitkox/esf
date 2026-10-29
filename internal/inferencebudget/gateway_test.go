@@ -224,3 +224,49 @@ func TestGatewayRejectsUnqualifiedRequestBeforeForwarding(t *testing.T) {
 		t.Fatal("invalid requests consumed reservations")
 	}
 }
+
+func TestGatewayRejectsRawAndDuplicateCredentialsBeforeLedger(t *testing.T) {
+	key := []byte(strings.Repeat("k", 32))
+	token := Token(key, "run-base")
+	gateway := &Gateway{TokenKey: key, AdminKey: strings.Repeat("a", 32)}
+	for _, tc := range []struct {
+		path    string
+		headers []string
+	}{
+		{"/v1/chat/completions", []string{token}},
+		{"/v1/chat/completions", []string{"Bearer " + token, "Bearer " + token}},
+		{"/control/accounts/run-base", []string{"Bearer " + gateway.AdminKey, "Bearer " + gateway.AdminKey}},
+	} {
+		r := httptest.NewRequest("POST", tc.path, strings.NewReader("{}"))
+		for _, v := range tc.headers {
+			r.Header.Add("Authorization", v)
+		}
+		w := httptest.NewRecorder()
+		gateway.ServeHTTP(w, r)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("%s status=%d", tc.path, w.Code)
+		}
+	}
+	empty := &Gateway{}
+	r := httptest.NewRequest("GET", "/control/accounts/run-base", nil)
+	r.Header.Set("Authorization", "Bearer ")
+	w := httptest.NewRecorder()
+	empty.ServeHTTP(w, r)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("empty control key status=%d", w.Code)
+	}
+}
+
+func TestGatewayRejectsUnusableAdminTokens(t *testing.T) {
+	g := Gateway{AdminKey: strings.Repeat("a", 32), TokenKey: []byte(strings.Repeat("k", 32)), Upstream: "https://provider.invalid/v1", UpstreamKey: "secret", Model: "test", InputPrice: 1, OutputPrice: 1, PricingEvidence: "evidence"}
+	g.RouteDigest = RouteDigest(g.Upstream, g.Model, g.InputPrice, g.OutputPrice, g.PricingEvidence)
+	if err := g.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, token := range []string{strings.Repeat("a", 32) + ",", strings.Repeat("a", 16) + "\u00a0" + strings.Repeat("b", 16)} {
+		g.AdminKey = token
+		if err := g.Validate(); err == nil {
+			t.Fatal("unusable admin token accepted")
+		}
+	}
+}

@@ -3,7 +3,9 @@ package repository
 import (
 	"fmt"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -111,6 +113,45 @@ func (r Request) validateLocal() error {
 	}
 	if err := ValidateRevision(r.Revision); err != nil {
 		return err
+	}
+	return nil
+}
+
+// ValidateLocalPaths checks operator declarations without inspecting the local
+// filesystem, since configuration may also be loaded on a submission client.
+func ValidateLocalPaths(paths []string) error {
+	for _, dir := range paths {
+		if !filepath.IsAbs(dir) || filepath.Clean(dir) != dir || strings.ContainsAny(dir, "\x00\r\n") || dir == string(filepath.Separator) {
+			return fmt.Errorf("local repository paths must be clean absolute repository directories, not filesystem roots")
+		}
+	}
+	return nil
+}
+
+func validateLocalPath(dir string, allowed []string) error {
+	if err := ValidateLocalPaths([]string{dir}); err != nil {
+		return fmt.Errorf("%w: %v", ErrRepositoryRejected, err)
+	}
+	registered := false
+	for _, approved := range allowed {
+		if dir == approved {
+			registered = true
+			break
+		}
+	}
+	if !registered {
+		return fmt.Errorf("%w: local repository is not registered in repositories.local_paths", ErrRepositoryRejected)
+	}
+	// Exact matching happens before filesystem inspection: unregistered paths
+	// do not become an existence oracle. Reject a path redirected by symlink
+	// since admission; the registered directory and parents remain operator-owned.
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil || resolved != dir {
+		return fmt.Errorf("%w: local repository must exist at its registered canonical path without symlinks", ErrRepositoryRejected)
+	}
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return fmt.Errorf("%w: registered local repository must be a directory", ErrRepositoryRejected)
 	}
 	return nil
 }

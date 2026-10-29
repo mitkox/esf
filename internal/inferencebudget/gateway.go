@@ -5,11 +5,11 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/mitkox/esf/internal/httpsecurity"
 	"io"
 	"net/http"
 	"net/url"
@@ -46,7 +46,7 @@ func RouteDigest(upstream, model string, inputPrice, outputPrice int64, pricingE
 
 func (g *Gateway) Validate() error {
 	u, e := url.Parse(g.Upstream)
-	if e != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || len(g.AdminKey) < 32 || len(g.TokenKey) < 32 || g.AdminKey == string(g.TokenKey) || g.UpstreamKey == "" || g.RouteDigest == "" || g.PricingEvidence == "" || g.InputPrice <= 0 || g.OutputPrice <= 0 {
+	if e != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || len(g.AdminKey) < 32 || !httpsecurity.ValidBearerToken(g.AdminKey) || len(g.TokenKey) < 32 || g.AdminKey == string(g.TokenKey) || g.UpstreamKey == "" || g.RouteDigest == "" || g.PricingEvidence == "" || g.InputPrice <= 0 || g.OutputPrice <= 0 {
 		return errors.New("gateway requires HTTPS upstream, separate control/token keys, and qualified pricing")
 	}
 	if g.Model == "" || g.RouteDigest != RouteDigest(g.Upstream, g.Model, g.InputPrice, g.OutputPrice, g.PricingEvidence) {
@@ -64,7 +64,12 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unsupported route", 404)
 		return
 	}
-	id, e := TokenID(g.TokenKey, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	token, ok := httpsecurity.Bearer(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id, e := TokenID(g.TokenKey, token)
 	if e != nil {
 		http.Error(w, "unauthorized", 401)
 		return
@@ -259,7 +264,7 @@ func usage(body []byte, stream bool) (int64, int64, bool) {
 	return input, output, found && terminal
 }
 func (g *Gateway) control(w http.ResponseWriter, r *http.Request) {
-	if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+g.AdminKey)) != 1 {
+	if !httpsecurity.Authenticated(r, g.AdminKey) {
 		http.Error(w, "unauthorized", 401)
 		return
 	}

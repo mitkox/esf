@@ -1,6 +1,7 @@
 package turnexec
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -8,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/mitkox/esf/internal/httpsecurity"
 	"io"
 	"net/http"
 	"net/url"
@@ -55,8 +57,8 @@ func Open(ctx context.Context, root, token string, profiles map[string]Profile, 
 	if err != nil {
 		return nil, err
 	}
-	if len(token) < 32 {
-		return nil, errors.New("service token must contain at least 32 characters")
+	if len(token) < 32 || !httpsecurity.ValidBearerToken(token) {
+		return nil, errors.New("service token must contain at least 32 characters from the ASCII bearer token alphabet")
 	}
 	if len(profiles) == 0 || provider == nil {
 		return nil, errors.New("provider and profiles required")
@@ -338,9 +340,40 @@ func respond(w http.ResponseWriter, status int, v any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
+
+// responseSnapshot serializes mutable execution state under the service lock,
+// then sends the immutable bytes after unlocking. A slow client must not block
+// every execution's state updates or lease processing.
+type responseSnapshot struct {
+	header http.Header
+	status int
+	body   bytes.Buffer
+}
+
+func (r *responseSnapshot) Header() http.Header { return r.header }
+func (r *responseSnapshot) WriteHeader(status int) {
+	if r.status == 0 {
+		r.status = status
+	}
+}
+func (r *responseSnapshot) Write(p []byte) (int, error) {
+	if r.status == 0 {
+		r.status = http.StatusOK
+	}
+	return r.body.Write(p)
+}
+func (r *responseSnapshot) flush(w http.ResponseWriter) {
+	for key, values := range r.header {
+		w.Header()[key] = values
+	}
+	if r.status != 0 {
+		w.WriteHeader(r.status)
+	}
+	_, _ = w.Write(r.body.Bytes())
+}
+
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	expected := "Bearer " + s.token
-	if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte(expected)) != 1 {
+	if !httpsecurity.Authenticated(r, s.token) {
 		respond(w, 401, map[string]string{"error": "unauthorized"})
 		return
 	}
@@ -395,8 +428,32 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	var owner struct {
+		Token string `json:"owner_token"`
+	}
+	var answer permissionAnswer
+	if len(parts) == 3 && r.Method == "POST" {
+		switch parts[2] {
+		case "cancel", "renew":
+			if err := decode(w, r, &owner, 4096); err != nil {
+				respond(w, 400, map[string]string{"error": "invalid ownership"})
+				return
+			}
+		case "permissions":
+			if decode(w, r, &answer, 4096) != nil || (answer.Decision != "allow" && answer.Decision != "deny") {
+				respond(w, 400, map[string]string{"error": "invalid permission decision"})
+				return
+			}
+		}
+	}
+	snapshot := &responseSnapshot{header: make(http.Header)}
+	original := w
+	w = snapshot
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer func() {
+		s.mu.Unlock()
+		snapshot.flush(original)
+	}()
 	rec := s.records[parts[1]]
 	if rec == nil {
 		http.NotFound(w, r)
@@ -440,18 +497,11 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			break
 		}
-		s.answerPermission(w, r, rec)
+		s.answerPermission(w, answer, rec)
 		return
 	case "cancel", "renew":
 		if r.Method != "POST" {
 			break
-		}
-		var owner struct {
-			Token string `json:"owner_token"`
-		}
-		if err := decode(w, r, &owner, 4096); err != nil {
-			respond(w, 400, map[string]string{"error": "invalid ownership"})
-			return
 		}
 		hash := digest([]byte(owner.Token))
 		if subtle.ConstantTimeCompare([]byte(hash), []byte(rec.OwnerHash)) != 1 {
@@ -527,8 +577,14 @@ func (s *Service) submit(w http.ResponseWriter, r *http.Request) {
 	ownerHash := digest([]byte(req.OwnerToken))
 	req.OwnerToken = ""
 	fingerprint := digestJSON(req)
+	snapshot := &responseSnapshot{header: make(http.Header)}
+	original := w
+	w = snapshot
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer func() {
+		s.mu.Unlock()
+		snapshot.flush(original)
+	}()
 	if s.closed {
 		respond(w, 503, map[string]string{"error": "service stopping"})
 		return

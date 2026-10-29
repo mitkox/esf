@@ -191,10 +191,14 @@ recorded run manifests identify its SHA-256 digest.
 1. Build with the version in `go.mod`: `go build -trimpath -o bin/factory ./cmd/factory`.
 2. Create a dedicated `factory` system user/group. Install the binary at
    `/usr/local/bin/factory` and configuration at `/etc/factory/factory.toml`.
-3. Make configuration and keyrings readable only by root and the factory group
-   (for example owner `root:factory`, mode `0640`). Keep any source loaded by
-   `LoadCredential` root-only and mode `0600`. Create `/etc/factory/worker.env`,
-   even when no environment credentials are needed.
+3. Configuration may be `root:factory` mode `0640`. Payload keyrings, API token
+   files and TLS private keys must instead be regular files with no group/other
+   access (mode `0600`), readable by the service identity. Use service-owned
+   files or systemd `LoadCredential`; keep credential source files root-only.
+   Symlinks and oversized secret files are refused. Before upgrading an existing
+   installation, migrate any `0640` keyrings to this ownership/permission model
+   on every submitting CLI and worker, then run doctor as that identity before
+   restarting. Create `/etc/factory/worker.env` even without environment secrets.
 4. Run `factory doctor --config /etc/factory/factory.toml` as the service user
    with the same environment. Resolve every reported failure.
 5. Install `deploy/factory-worker.service` into `/etc/systemd/system/`, reload
@@ -322,3 +326,13 @@ behind TLS, or let a reverse proxy terminate TLS; see the
 `factory describe`, `status --watch`, `logs` and `get changes`. See
 [the 0.7.1 release notes](release-v0.7.1.md) and
 [ADR 0008](adr/0008-remove-machinist.md).
+
+### Local repository registration
+
+Workers reject local sources unless their exact canonical directories appear in
+`[repositories].local_paths`. Register Git worktree roots or bare repository
+roots, never ordinary subdirectories. Descendants, prefix matches and symlink
+aliases do not inherit authorization. Restart the worker after updating policy;
+a caller's CLI configuration cannot authorize a path on the worker. Registration
+exports all refs/history, so protect the directory, parents and Git metadata from
+untrusted writers and register only histories suitable for the task's sandbox.

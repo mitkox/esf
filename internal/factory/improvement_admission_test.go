@@ -50,6 +50,8 @@ func TestImprovementAdmissionRegistersBoundedAccountsWithoutAllocatingVM(t *test
 	deny := false
 	cfg.Egress = map[string]EgressPolicyConfig{"locked": {AllowInternet: &deny}}
 	cfg.Scopes[DefaultScope] = ScopeConfig{Egress: "locked", ImprovementPolicies: []string{"offline"}}
+	req := baseRequest(t)
+	cfg.Repositories.LocalPaths = []string{req.LocalPath}
 	fake := sandbox.NewFake()
 	runtime, e := NewRuntime(ctx, RuntimeOptions{Config: cfg, SandboxProvider: fake})
 	if e != nil {
@@ -60,7 +62,6 @@ func TestImprovementAdmissionRegistersBoundedAccountsWithoutAllocatingVM(t *test
 	if e != nil {
 		t.Fatal(e)
 	}
-	req := baseRequest(t)
 	req.AgentHarness = "opencode2"
 	req.ImprovementPolicy = "offline"
 	ad, e := a.AdmitImprovement(ctx, req)

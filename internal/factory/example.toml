@@ -120,8 +120,14 @@ service_name  = "factory"
 
 [repositories]
 # Remote repositories must match one of these prefixes. Empty disallows all
-# remote repositories; local sources remain available for tests.
+# remote repositories. Local sources require a separate exact-path registration.
 allowed = []
+# Exact canonical absolute directories on the worker host; descendants and
+# symlink aliases are not granted. Empty disables --local-path submissions.
+# Keep these repositories, their parent directories and Git metadata under
+# operator control. Register the fixture path before running factory-run-demo.sh.
+local_paths = []
+# local_paths = ["/srv/esf/fixtures/factory-e2e"]
 
 # ── Agent harnesses ──────────────────────────────────────────────────────────
 # The harness name is what a request may select. The executable and arguments

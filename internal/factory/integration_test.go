@@ -158,12 +158,13 @@ func (b *blockingProvider) release() {
 	b.once.Do(func() { close(b.blockAgent) })
 }
 
-func newIntegrationFixture(t *testing.T, provider sandbox.Provider) (client.Client, string, *artifacts.Local) {
+func newIntegrationFixture(t *testing.T, provider sandbox.Provider, localPaths ...string) (client.Client, string, *artifacts.Local) {
 	t.Helper()
 
 	base := hardenedDefaults()
 	base.Cube.TemplateID = "tpl-integration"
 	base.Sandbox.BasePackages = []string{"git"}
+	base.Repositories.LocalPaths = localPaths
 
 	harness, err := agentharness.NewGeneric(agentharness.Spec{
 		Name:       "integration-agent",
@@ -198,7 +199,7 @@ func newIntegrationFixture(t *testing.T, provider sandbox.Provider) (client.Clie
 
 	acts, err := NewActivities(ActivitiesOptions{
 		Provider:        provider,
-		Repositories:    repository.New(nil),
+		Repositories:    repository.New(base.Repositories.Allowed, repository.WithLocalPaths(base.Repositories.LocalPaths)),
 		Harnesses:       registry,
 		Profiles:        base.VerificationProfiles(),
 		ArtifactFactory: store,
@@ -249,9 +250,8 @@ func integrationFixtureRepo(t *testing.T) (string, string) {
 // against a real Temporal server, and that the sandbox is destroyed.
 func TestWorkflowWithRealTemporal(t *testing.T) {
 	bp := newBlockingProvider()
-	c, taskQueue, store := newIntegrationFixture(t, bp)
-
 	repoDir, sha := integrationFixtureRepo(t)
+	c, taskQueue, store := newIntegrationFixture(t, bp, repoDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -321,9 +321,8 @@ func TestWorkflowWithRealTemporal(t *testing.T) {
 // workflow must still destroy its sandbox.
 func TestWorkflowCancellationDestroysSandbox(t *testing.T) {
 	bp := newBlockingProvider()
-	c, taskQueue, _ := newIntegrationFixture(t, bp)
-
 	repoDir, sha := integrationFixtureRepo(t)
+	c, taskQueue, _ := newIntegrationFixture(t, bp, repoDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -396,8 +395,8 @@ func TestWorkflowTimeoutCleansUp(t *testing.T) {
 		}
 	}
 
-	c, taskQueue, _ := newIntegrationFixture(t, bp)
 	repoDir, sha := integrationFixtureRepo(t)
+	c, taskQueue, _ := newIntegrationFixture(t, bp, repoDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -463,8 +462,8 @@ func TestLongAgentHeartbeat(t *testing.T) {
 	}
 	bp := newBlockingProvider()
 	defer bp.release()
-	c, queue, _ := newIntegrationFixture(t, bp)
 	dir, sha := integrationFixtureRepo(t)
+	c, queue, _ := newIntegrationFixture(t, bp, dir)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	req := RunRequest{RunID: fmt.Sprintf("run-heartbeat-%d", time.Now().UnixNano()), LocalPath: dir, RepositoryKind: "local", Revision: sha, Task: "heartbeat check", AgentHarness: "integration-agent", VerificationProfile: "default", AgentTimeout: 4 * time.Minute}

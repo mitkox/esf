@@ -451,3 +451,11 @@ func TestExactResourcePolicyParsing(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenRejectsUnusableServiceTokens(t *testing.T) {
+	for _, token := range []string{strings.Repeat("a", 32) + ",", strings.Repeat("a", 16) + "\u00a0" + strings.Repeat("b", 16)} {
+		if _, err := Open(context.Background(), t.TempDir(), token, profiles(), sandbox.NewFake()); err == nil {
+			t.Fatal("unusable token accepted")
+		}
+	}
+}
