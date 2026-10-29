@@ -46,6 +46,34 @@ func TestFakeCreateDestroyList(t *testing.T) {
 	}
 }
 
+func TestFakeBoundedFileReadRejectsOversizeAndReturnsIndependentBytes(t *testing.T) {
+	ctx := context.Background()
+	provider := NewFake()
+	sb, err := provider.Create(ctx, Spec{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sb.WriteFile(ctx, "/tmp/file", []byte("four")); err != nil {
+		t.Fatal(err)
+	}
+	reader := sb.(BoundedFileReader)
+	if data, err := reader.ReadFileBounded(ctx, "/tmp/file", 3); err == nil || data != nil {
+		t.Fatal("oversized fake file returned data")
+	}
+	data, err := reader.ReadFileBounded(ctx, "/tmp/file", 4)
+	if err != nil || string(data) != "four" {
+		t.Fatalf("exact bound: %v", err)
+	}
+	data[0] = 'x'
+	again, err := reader.ReadFileBounded(ctx, "/tmp/file", 4)
+	if err != nil || string(again) != "four" {
+		t.Fatal("returned bytes alias fake storage")
+	}
+	if _, err := reader.ReadFileBounded(ctx, "/tmp/file", 0); err == nil {
+		t.Fatal("accepted zero bound")
+	}
+}
+
 func TestFakeReattachRequiresLiveSandbox(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

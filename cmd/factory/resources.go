@@ -42,26 +42,27 @@ import (
 // resources. It cannot express an executable, a host path or a credential,
 // exactly like the CLI flags.
 type runSpec struct {
-	HarnessProfile      string   `json:"harness_profile" toml:"harness_profile"`
-	ImprovementPolicy   string   `json:"improvement_policy" toml:"improvement_policy"`
-	RunID               string   `json:"run_id" toml:"run_id"`
-	ChangeID            string   `json:"change_id" toml:"change_id"`
-	ParentRunID         string   `json:"parent_run_id" toml:"parent_run_id"`
-	Scope               string   `json:"scope" toml:"scope"`
-	Repository          string   `json:"repository" toml:"repository"`
-	Revision            string   `json:"revision" toml:"revision"`
-	Task                string   `json:"task" toml:"task"`
-	TaskFile            string   `json:"task_file" toml:"task_file"`
-	AgentHarness        string   `json:"agent_harness" toml:"agent_harness"`
-	Model               string   `json:"model" toml:"model"`
-	Workspace           string   `json:"workspace" toml:"workspace"`
-	EgressPolicy        string   `json:"egress_policy" toml:"egress_policy"`
-	VerificationProfile string   `json:"verification_profile" toml:"verification_profile"`
-	SandboxTemplate     string   `json:"sandbox_template" toml:"sandbox_template"`
-	Review              *bool    `json:"review" toml:"review"`
-	AgentTimeout        string   `json:"agent_timeout" toml:"agent_timeout"`
-	RunTimeout          string   `json:"total_timeout" toml:"total_timeout"`
-	Tags                []string `json:"tags" toml:"tags"`
+	HarnessProfile            string   `json:"harness_profile" toml:"harness_profile"`
+	ImprovementPolicy         string   `json:"improvement_policy" toml:"improvement_policy"`
+	SecurityAssessmentProfile string   `json:"security_assessment_profile" toml:"security_assessment_profile"`
+	RunID                     string   `json:"run_id" toml:"run_id"`
+	ChangeID                  string   `json:"change_id" toml:"change_id"`
+	ParentRunID               string   `json:"parent_run_id" toml:"parent_run_id"`
+	Scope                     string   `json:"scope" toml:"scope"`
+	Repository                string   `json:"repository" toml:"repository"`
+	Revision                  string   `json:"revision" toml:"revision"`
+	Task                      string   `json:"task" toml:"task"`
+	TaskFile                  string   `json:"task_file" toml:"task_file"`
+	AgentHarness              string   `json:"agent_harness" toml:"agent_harness"`
+	Model                     string   `json:"model" toml:"model"`
+	Workspace                 string   `json:"workspace" toml:"workspace"`
+	EgressPolicy              string   `json:"egress_policy" toml:"egress_policy"`
+	VerificationProfile       string   `json:"verification_profile" toml:"verification_profile"`
+	SandboxTemplate           string   `json:"sandbox_template" toml:"sandbox_template"`
+	Review                    *bool    `json:"review" toml:"review"`
+	AgentTimeout              string   `json:"agent_timeout" toml:"agent_timeout"`
+	RunTimeout                string   `json:"total_timeout" toml:"total_timeout"`
+	Tags                      []string `json:"tags" toml:"tags"`
 }
 
 // resourceKinds lists every kind `get` and `describe` understand.
@@ -692,25 +693,26 @@ func readRunSpec(path string) (runSpec, error) {
 // runRequestFromSpec validates a manifest into a RunRequest.
 func runRequestFromSpec(cfg factory.Config, spec runSpec) (factory.RunRequest, error) {
 	req := factory.RunRequest{
-		HarnessProfile:      spec.HarnessProfile,
-		ImprovementPolicy:   spec.ImprovementPolicy,
-		RunID:               spec.RunID,
-		ChangeID:            spec.ChangeID,
-		ParentRunID:         spec.ParentRunID,
-		Scope:               spec.Scope,
-		Repository:          spec.Repository,
-		Revision:            spec.Revision,
-		Task:                spec.Task,
-		AgentHarness:        spec.AgentHarness,
-		AgentModel:          spec.Model,
-		Workspace:           spec.Workspace,
-		EgressPolicy:        spec.EgressPolicy,
-		VerificationProfile: spec.VerificationProfile,
-		SandboxTemplate:     spec.SandboxTemplate,
-		Review:              spec.Review,
-		AgentTimeout:        cfg.Limits.AgentTimeout.Std(),
-		VerificationTimeout: cfg.Limits.VerificationTimeout.Std(),
-		TotalTimeout:        cfg.Limits.TotalTimeout.Std(),
+		HarnessProfile:            spec.HarnessProfile,
+		ImprovementPolicy:         spec.ImprovementPolicy,
+		SecurityAssessmentProfile: spec.SecurityAssessmentProfile,
+		RunID:                     spec.RunID,
+		ChangeID:                  spec.ChangeID,
+		ParentRunID:               spec.ParentRunID,
+		Scope:                     spec.Scope,
+		Repository:                spec.Repository,
+		Revision:                  spec.Revision,
+		Task:                      spec.Task,
+		AgentHarness:              spec.AgentHarness,
+		AgentModel:                spec.Model,
+		Workspace:                 spec.Workspace,
+		EgressPolicy:              spec.EgressPolicy,
+		VerificationProfile:       spec.VerificationProfile,
+		SandboxTemplate:           spec.SandboxTemplate,
+		Review:                    spec.Review,
+		AgentTimeout:              cfg.Limits.AgentTimeout.Std(),
+		VerificationTimeout:       cfg.Limits.VerificationTimeout.Std(),
+		TotalTimeout:              cfg.Limits.TotalTimeout.Std(),
 	}
 	// `model` names a declared model when one exists, and is otherwise passed to
 	// the harness as a raw model id. A manifest cannot invent a model resource,

@@ -118,26 +118,27 @@ func loadConfig(flagValue string) (factory.Config, error) {
 
 func newRunCommand(configPath *string) *cobra.Command {
 	var (
-		repo              string
-		localPath         string
-		rev               string
-		task              string
-		taskFile          string
-		agent             string
-		model             string
-		profile           string
-		template          string
-		runID             string
-		wait              bool
-		agentTO           time.Duration
-		scope             string
-		workspace         string
-		egress            string
-		changeID          string
-		parentRun         string
-		review            bool
-		harnessProfile    string
-		improvementPolicy string
+		repo               string
+		localPath          string
+		rev                string
+		task               string
+		taskFile           string
+		agent              string
+		model              string
+		profile            string
+		template           string
+		runID              string
+		wait               bool
+		agentTO            time.Duration
+		scope              string
+		workspace          string
+		egress             string
+		changeID           string
+		parentRun          string
+		review             bool
+		harnessProfile     string
+		improvementPolicy  string
+		securityAssessment string
 	)
 
 	cmd := &cobra.Command{
@@ -188,25 +189,26 @@ execute an arbitrary program.`,
 			}
 
 			req := factory.RunRequest{
-				HarnessProfile:      harnessProfile,
-				ImprovementPolicy:   improvementPolicy,
-				RunID:               runID,
-				ChangeID:            changeID,
-				ParentRunID:         parentRun,
-				Scope:               scope,
-				Repository:          repo,
-				LocalPath:           localPath,
-				Revision:            rev,
-				Task:                prompt,
-				SandboxTemplate:     template,
-				AgentHarness:        agent,
-				AgentModel:          model,
-				Workspace:           workspace,
-				EgressPolicy:        egress,
-				VerificationProfile: profile,
-				AgentTimeout:        cfg.Limits.AgentTimeout.Std(),
-				VerificationTimeout: cfg.Limits.VerificationTimeout.Std(),
-				TotalTimeout:        cfg.Limits.TotalTimeout.Std(),
+				HarnessProfile:            harnessProfile,
+				ImprovementPolicy:         improvementPolicy,
+				SecurityAssessmentProfile: securityAssessment,
+				RunID:                     runID,
+				ChangeID:                  changeID,
+				ParentRunID:               parentRun,
+				Scope:                     scope,
+				Repository:                repo,
+				LocalPath:                 localPath,
+				Revision:                  rev,
+				Task:                      prompt,
+				SandboxTemplate:           template,
+				AgentHarness:              agent,
+				AgentModel:                model,
+				Workspace:                 workspace,
+				EgressPolicy:              egress,
+				VerificationProfile:       profile,
+				AgentTimeout:              cfg.Limits.AgentTimeout.Std(),
+				VerificationTimeout:       cfg.Limits.VerificationTimeout.Std(),
+				TotalTimeout:              cfg.Limits.TotalTimeout.Std(),
 			}
 			// --model accepts either a declared model NAME or a raw model id, as it
 			// always has. Only a declared name is resolved as a resource and pinned
@@ -287,6 +289,7 @@ execute an arbitrary program.`,
 	cmd.Flags().StringVar(&profile, "verification", "", "verification profile name")
 	cmd.Flags().StringVar(&harnessProfile, "harness-profile", "", "approved instructional profile name")
 	cmd.Flags().StringVar(&improvementPolicy, "improvement-policy", "", "operator-owned bounded improvement policy name")
+	cmd.Flags().StringVar(&securityAssessment, "security-assessment", "", "approved security assessment profile name")
 	cmd.Flags().StringVar(&template, "sandbox-template", "", "CubeSandbox template id (defaults to configuration)")
 	cmd.Flags().StringVar(&runID, "run-id", "", "explicit run id (default: generated)")
 	cmd.Flags().BoolVar(&wait, "wait", true, "wait for the run to finish")
@@ -632,17 +635,25 @@ func newLogsCommand(configPath *string) *cobra.Command {
 // ── worker ──────────────────────────────────────────────────────────────────
 
 func newWorkerCommand(configPath *string) *cobra.Command {
-	return &cobra.Command{
+	var executorConfig, executorSHA256 string
+	cmd := &cobra.Command{
 		Use:          "worker",
 		Short:        "Run the Temporal worker (the factory's activity executor)",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
+			if err := validateSecurityExecutorFlags(executorConfig, executorSHA256); err != nil {
+				return err
+			}
 			cfg, err := loadConfig(*configPath)
 			if err != nil {
 				return err
 			}
-			runtime, err := factory.NewRuntime(ctx, factory.RuntimeOptions{Config: cfg})
+			executor, err := loadSecurityExecutor(cfg, executorConfig, executorSHA256)
+			if err != nil {
+				return err
+			}
+			runtime, err := factory.NewRuntime(ctx, factory.RuntimeOptions{Config: cfg, SecurityAssessor: executor})
 			if err != nil {
 				return err
 			}
@@ -650,6 +661,9 @@ func newWorkerCommand(configPath *string) *cobra.Command {
 			return runtime.RunWorker(ctx)
 		},
 	}
+	cmd.Flags().StringVar(&executorConfig, "security-executor-config", "", "absolute path to pinned operator security executor JSON")
+	cmd.Flags().StringVar(&executorSHA256, "security-executor-sha256", "", "SHA-256 of the operator security executor JSON")
+	return cmd
 }
 
 // ── doctor ──────────────────────────────────────────────────────────────────

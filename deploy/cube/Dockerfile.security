@@ -1,0 +1,20 @@
+# COPY-only packaging: build the payload with build-runtime.sh inside Cube.
+# The host image build executes no package, application or assessment code.
+ARG PYTHON_BASE=docker.io/library/python@sha256:17cbbc787c42807b179b559a5356f87804f01812cbcabd57f2becd3605ce65cd
+FROM ${PYTHON_BASE}
+COPY --chmod=0755 envd /usr/local/bin/envd
+COPY runtime/ /opt/security-runtime/
+COPY --chmod=0755 entrypoint.sh /usr/local/bin/esf-security-entrypoint
+ENV PATH=/opt/security-runtime/venv/bin:${PATH} \
+    OPENCYBER_MCP_MODE=compact \
+    OPENCYBER_ENFORCE_SCOPE=1 \
+    OPENCYBER_AUDIT_REQUIRED=1 \
+    OPENCYBER_STRICT_CATALOG=1 \
+    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
+    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+LABEL org.opencontainers.image.title="ESF native OpenCyber assessment runtime" \
+      org.opencontainers.image.revision="09692d89e3cb9dce3506cd4e6fc92c9e4c3c16b6" \
+      com.esf.packaging.repository="https://github.com/mitkox/esf"
+EXPOSE 49983
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/esf-security-entrypoint"]

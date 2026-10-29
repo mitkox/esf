@@ -285,6 +285,18 @@ description = "repository test script"
 # workspace    = "python"
 # budget       = "cheap"
 # review       = false        # overrides the global review gate
+# security_assessments = ["tenant-http"] # explicit grant; selection remains opt-in
+
+# Optional advisory assessments are disabled unless a RunRequest selects a
+# declared profile AND its scope explicitly grants that name. Paths and hashes
+# are operator policy, never caller-supplied endpoints or capabilities.
+# Only declare a profile after actual route/runtime/cleanup qualification.
+# See docs/security-assessment.md for the receipt contract.
+# [security_assessment_profiles.tenant-http]
+# profile_path = "/absolute/operator/security/tenant-http.json"
+# profile_sha256 = "<sha256-of-exact-profile-bytes>"
+# qualification_path = "/absolute/operator/security/qualification.json"
+# qualification_sha256 = "<sha256-of-exact-qualification-bytes>"
 
 # [review] — the human review gate. When enabled, a run pauses after the
 # deterministic gates report, optionally checkpoints its sandbox, publishes

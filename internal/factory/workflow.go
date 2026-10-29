@@ -44,17 +44,18 @@ func RunIDFromWorkflowID(workflowID string) (string, bool) {
 // It is deliberately small: it is returned by a Temporal query while the
 // workflow is still running, and the full record lives in the run manifest.
 type RunStatus struct {
-	RunID         string        `json:"run_id"`
-	State         RunState      `json:"state"`
-	SandboxID     string        `json:"sandbox_id,omitempty"`
-	CurrentStep   string        `json:"current_step"`
-	StartedAt     time.Time     `json:"started_at"`
-	BaselineSHA   string        `json:"baseline_sha,omitempty"`
-	AgentOutcome  Outcome       `json:"agent_result"`
-	VerifyOutcome Outcome       `json:"verification_result"`
-	Intake        *IntakeResult `json:"intake,omitempty"`
-	Error         string        `json:"error,omitempty"`
-	SandboxGone   bool          `json:"sandbox_destroyed"`
+	SecurityAssessment *SecurityAssessmentSummary `json:"security_assessment,omitempty"`
+	RunID              string                     `json:"run_id"`
+	State              RunState                   `json:"state"`
+	SandboxID          string                     `json:"sandbox_id,omitempty"`
+	CurrentStep        string                     `json:"current_step"`
+	StartedAt          time.Time                  `json:"started_at"`
+	BaselineSHA        string                     `json:"baseline_sha,omitempty"`
+	AgentOutcome       Outcome                    `json:"agent_result"`
+	VerifyOutcome      Outcome                    `json:"verification_result"`
+	Intake             *IntakeResult              `json:"intake,omitempty"`
+	Error              string                     `json:"error,omitempty"`
+	SandboxGone        bool                       `json:"sandbox_destroyed"`
 	// ChangeID is the durable work item this run belongs to.
 	ChangeID string `json:"change_id,omitempty"`
 	// Scope is the tenancy boundary the run executes under.
@@ -69,11 +70,14 @@ type RunStatus struct {
 // Every field is derived from an activity result, never from wall-clock time or
 // randomness, so Temporal replay reconstructs it identically.
 type workflowState struct {
-	execution       executionOverrides
-	status          RunStatus
-	executionID     string
-	createAttempted bool
-	totalTimedOut   bool
+	securityEnabled    bool
+	securitySnapshot   SecurityCandidateReference
+	securityAssessment *SecurityAssessmentSummary
+	execution          executionOverrides
+	status             RunStatus
+	executionID        string
+	createAttempted    bool
+	totalTimedOut      bool
 
 	validate          ValidateOutput
 	intake            *IntakeResult
@@ -215,6 +219,9 @@ func softwareChangeWorkflow(ctx workflow.Context, req RunRequest, overrides exec
 			state.status.State = StateInfrastructureFailed
 			state.status.Error = "total execution timeout exceeded"
 		}
+	}
+	if state.securityEnabled && state.securityAssessment == nil {
+		state.recordSecurity(ctx, acts, req, SecurityAssessmentSummary{Profile: state.resources.SecurityAssessmentProfile, Status: "incomplete", AssertionOutcome: "unobserved", CandidateDigest: state.securitySnapshot.CandidateDigest, ErrorCode: "run_stopped_before_assessment"})
 	}
 
 	// Destroy the sandbox and verify it is gone BEFORE recording the result.
@@ -652,6 +659,20 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	if err := s.quarantineIfTripped(ctx, acts, req, agentOut.Result.ExitCode); err != nil {
 		return err
 	}
+	if s.resources.SecurityAssessmentProfile != "" && workflow.GetVersion(ctx, securityAssessmentVersion, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		s.securityEnabled = true
+		s.status.CurrentStep = "security.candidate.capture"
+		if s.resources.SecurityAssessmentConfig == nil {
+			s.securitySnapshot.ErrorCode = "profile_unresolved"
+		} else {
+			if err := executeActivity(ctx, acts.CaptureSecurityCandidate, securityCandidateCaptureOptions(), CaptureSecurityCandidateInput{RunID: req.RunID, SandboxID: s.sandboxID, RepositoryDir: req.EffectiveRepositoryDir(), ProfileConfig: *s.resources.SecurityAssessmentConfig}).Get(ctx, &s.securitySnapshot); err != nil {
+				s.securitySnapshot.ErrorCode = "candidate_capture_incomplete"
+			}
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
 
 	// ── 7. Deterministic verification ───────────────────────────────────────
 	s.status.CurrentStep = "verify"
@@ -686,6 +707,13 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	// Recorded as evidence, never folded into the deliverable.
 	s.collect(ctx, acts, req, VerificationPhase)
 
+	// Optional advice follows the mandatory verification evidence and precedes review.
+	if s.securityEnabled {
+		s.assessSecurity(ctx, acts, req, verified.Result.Passed)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
 	// ── 8b. Human review gate ──────────────────────────────────────────────
 	// The gate runs AFTER the deliverable patch is captured and the gates have
 	// reported, so a human reviews the same artifacts the record contains. It
@@ -1229,6 +1257,7 @@ func finalizeRun(
 	}
 
 	input := FinalizeInput{
+		SecurityAssessment:      state.securityAssessment,
 		Improvement:             state.execution.Receipt,
 		Request:                 req,
 		Validate:                state.validate,
@@ -1279,6 +1308,42 @@ func finalizeRun(
 		return RunManifest{}, err
 	}
 	return out.Manifest, nil
+}
+
+func (s *workflowState) recordSecurity(ctx workflow.Context, acts *Activities, req RunRequest, summary SecurityAssessmentSummary) {
+	disconnected, _ := workflow.NewDisconnectedContext(ctx)
+	var out SecurityAssessmentOutput
+	opts := noRetry()
+	opts.StartToCloseTimeout = time.Minute
+	if err := executeActivity(disconnected, acts.RecordSecurityAssessment, opts, RecordSecurityAssessmentInput{RunID: req.RunID, Summary: summary}).Get(disconnected, &out); err != nil {
+		out = SecurityAssessmentOutput{Summary: summary, EvidenceError: "security_advisory_persistence_failed"}
+	}
+	s.securityAssessment = &out.Summary
+	s.status.SecurityAssessment = s.securityAssessment
+	if out.EvidenceError != "" {
+		s.collectionFailed = true
+		s.status.Error = appendError(s.status.Error, out.EvidenceError)
+	}
+}
+
+func (s *workflowState) assessSecurity(ctx workflow.Context, acts *Activities, req RunRequest, passed bool) {
+	s.status.CurrentStep = "security.assess"
+	if s.resources.SecurityAssessmentConfig == nil {
+		s.recordSecurity(ctx, acts, req, SecurityAssessmentSummary{Profile: s.resources.SecurityAssessmentProfile, Status: "incomplete", AssertionOutcome: "unobserved", ErrorCode: "profile_unresolved"})
+		return
+	}
+	var out SecurityAssessmentOutput
+	in := SecurityAssessmentInput{RunID: req.RunID, ChangeID: s.changeID, ParentRunID: req.ParentRunID, SandboxID: s.sandboxID, RepositoryDir: req.EffectiveRepositoryDir(), ProfileName: s.resources.SecurityAssessmentProfile, ProfileConfig: *s.resources.SecurityAssessmentConfig, Snapshot: s.securitySnapshot, FunctionalPassed: passed, FunctionalEvidenceError: s.collectionFailed, VerificationMutatedTree: s.verificationDrift}
+	if err := executeActivity(ctx, acts.AssessSecurity, securityAssessmentOptions(), in).Get(ctx, &out); err != nil {
+		s.recordSecurity(ctx, acts, req, SecurityAssessmentSummary{Profile: in.ProfileName, Status: "incomplete", AssertionOutcome: "unobserved", CandidateDigest: in.Snapshot.CandidateDigest, ErrorCode: "assessment_activity_failed"})
+		return
+	}
+	s.securityAssessment = &out.Summary
+	s.status.SecurityAssessment = s.securityAssessment
+	if out.EvidenceError != "" {
+		s.collectionFailed = true
+		s.status.Error = appendError(s.status.Error, out.EvidenceError)
+	}
 }
 
 // ── activity options ──────────────────────────────────────────────────────

@@ -194,6 +194,15 @@ type Sandbox interface {
 	Destroy(ctx context.Context) error
 }
 
+// BoundedFileReader is required when transferring builder-controlled artifacts.
+// Implementations must cap the incoming stream before allocating the complete
+// file, read at most maxBytes+1, and return no bytes when the limit is exceeded.
+// Callers must fail closed if this capability is absent; ReadFile is not a safe
+// fallback for an untrusted file whose size may change during transfer.
+type BoundedFileReader interface {
+	ReadFileBounded(ctx context.Context, path string, maxBytes int64) ([]byte, error)
+}
+
 // Capabilities advertises optional features a provider supports.
 //
 // The MVP implements none of the speculative-execution features. They are

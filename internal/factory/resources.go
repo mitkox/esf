@@ -263,6 +263,7 @@ type ReviewConfig struct {
 // names the scope it acts in. A scope can only narrow the operator's policy,
 // never widen it — the union of all scopes is a subset of the global config.
 type ScopeConfig struct {
+	SecurityAssessments []string `toml:"security_assessments"`
 	HarnessProfiles     []string `toml:"harness_profiles"`
 	ImprovementPolicies []string `toml:"improvement_policies"`
 	// Repositories narrows the global allowlist. Empty inherits the global list.
@@ -288,8 +289,10 @@ type ScopeConfig struct {
 // plain data: workflow code must never resolve a name, because a config change
 // mid-run would make replay non-deterministic.
 type ResolvedResources struct {
-	HarnessProfile       string `json:"harness_profile,omitempty"`
-	HarnessProfileDigest string `json:"harness_profile_digest,omitempty"`
+	SecurityAssessmentProfile string                           `json:"security_assessment_profile,omitempty"`
+	SecurityAssessmentConfig  *SecurityAssessmentProfileConfig `json:"security_assessment_config,omitempty"`
+	HarnessProfile            string                           `json:"harness_profile,omitempty"`
+	HarnessProfileDigest      string                           `json:"harness_profile_digest,omitempty"`
 	// Scope the run executes under. Empty means the default scope.
 	Scope string `json:"scope,omitempty"`
 	// RepositoriesAllowed is the effective repository allowlist after the scope
@@ -390,6 +393,20 @@ func (c Config) ResolveResources(req RunRequest) (ResolvedResources, error) {
 	}
 
 	out := ResolvedResources{Scope: scopeName}
+	if req.SecurityAssessmentProfile != "" {
+		profile, ok := c.SecurityAssessmentProfiles[req.SecurityAssessmentProfile]
+		if !ok {
+			return ResolvedResources{}, fmt.Errorf("unknown security assessment profile %q", req.SecurityAssessmentProfile)
+		}
+		if !hasScope || !containsString(scope.SecurityAssessments, req.SecurityAssessmentProfile) {
+			return ResolvedResources{}, fmt.Errorf("security assessment profile %q is not granted in scope %q", req.SecurityAssessmentProfile, scopeName)
+		}
+		if err := profile.validate(); err != nil {
+			return ResolvedResources{}, err
+		}
+		out.SecurityAssessmentProfile = req.SecurityAssessmentProfile
+		out.SecurityAssessmentConfig = &profile
+	}
 
 	// Repository narrowing: the scope allowlist is intersected with the global
 	// allowlist. A scope can never add a repository the operator did not allow.

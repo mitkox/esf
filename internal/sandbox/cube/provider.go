@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -18,9 +19,11 @@ const ProviderName = "cubesandbox"
 
 // Provider is a sandbox.Provider backed by an existing CubeSandbox deployment.
 type Provider struct {
-	cfg    Config
-	client *cubesandbox.Client
-	log    *slog.Logger
+	cfg        Config
+	client     *cubesandbox.Client
+	log        *slog.Logger
+	fileHTTP   *http.Client
+	fileScheme string
 }
 
 // Option customizes a Provider.
@@ -67,6 +70,7 @@ func New(cfg Config, opts ...Option) (*Provider, error) {
 		sdkCfg.RequestTimeout = cfg.RequestTimeout.Std()
 	}
 	p.client = cubesandbox.NewClient(sdkCfg)
+	p.fileHTTP, p.fileScheme = boundedFileHTTPClient(sdkCfg)
 	return p, nil
 }
 
@@ -203,7 +207,12 @@ func (p *Provider) SandboxState(ctx context.Context, sandboxID string) (string, 
 }
 
 // Close releases idle HTTP connections. It does not destroy any sandbox.
-func (p *Provider) Close() error { return p.client.Close() }
+func (p *Provider) Close() error {
+	if p.fileHTTP != nil {
+		p.fileHTTP.CloseIdleConnections()
+	}
+	return p.client.Close()
+}
 
 // Config returns a copy of the provider configuration.
 func (p *Provider) Config() Config { return p.cfg }
@@ -278,6 +287,8 @@ func (p *Provider) Create(ctx context.Context, spec sandbox.Spec) (sandbox.Sandb
 		sb:          created,
 		log:         p.log,
 		outputLimit: p.commandOutputLimit(),
+		fileHTTP:    p.fileHTTP,
+		fileScheme:  p.fileScheme,
 	}, nil
 }
 
@@ -297,6 +308,8 @@ func (p *Provider) Reattach(ctx context.Context, sandboxID string) (sandbox.Sand
 		sb:          sb,
 		log:         p.log,
 		outputLimit: p.commandOutputLimit(),
+		fileHTTP:    p.fileHTTP,
+		fileScheme:  p.fileScheme,
 	}, nil
 }
 
@@ -351,6 +364,8 @@ type cubeSandbox struct {
 	sb          *cubesandbox.Sandbox
 	log         *slog.Logger
 	outputLimit int64
+	fileHTTP    *http.Client
+	fileScheme  string
 }
 
 func (p *Provider) commandOutputLimit() int64 {
