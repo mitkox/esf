@@ -3,7 +3,6 @@ package console
 import (
 	"compress/gzip"
 	"context"
-	"crypto/subtle"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -21,6 +20,7 @@ import (
 	"time"
 
 	"github.com/mitkox/esf/internal/factory"
+	"github.com/mitkox/esf/internal/httpsecurity"
 )
 
 // Config configures one factory console server.
@@ -107,8 +107,8 @@ func New(cfg Config) (*Server, error) {
 	if token != "" && len(token) < 32 {
 		return nil, errors.New("console: the read token must be at least 32 characters")
 	}
-	if token != "" && strings.ContainsAny(token, " \t\r\n") {
-		return nil, errors.New("console: the read token must not contain whitespace")
+	if token != "" && !httpsecurity.ValidBearerToken(token) {
+		return nil, errors.New("console: the read token must use the ASCII bearer token alphabet without whitespace")
 	}
 	if cfg.Environment == "" {
 		cfg.Environment = "self-hosted"
@@ -215,13 +215,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many failed authentication attempts. Try again later.")
 			return
 		}
-		provided := ""
-		if header := request.Header.Get("Authorization"); header != "" {
-			if strings.HasPrefix(strings.ToLower(header), "bearer ") {
-				provided = strings.TrimSpace(header[7:])
-			}
-		}
-		if provided == "" || subtle.ConstantTimeCompare([]byte(provided), s.token) != 1 {
+		if !httpsecurity.Authenticated(request, string(s.token)) {
 			s.throttle.fail(key)
 			response.Header().Set("WWW-Authenticate", `Bearer realm="ESF factory console"`)
 			writeError(response, http.StatusUnauthorized, "unauthorized", "A valid console access token is required.")
@@ -420,6 +414,9 @@ func (s *Server) Serve(ctx context.Context, listen string, onListen func(net.Add
 	if !s.authRequired() && !isLoopbackListen(listen) {
 		return fmt.Errorf("console: refusing to serve without a read token on non-loopback listener %q", listen)
 	}
+	if err := httpsecurity.ValidateListen(listen, s.tlsEnabled); err != nil {
+		return fmt.Errorf("console: %w", err)
+	}
 	server := &http.Server{
 		Addr:              listen,
 		Handler:           s.handler,
@@ -427,10 +424,15 @@ func (s *Server) Serve(ctx context.Context, listen string, onListen func(net.Add
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    16384,
 	}
 	listener, err := net.Listen("tcp", listen)
 	if err != nil {
 		return err
+	}
+	if err := httpsecurity.ValidateListen(listener.Addr().String(), s.tlsEnabled); err != nil {
+		listener.Close()
+		return fmt.Errorf("console: %w", err)
 	}
 	if s.tlsConfig != nil {
 		listener = tls.NewListener(listener, s.tlsConfig)

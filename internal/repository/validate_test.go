@@ -1,7 +1,10 @@
 package repository
 
 import (
+	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -142,15 +145,69 @@ func TestRemotePolicyMatchesAuthorityAndPathBoundaries(t *testing.T) {
 
 func TestLocalSourceValidation(t *testing.T) {
 	t.Parallel()
-	p := New(nil)
-	if err := p.Validate(Request{Kind: SourceLocal, LocalPath: "/srv/fixture", Revision: "abc123"}); err != nil {
-		t.Fatalf("local source should be allowed without a remote allowlist: %v", err)
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := p.Validate(Request{Kind: SourceLocal, Revision: "abc123"}); err == nil {
-		t.Fatal("expected a missing local path to be rejected")
+	approved := filepath.Join(dir, "approved")
+	if err := os.Mkdir(approved, 0700); err != nil {
+		t.Fatal(err)
 	}
-	if err := p.Validate(Request{Kind: SourceLocal, LocalPath: "/srv/x", Revision: ""}); err == nil {
-		t.Fatal("expected a missing revision to be rejected: runs must be reproducible")
+	req := Request{Kind: SourceLocal, LocalPath: approved, Revision: "abc123"}
+	if err := New(nil).Validate(req); !errors.Is(err, ErrRepositoryRejected) {
+		t.Fatalf("unregistered source: %v", err)
+	}
+	p := New(nil, WithLocalPaths([]string{approved}))
+	if err := p.Validate(req); err != nil {
+		t.Fatalf("registered source: %v", err)
+	}
+	for _, path := range []string{"", approved + "-sibling", filepath.Join(approved, "child"), "relative", approved + "/../approved"} {
+		bad := req
+		bad.LocalPath = path
+		if err := p.Validate(bad); err == nil {
+			t.Fatalf("accepted %q", path)
+		}
+	}
+	req.Revision = ""
+	if err := p.Validate(req); err == nil {
+		t.Fatal("missing revision accepted")
+	}
+}
+
+func TestPrepareRechecksLocalRegistrationBeforeHostRead(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	approved := filepath.Join(dir, "approved")
+	other := filepath.Join(dir, "other")
+	if err := os.Mkdir(approved, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(other, 0700); err != nil {
+		t.Fatal(err)
+	}
+	p := New(nil, WithLocalPaths([]string{approved}))
+	p.runHostCommand = func(context.Context, string, ...string) (string, error) {
+		t.Fatal("host git ran before policy rejection")
+		return "", nil
+	}
+	req := Request{Kind: SourceLocal, LocalPath: approved, Revision: "abc123"}
+	if err := p.Validate(req); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(approved); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(other, approved); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Prepare(context.Background(), nil, req); !errors.Is(err, ErrRepositoryRejected) {
+		t.Fatalf("redirected source: %v", err)
+	}
+	req.LocalPath = other
+	if _, err := p.Prepare(context.Background(), nil, req); !errors.Is(err, ErrRepositoryRejected) {
+		t.Fatalf("unregistered direct Prepare: %v", err)
 	}
 }
 

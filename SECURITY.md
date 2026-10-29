@@ -16,9 +16,16 @@ requires it.
 
 ## Trust model
 
-The `factory` CLI is the control plane and the security boundary. It accepts
-only an approved repository, an exact revision and task text; it never accepts
-an executable, a host path, an environment override or a credential reference.
+The factory worker enforces repository policy for CLI and direct workflow
+submissions. Remote URLs must match the operator allowlist. `--local-path`
+accepts only an exact canonical repository directory registered in
+`repositories.local_paths`; local sources are disabled when that list is empty.
+Registration is checked again before the worker reads or bundles host content.
+It does not grant access to descendants, adjacent paths or symlink aliases.
+Registered repositories, their parent directories and Git metadata must remain
+under operator control. A local source exports all repository refs into Cube,
+so only register repositories whose full history may be disclosed to the task.
+Task submissions cannot supply an executable or redefine operator resources.
 Operator configuration declares the repositories, harnesses, templates,
 verification profiles, resource limits and egress policy. Task text and
 repository content are untrusted.

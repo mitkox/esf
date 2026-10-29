@@ -38,7 +38,7 @@ Flags:
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `--listen` | `127.0.0.1:7331` | Listen address. A non-loopback address requires a read token. |
+| `--listen` | `127.0.0.1:7331` | Listen address. A non-loopback address requires a read token and native TLS. |
 | `--read-token-file` | empty | Private, 0600 regular file containing a 32+ character token. |
 | `--tls-cert-file` | empty | PEM certificate that enables native HTTPS (requires `--tls-key-file`). |
 | `--tls-key-file` | empty | PEM private key, mode 0600 (no group/other access), paired with the certificate. |
@@ -150,7 +150,7 @@ health claims: a reachable port is not the same as a healthy service.
 
 ## Security posture
 
-- Loopback by default. A read token is mandatory for any other listener; the
+- Loopback by default. A read token and native TLS are mandatory for any other listener; the
   server refuses to start without one.
 - Constant-time token comparison; the token is never logged or placed in a URL.
 - Failed bearer attempts are throttled per client: 10 failures in 5 minutes
@@ -290,3 +290,13 @@ not a factory execution: it creates no sandbox and changes no run evidence.
 5. Verify `GET /api/v1/console/healthz` over the final URL before handing out
    the link, and confirm an unauthenticated API request returns `401`.
 6. Restart the console after replacing the binary; it keeps no durable state.
+
+Non-loopback plaintext listeners are rejected at startup, even with a token.
+For TLS termination at a reverse proxy, keep the console backend on loopback.
+Secret files (read tokens and TLS keys) must be private regular files; symlinks,
+group/other permissions, and oversized files are refused.
+
+Bearer tokens use ASCII letters/digits and `-._~+/`, optionally followed by `=`
+padding. Generate a 32-byte random hex token (`openssl rand -hex 32`). Startup
+rejects commas, whitespace and other characters that cannot be used as a bearer
+credential; replace such legacy credentials before restarting.

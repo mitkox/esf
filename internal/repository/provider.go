@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -74,14 +75,22 @@ type Baseline struct {
 
 // Provider prepares repositories.
 type Provider struct {
-	allowed []string
-	log     *slog.Logger
+	allowed    []string
+	localPaths []string
+	log        *slog.Logger
 	// runHostCommand allows tests to replace host-side git invocation.
 	runHostCommand func(ctx context.Context, dir string, argv ...string) (string, error)
 }
 
 // Option customizes a Provider.
 type Option func(*Provider)
+
+// WithLocalPaths registers exact, canonical host repository directories. An
+// empty list disables local sources. These paths and their Git metadata must
+// be controlled by the operator, not by task submitters.
+func WithLocalPaths(paths []string) Option {
+	return func(p *Provider) { p.localPaths = append([]string(nil), paths...) }
+}
 
 // WithLogger sets the structured logger.
 func WithLogger(log *slog.Logger) Option {
@@ -96,7 +105,7 @@ func WithLogger(log *slog.Logger) Option {
 //
 // allowed is the operator-controlled allowlist of git URL prefixes (for
 // example "https://github.com/my-org/"). It may be empty, which disallows all
-// remote repositories; local repositories are unaffected.
+// remote repositories. Local repositories require WithLocalPaths.
 func New(allowed []string, opts ...Option) *Provider {
 	p := &Provider{
 		allowed: append([]string(nil), allowed...),
@@ -118,12 +127,18 @@ func (p *Provider) Allowed() []string { return append([]string(nil), p.allowed..
 // It exists so the factory can reject a disallowed repository BEFORE any
 // sandbox is created, and so the same rule is enforced at every entry point.
 func (p *Provider) Validate(req Request) error {
-	return req.validate(p.allowed)
+	if err := req.validate(p.allowed); err != nil {
+		return err
+	}
+	if req.Kind == SourceLocal {
+		return validateLocalPath(req.LocalPath, p.localPaths)
+	}
+	return nil
 }
 
 // Prepare clones the repository into the sandbox and records the baseline.
 func (p *Provider) Prepare(ctx context.Context, sb sandbox.Sandbox, req Request) (Baseline, error) {
-	if err := req.validate(p.allowed); err != nil {
+	if err := p.Validate(req); err != nil {
 		return Baseline{}, err
 	}
 	dest := req.DestDir
@@ -164,12 +179,21 @@ func (p *Provider) prepareRemote(ctx context.Context, sb sandbox.Sandbox, req Re
 }
 
 func (p *Provider) prepareLocal(ctx context.Context, sb sandbox.Sandbox, req Request, dest string) (Baseline, error) {
+	// Recheck at the host-read boundary, even when admission already validated
+	// the request. Workflow history and direct activity calls are not authority.
+	if err := validateLocalPath(req.LocalPath, p.localPaths); err != nil {
+		return Baseline{}, err
+	}
 	absPath, err := os.Stat(req.LocalPath)
 	if err != nil {
 		return Baseline{}, fmt.Errorf("repository: local path %q: %w", req.LocalPath, err)
 	}
 	if !absPath.IsDir() {
 		return Baseline{}, fmt.Errorf("repository: local path %q is not a directory", req.LocalPath)
+	}
+
+	if err := p.validateLocalGitRoot(ctx, req.LocalPath); err != nil {
+		return Baseline{}, err
 	}
 
 	// Pack on the host. `git bundle` is a transport, not a code path: it reads
@@ -399,8 +423,38 @@ func HashTask(task string) string {
 }
 
 // runGitHost runs a git command on the factory host.
+// validateLocalGitRoot prevents Git's ancestor discovery from exporting a
+// parent repository when the operator registered an ordinary subdirectory.
+func (p *Provider) validateLocalGitRoot(ctx context.Context, dir string) error {
+	bare, err := p.runHostCommand(ctx, dir, "rev-parse", "--is-bare-repository")
+	if err != nil {
+		return fmt.Errorf("%w: registered path is not a Git repository", ErrRepositoryRejected)
+	}
+	arg := "--show-toplevel"
+	if strings.TrimSpace(bare) == "true" {
+		arg = "--absolute-git-dir"
+	}
+	root, err := p.runHostCommand(ctx, dir, "rev-parse", arg)
+	if err != nil {
+		return fmt.Errorf("%w: cannot resolve registered Git root", ErrRepositoryRejected)
+	}
+	resolved, err := filepath.EvalSymlinks(strings.TrimSpace(root))
+	if err != nil || resolved != dir {
+		return fmt.Errorf("%w: registered path must be the Git repository root", ErrRepositoryRejected)
+	}
+	return nil
+}
+
 func runGitHost(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	// Host Git is a local object transport. Ambient repository/config overrides
+	// must not redirect the operator-registered source to another repository.
+	cmd.Env = []string{}
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "GIT_") {
+			cmd.Env = append(cmd.Env, entry)
+		}
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

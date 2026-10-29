@@ -3,7 +3,7 @@ package factory
 import (
 	"bytes"
 	"fmt"
-	"io"
+	"github.com/mitkox/esf/internal/secretfile"
 	"net"
 	"net/url"
 	"os"
@@ -151,34 +151,9 @@ func resolveHarnessCredential(h HarnessConfig) (string, error) {
 }
 
 func readCredentialFile(path string) (string, error) {
-	pathInfo, err := os.Lstat(path)
-	if err != nil {
-		return "", fmt.Errorf("inspect credential path: %w", err)
-	}
-	if !pathInfo.Mode().IsRegular() {
-		return "", fmt.Errorf("credential file must be a regular file, not a symlink or device")
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return "", fmt.Errorf("open credential file: %w", err)
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		return "", fmt.Errorf("inspect credential file: %w", err)
-	}
-	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("credential file must be a regular file")
-	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return "", fmt.Errorf("credential file permissions %04o expose it to group or other users", info.Mode().Perm())
-	}
-	data, err := io.ReadAll(io.LimitReader(file, 2049))
+	data, err := secretfile.Read(path, 2048)
 	if err != nil {
 		return "", fmt.Errorf("read credential file: %w", err)
-	}
-	if len(data) > 2048 {
-		return "", fmt.Errorf("credential file exceeds 2048 bytes")
 	}
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 {

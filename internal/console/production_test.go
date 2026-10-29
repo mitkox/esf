@@ -346,3 +346,46 @@ func TestAuthThrottleTableIsBounded(t *testing.T) {
 		t.Fatalf("overflow bucket remained unblocked")
 	}
 }
+
+func TestServeRefusesAuthenticatedRemotePlaintext(t *testing.T) {
+	root, clock := buildFixtureStore(t)
+	server, err := New(Config{DataDir: root, ReadToken: testToken, Now: clock.Now,
+		Static: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<html></html>")}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	for _, address := range []string{"0.0.0.0:0", "[::]:0", "192.0.2.1:0", "example.com:0"} {
+		if err := server.Serve(context.Background(), address, func(net.Addr) { t.Error("unsafe listener opened") }); err == nil || !strings.Contains(err.Error(), "requires TLS") {
+			t.Fatalf("%s: expected transport refusal, got %v", address, err)
+		}
+	}
+}
+
+func TestConsoleRejectsDuplicateAuthorization(t *testing.T) {
+	root, clock := buildFixtureStore(t)
+	server, err := New(Config{DataDir: root, ReadToken: testToken, Now: clock.Now,
+		Static: fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<html></html>")}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	request := httptest.NewRequest("GET", "/api/v1/console/session", nil)
+	request.Header.Add("Authorization", "Bearer "+testToken)
+	request.Header.Add("Authorization", "Bearer wrong")
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d", response.Code)
+	}
+}
+
+func TestConsoleRejectsUnusableConfiguredTokens(t *testing.T) {
+	for _, token := range []string{strings.Repeat("a", 32) + ",", strings.Repeat("a", 16) + "\u00a0" + strings.Repeat("b", 16)} {
+		if _, err := New(Config{DataDir: t.TempDir(), ReadToken: token}); err == nil {
+			t.Fatal("unusable token accepted")
+		}
+	}
+}

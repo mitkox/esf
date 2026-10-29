@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
+	"github.com/mitkox/esf/internal/secretfile"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
@@ -23,7 +23,7 @@ type payloadCodec struct {
 }
 
 func loadPayloadCodec(path string) (*payloadCodec, error) {
-	data, err := os.ReadFile(path)
+	data, err := secretfile.Read(path, 1<<20)
 	if err != nil {
 		return nil, fmt.Errorf("read Temporal payload keyring: %w", err)
 	}

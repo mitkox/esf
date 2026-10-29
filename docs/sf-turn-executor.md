@@ -185,3 +185,27 @@ no model calls were repeated. Earlier model receipts remain revision-tagged.
 The factory conformance metadata probe was inconclusive; the separate lifecycle
 probes passed. Azure, production qualification and sf acceptance remain separate
 validation gates.
+
+## Transport and credential configuration
+
+Plain HTTP is restricted to explicit loopback listeners. A remote or wildcard
+`--listen` requires `--tls-cert-file` and `--tls-key-file`; startup refuses
+remote plaintext before connecting to Cube. Native TLS requires a currently
+valid certificate and a private regular key file, and negotiates TLS 1.2 or newer.
+A TLS reverse proxy can instead forward to a loopback backend.
+
+Prefer `--token-file /path/to/service.token` for a private regular file holding
+at least 32 non-whitespace characters. It overrides `ESF_TURN_SERVICE_TOKEN`.
+Create tokens with a restrictive umask and keep them mode 0600. Symlinks,
+group/other permissions, and token files larger than 4096 bytes are refused.
+Every API request still requires one `Authorization: Bearer <token>` header;
+query credentials and duplicate Authorization headers are rejected.
+
+These credentials identify one trusted service/operator domain. They do not
+provide per-user roles or tenant isolation. Restrict backend access and place
+organizational identity/access controls at the proxy for shared deployments.
+
+Bearer tokens use ASCII letters/digits and `-._~+/`, optionally followed by `=`
+padding. Generate a 32-byte random hex token (`openssl rand -hex 32`). Startup
+rejects commas, whitespace and other characters that cannot be used as a bearer
+credential; replace such legacy credentials before restarting.

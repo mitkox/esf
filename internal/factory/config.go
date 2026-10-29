@@ -11,6 +11,7 @@ import (
 
 	"github.com/mitkox/esf/internal/agentharness"
 	artifacts "github.com/mitkox/esf/internal/factoryartifacts"
+	"github.com/mitkox/esf/internal/repository"
 	"github.com/mitkox/esf/internal/sandbox/cube"
 	"github.com/mitkox/esf/internal/tomlx"
 	"github.com/mitkox/esf/internal/verification"
@@ -74,7 +75,7 @@ type Config struct {
 	// Verification holds the deterministic gate profiles.
 	Verification map[string]verification.Profile `toml:"verification"`
 
-	// Repositories constrains which remote repositories may be used.
+	// Repositories constrains which remote and local repositories may be used.
 	Repositories RepositoriesConfig `toml:"repositories"`
 
 	Observability ObservabilityConfig `toml:"observability"`
@@ -155,11 +156,14 @@ type LimitsConfig struct {
 	DiskMiB             int            `toml:"disk_mib"`
 }
 
-// RepositoriesConfig constrains remote repository access.
+// RepositoriesConfig constrains remote and host repository access.
 type RepositoriesConfig struct {
 	// Allowed is the allowlist of git URL prefixes. Empty disallows all remote
-	// repositories (local sources remain available).
+	// repositories.
 	Allowed []string `toml:"allowed"`
+	// LocalPaths registers exact canonical host repository directories. Empty
+	// disables local sources; this never grants descendant or prefix access.
+	LocalPaths []string `toml:"local_paths"`
 }
 
 // ObservabilityConfig configures trace export.
@@ -373,6 +377,9 @@ func (c Config) Validate() error {
 		return err
 	}
 	var problems []string
+	if err := repository.ValidateLocalPaths(c.Repositories.LocalPaths); err != nil {
+		problems = append(problems, "repositories.local_paths: "+err.Error())
+	}
 	if c.SchemaVersion != 0 && c.SchemaVersion != ConfigSchemaVersion {
 		problems = append(problems, fmt.Sprintf("unsupported configuration schema_version %d (supported: %d)", c.SchemaVersion, ConfigSchemaVersion))
 	}

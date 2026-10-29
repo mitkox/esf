@@ -126,6 +126,7 @@ func runWorkflowOpts(t *testing.T, fake sandbox.Provider, req RunRequest, opts w
 		FactoryVersion: "test",
 		Cube:           cubeConfigForTest(),
 		Sandbox:        SandboxConfig{BasePackages: []string{"git"}},
+		Repositories:   RepositoriesConfig{LocalPaths: []string{req.LocalPath}},
 		Verification: map[string]verification.Profile{
 			"default": {
 				Name:  "default",
@@ -133,13 +134,16 @@ func runWorkflowOpts(t *testing.T, fake sandbox.Provider, req RunRequest, opts w
 			},
 		},
 	}
+	if req.LocalPath == "" {
+		cfg.Repositories.LocalPaths = nil
+	}
 	if opts.mutateConfig != nil {
 		opts.mutateConfig(&cfg)
 	}
 
 	acts, err := NewActivities(ActivitiesOptions{
 		Provider:        fake,
-		Repositories:    repository.New(nil),
+		Repositories:    repository.New(cfg.Repositories.Allowed, repository.WithLocalPaths(cfg.Repositories.LocalPaths)),
 		Harnesses:       registry,
 		Profiles:        cfg.VerificationProfiles(),
 		ArtifactFactory: store,
@@ -175,7 +179,10 @@ func runWorkflowOpts(t *testing.T, fake sandbox.Provider, req RunRequest, opts w
 // must be a genuine repository even though the sandbox is fake.
 func newFixtureRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("resolve fixture directory: %v", err)
+	}
 	commands := [][]string{
 		{"init", "-q"},
 		{"config", "user.email", "factory@test"},

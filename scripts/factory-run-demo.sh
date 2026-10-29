@@ -27,6 +27,7 @@ FIXTURE_PATH="$(echo "${FIXTURE_OUTPUT}" | sed -n 's/^fixture_path=//p')"
 FIXTURE_SHA="$(echo "${FIXTURE_OUTPUT}" | sed -n 's/^fixture_sha=//p')"
 echo "   path: ${FIXTURE_PATH}"
 echo "   sha:  ${FIXTURE_SHA}"
+echo "   prerequisite: register this exact path in factory.toml [repositories].local_paths"
 echo
 
 echo "== building factory =="

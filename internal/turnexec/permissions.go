@@ -91,17 +91,16 @@ func (s *Service) pollPermission(ctx context.Context, sb sandbox.Sandbox, r *rec
 	s.event(r, "permission", permission)
 	return s.persist(r)
 }
-func (s *Service) answerPermission(w http.ResponseWriter, r *http.Request, rec *record) {
-	var answer struct {
-		OwnerToken string `json:"owner_token"`
-		ID         string `json:"permission_id"`
-		Digest     string `json:"operation_digest"`
-		Decision   string `json:"decision"`
-	}
-	if decode(w, r, &answer, 4096) != nil || (answer.Decision != "allow" && answer.Decision != "deny") {
-		respond(w, 400, map[string]string{"error": "invalid permission decision"})
-		return
-	}
+
+type permissionAnswer struct {
+	OwnerToken string `json:"owner_token"`
+	ID         string `json:"permission_id"`
+	Digest     string `json:"operation_digest"`
+	Decision   string `json:"decision"`
+}
+
+// answerPermission runs with s.mu held; the request has already been decoded.
+func (s *Service) answerPermission(w http.ResponseWriter, answer permissionAnswer, rec *record) {
 	ownerHash := digest([]byte(answer.OwnerToken))
 	if subtle.ConstantTimeCompare([]byte(ownerHash), []byte(rec.OwnerHash)) != 1 {
 		respond(w, 403, map[string]string{"error": "ownership mismatch"})

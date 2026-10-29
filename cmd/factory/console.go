@@ -12,6 +12,8 @@ import (
 
 	"github.com/mitkox/esf/internal/console"
 	"github.com/mitkox/esf/internal/factory"
+	"github.com/mitkox/esf/internal/httpsecurity"
+	"github.com/mitkox/esf/internal/secretfile"
 )
 
 // newConsoleCommand serves the read-only factory console.
@@ -130,7 +132,7 @@ Examples:
 			})
 		},
 	}
-	command.Flags().StringVar(&listen, "listen", "127.0.0.1:7331", "loopback listen address")
+	command.Flags().StringVar(&listen, "listen", "127.0.0.1:7331", "listen address (non-loopback requires TLS)")
 	command.Flags().StringVar(&tokenFile, "read-token-file", "", "private file holding the console bearer token")
 	command.Flags().BoolVar(&noAuth, "no-auth", false, "disable authentication (loopback listeners only; local evaluation)")
 	command.Flags().BoolVar(&live, "live", true, "query Temporal and CubeSandbox for live, read-only state")
@@ -145,26 +147,13 @@ Examples:
 // readConsoleTokenFile validates and loads a bearer token file. The rules match
 // the control plane's: a small, private, regular file, never a symlink.
 func readConsoleTokenFile(path string) (string, error) {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return "", fmt.Errorf("read token file: %w", err)
-	}
-	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("read token file must be a regular file, not a symlink or device")
-	}
-	if info.Size() > 4096 {
-		return "", fmt.Errorf("read token file must be at most 4096 bytes")
-	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return "", fmt.Errorf("read token file permissions %04o expose it to group or other users; chmod 600 it", info.Mode().Perm())
-	}
-	data, err := os.ReadFile(path)
+	data, err := secretfile.Read(path, 4096)
 	if err != nil {
 		return "", fmt.Errorf("read token file: %w", err)
 	}
 	token := strings.TrimSpace(string(data))
-	if len(token) < 32 || strings.ContainsAny(token, " \t\r\n") {
-		return "", fmt.Errorf("read token must be at least 32 non-whitespace characters")
+	if len(token) < 32 || !httpsecurity.ValidBearerToken(token) {
+		return "", fmt.Errorf("read token must be at least 32 characters from the ASCII bearer token alphabet")
 	}
 	return token, nil
 }

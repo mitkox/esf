@@ -278,7 +278,7 @@ execute an arbitrary program.`,
 	}
 
 	cmd.Flags().StringVar(&repo, "repo", "", "approved repository URL (remote)")
-	cmd.Flags().StringVar(&localPath, "local-path", "", "host repository path (packed into the sandbox; used by tests)")
+	cmd.Flags().StringVar(&localPath, "local-path", "", "canonical host repository path registered in repositories.local_paths (packed into the sandbox)")
 	cmd.Flags().StringVar(&rev, "rev", "", "exact revision to check out (required)")
 	cmd.Flags().StringVar(&task, "task", "", "task text")
 	cmd.Flags().StringVar(&taskFile, "task-file", "", "read task text from a file")

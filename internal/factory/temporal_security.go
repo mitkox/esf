@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/mitkox/esf/internal/secretfile"
 	"net"
 	"os"
 
@@ -38,7 +39,15 @@ func (c TemporalConfig) connectionOptions() (client.ConnectionOptions, error) {
 		return options, fmt.Errorf("temporal.cert_file and key_file must be configured together")
 	}
 	if c.CertFile != "" {
-		cert, err := tls.LoadX509KeyPair(c.CertFile, c.KeyFile)
+		certPEM, err := os.ReadFile(c.CertFile)
+		if err != nil {
+			return options, fmt.Errorf("read Temporal client certificate: %w", err)
+		}
+		keyPEM, err := secretfile.Read(c.KeyFile, 1<<20)
+		if err != nil {
+			return options, fmt.Errorf("read Temporal client key: %w", err)
+		}
+		cert, err := tls.X509KeyPair(certPEM, keyPEM)
 		if err != nil {
 			return options, fmt.Errorf("load Temporal client certificate: %w", err)
 		}

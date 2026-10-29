@@ -101,7 +101,7 @@ func NewRuntime(ctx context.Context, opts RuntimeOptions) (*Runtime, error) {
 	return &Runtime{
 		Config:    cfg,
 		Provider:  provider,
-		Repos:     repository.New(cfg.Repositories.Allowed, repository.WithLogger(log)),
+		Repos:     repository.New(cfg.Repositories.Allowed, repository.WithLocalPaths(cfg.Repositories.LocalPaths), repository.WithLogger(log)),
 		Harnesses: harnesses,
 		Profiles:  cfg.VerificationProfiles(),
 		Artifacts: artifactFactory,
