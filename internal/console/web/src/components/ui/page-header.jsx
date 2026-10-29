@@ -14,7 +14,7 @@ export function PageHeader({
   className,
 }) {
   return (
-    <header className={clsx("mb-5", className)}>
+    <header className={clsx("mb-7", className)}>
       {backHref ? (
         <a
           href={backHref}
@@ -24,10 +24,10 @@ export function PageHeader({
           {backLabel}
         </a>
       ) : null}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-          <h1 className="text-[22px] font-semibold leading-tight tracking-[-0.02em] text-foreground sm:text-[26px]">
+          {eyebrow ? <p className="eyebrow mb-2">{eyebrow}</p> : null}
+          <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.04em] text-foreground sm:text-[32px]">
             {title}
           </h1>
           {description ? (

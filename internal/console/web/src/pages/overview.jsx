@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import clsx from "clsx";
-import { Activity, CalendarRange, Clock, Cpu, GitBranch, RefreshCw } from "lucide-react";
+import { Activity, CalendarRange, Clock, Cpu, GitBranch, ArrowUpRight, RefreshCw } from "lucide-react";
 import { useApi } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { useWorkspace } from "@/lib/workspace";
@@ -35,7 +35,7 @@ import {
   WindowEmptyNotice,
 } from "@/components/overview/data-states";
 
-const PAGE_CONTAINER = "mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8";
+const PAGE_CONTAINER = "mx-auto w-full max-w-[1600px] px-4 py-7 sm:px-6 lg:px-8";
 
 const ENVIRONMENT_LABEL = {
   production: "Production",
@@ -140,15 +140,13 @@ export function OverviewPage() {
   const comparisonNote =
     windowKey === "all" ? "" : " Deltas compare with the preceding equal-length window.";
   const description = data
-    ? `Read-only operational picture from run manifests, change records and live orchestration state. Evidence coverage: ${coverageText(
-        data.window,
-      )}.${comparisonNote}`
-    : "Read-only operational picture from run manifests, change records and live orchestration state.";
+    ? `Run activity, review decisions and factory health. ${windowName}.`
+    : "Run activity, review decisions and factory health in one place.";
 
   return (
     <div className={PAGE_CONTAINER}>
       <PageHeader
-        eyebrow="Mission control"
+        eyebrow="Workspace overview"
         title="Factory overview"
         description={description}
         meta={
@@ -156,6 +154,7 @@ export function OverviewPage() {
             <Badge variant="outline" size="sm" dot={environmentTone} className="capitalize">
               {environmentLabel}
             </Badge>
+            <HealthChip status={data?.health?.status} loading={firstLoad} />
             <span className="inline-flex items-center gap-1.5">
               <CalendarRange aria-hidden="true" className="h-3.5 w-3.5" />
               {windowName}
@@ -169,7 +168,7 @@ export function OverviewPage() {
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Activity aria-hidden="true" className="h-3.5 w-3.5" />
-              {autoRefresh ? "Auto-refresh 30s" : "Auto-refresh off"}
+              {autoRefresh ? "Updating every 30s" : "Updates paused"}
             </span>
             {data?.index ? (
               <span className="hidden text-muted-foreground/80 sm:inline">
@@ -180,7 +179,9 @@ export function OverviewPage() {
         }
         actions={
           <>
-            <HealthChip status={data?.health?.status} loading={firstLoad} />
+            <Button href="#/runs" variant="primary" size="lg" iconRight={<ArrowUpRight />}>
+              Explore runs
+            </Button>
             <Button
               variant="secondary"
               size="sm"
@@ -213,7 +214,7 @@ export function OverviewPage() {
       ) : storeEmpty ? (
         <EmptyEvidence index={data?.index} />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <KpiGrid data={data} />
 
           {windowRuns === 0 ? (
@@ -227,13 +228,21 @@ export function OverviewPage() {
 
           <div className="grid-12">
             <ThroughputCard data={data} className="col-span-12 min-w-0 xl:col-span-7" />
-            <OutcomesCard data={data} className="col-span-12 min-w-0 xl:col-span-5" />
-
             <AttentionPanel
               items={data?.attention}
               now={now}
-              className="col-span-12 min-w-0 lg:col-span-6 xl:col-span-4"
+              className="col-span-12 min-w-0 xl:col-span-5"
             />
+          </div>
+
+          <RecentRunsCard runs={data?.recent_runs} now={now} />
+
+          <div className="flex flex-wrap items-baseline justify-between gap-2 pt-3">
+            <h2 className="text-base font-semibold tracking-tight">Factory insights</h2>
+            <span className="text-xs text-muted-foreground">Results, infrastructure and security</span>
+          </div>
+          <div className="grid-12">
+            <OutcomesCard data={data} className="col-span-12 min-w-0 lg:col-span-6 xl:col-span-4" />
             <HealthPanel health={data?.health} className="col-span-12 min-w-0 lg:col-span-6 xl:col-span-4" />
             <SecurityPanel security={data?.security} className="col-span-12 min-w-0 xl:col-span-4" />
 
@@ -269,9 +278,10 @@ export function OverviewPage() {
             />
           </div>
 
-          <RecentRunsCard runs={data?.recent_runs} now={now} />
-
           <CatalogStrip catalog={data?.catalog} />
+          <p className="pb-2 text-xs leading-relaxed text-muted-foreground">
+            Evidence coverage: {coverageText(data?.window)}.{comparisonNote} Read-only view of recorded evidence and live orchestration state.
+          </p>
         </div>
       )}
     </div>

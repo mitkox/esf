@@ -29,52 +29,54 @@
   --color-info: var(--info);
   --color-ring: var(--ring);
 
-  --radius-panel: 0.875rem;
+  --radius-panel: 1rem;
   --shadow-panel: 0 1px 0 rgb(255 255 255 / 0.03), 0 18px 40px -24px rgb(0 0 0 / 0.7);
 }
 
 :root {
   color-scheme: light;
-  --background: #f3f5f9;
-  --foreground: #0d1520;
+  --background: #f5f6f4;
+  --foreground: #202824;
   --surface: #ffffff;
-  --surface-raised: #f8fafc;
+  --surface-raised: #f8f9f7;
   --surface-overlay: #ffffff;
-  --muted: #edf1f7;
-  --muted-foreground: #5c6b80;
-  --border: #dde4ee;
-  --border-strong: #c6d1e0;
-  --primary: #3355d1;
-  --primary-foreground: #f7f9ff;
+  --muted: #ecefeb;
+  --muted-foreground: #425349;
+  --border: #dfe5df;
+  --border-strong: #becbc2;
+  --primary: #087367;
+  --primary-foreground: #ffffff;
   --accent: #0f766e;
   --success: #067a55;
   --warning: #a16207;
   --danger: #be123c;
   --security: #6d28d9;
   --info: #0369a1;
-  --ring: #3355d1;
+  --ring: #087367;
+  --panel-shadow: 0 2px 4px rgb(30 50 40 / 0.025), 0 12px 32px -24px rgb(30 50 40 / 0.2);
 }
 
 .dark {
   color-scheme: dark;
-  --background: #070a10;
-  --foreground: #e7eef8;
-  --surface: #0c1119;
-  --surface-raised: #111827;
-  --surface-overlay: #151d2b;
-  --muted: #16202e;
-  --muted-foreground: #8d9bb0;
-  --border: #1e2938;
-  --border-strong: #2c3a50;
-  --primary: #7c9cff;
-  --primary-foreground: #071022;
-  --accent: #5eead4;
-  --success: #34d399;
-  --warning: #f5b84b;
-  --danger: #fb7185;
-  --security: #a78bfa;
-  --info: #38bdf8;
-  --ring: #7c9cff;
+  --background: #111214;
+  --foreground: #e6e8ec;
+  --surface: #1a1c20;
+  --surface-raised: #202329;
+  --surface-overlay: #272b32;
+  --muted: #252930;
+  --muted-foreground: #a4acb9;
+  --border: #30353d;
+  --border-strong: #464e5b;
+  --primary: #8baff0;
+  --primary-foreground: #121c2d;
+  --accent: #96a6bf;
+  --success: #7ab991;
+  --warning: #d9b56f;
+  --danger: #e58c94;
+  --security: #b3a4d6;
+  --info: #8baed8;
+  --ring: #8baff0;
+  --panel-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
 }
 
 * {
@@ -204,11 +206,34 @@ button:disabled {
 
 :root {
   --sidebar-width: 248px;
-  --topbar-height: 56px;
+  --topbar-height: 68px;
   --content-max: 1600px;
 }
 
 @layer components {
+  .evidence-card {
+    box-shadow: var(--panel-shadow);
+  }
+
+  .metric-card {
+    min-height: 156px;
+    background: linear-gradient(140deg, color-mix(in srgb, var(--primary) 3%, var(--surface)), var(--surface) 70%);
+  }
+
+  .metrics-details > summary {
+    list-style: none;
+  }
+  .metrics-details > summary::-webkit-details-marker {
+    display: none;
+  }
+  .metrics-details[open] > summary .details-chevron {
+    transform: rotate(180deg);
+  }
+
+  .factory-sidebar {
+    background: color-mix(in srgb, var(--surface) 65%, var(--background));
+  }
+
   /* Content frame. Screens own their own horizontal padding; the shell only
      caps the reading width so a 4K display does not stretch evidence tables. */
   .content-shell {
@@ -231,6 +256,14 @@ button:disabled {
       color-mix(in srgb, var(--primary) 9%, transparent) 0%,
       transparent 72%
     );
+  }
+
+  .dark .glow-top {
+    background: none;
+  }
+
+  .dark .metric-card {
+    background: var(--surface);
   }
 
   .skip-link {

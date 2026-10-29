@@ -1,4 +1,6 @@
 import {
+  ChevronDown,
+  SlidersHorizontal,
   CircleCheck,
   CircleDollarSign,
   ClipboardCheck,
@@ -109,7 +111,7 @@ export function KpiGrid({ data }) {
 
   return (
     <section aria-label="Key factory metrics">
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiTile
           label={KPI_LABELS[0]}
           value={runsKpi.available === false ? <Unavailable label="Unavailable" /> : formatNumber(runsKpi.value)}
@@ -180,98 +182,108 @@ export function KpiGrid({ data }) {
           }
         />
 
-        <KpiTile
-          label={KPI_LABELS[4]}
-          value={securityKpi.available === false ? <Unavailable label="Unavailable" /> : formatNumber(securityKpi.value)}
-          hint={
-            Number(securityKpi.value) > 0
-              ? `Among ${formatNumber(securityKpi.sample)} runs in this window`
-              : Number(securityKpi.sample) > 0
-                ? `No security stop among ${formatNumber(securityKpi.sample)} runs`
-                : "No runs evaluated in this window"
-          }
-          delta={deltaArg(securityKpi, { security: true })}
-          tone={Number(securityKpi.value) > 0 ? "danger" : "muted"}
-          icon={<ShieldAlert />}
-          spark={securitySpark}
-          href="#/security"
-          className="h-full"
-        />
-
-        <KpiTile
-          label={KPI_LABELS[5]}
-          value={percentValue(cleanupKpi)}
-          hint={
-            cleanupKpi.available === false
-              ? truncate(cleanupKpi.note || "No cleanup evidence in this window.", 96)
-              : `${formatNumber(cleanupKpi.sample)} runs with cleanup evidence`
-          }
-          delta={deltaArg(cleanupKpi)}
-          tone={cleanupKpi.available === false ? "muted" : "success"}
-          icon={<PackageCheck />}
-          href="#/operations"
-          className="h-full"
-        />
-
-        <KpiTile
-          label={KPI_LABELS[6]}
-          value={durationValue(p50Kpi)}
-          hint={
-            p50Kpi.available === false
-              ? truncate(p50Kpi.note || "No duration samples in this window.", 96)
-              : `${formatNumber(p50Kpi.sample)} duration samples`
-          }
-          delta={deltaArg(p50Kpi, { duration: true })}
-          icon={<Timer />}
-          spark={durationSpark}
-          className="h-full"
-        />
-
-        <KpiTile
-          label={KPI_LABELS[7]}
-          value={durationValue(p95Kpi)}
-          hint={
-            p95Kpi.available === false
-              ? truncate(p95Kpi.note || "No duration samples in this window.", 96)
-              : `${formatNumber(p95Kpi.sample)} duration samples`
-          }
-          delta={deltaArg(p95Kpi, { duration: true })}
-          icon={<Gauge />}
-          className="h-full"
-        />
-
-        <KpiTile
-          label={KPI_LABELS[8]}
-          value={
-            tokensKpi.available === false ? (
-              <Unavailable label="Not reported" />
-            ) : (
-              formatNumber(tokensKpi.value, { compact: true })
-            )
-          }
-          hint={
-            tokensKpi.available === false
-              ? truncate(tokensKpi.note || "No harness reported token usage.", 96)
-              : `${formatNumber(tokensKpi.sample)} runs reported token usage`
-          }
-          delta={deltaArg(tokensKpi, { neutral: true })}
-          icon={<Hash />}
-          className="h-full"
-        />
-
-        <KpiTile
-          label={KPI_LABELS[9]}
-          value={costKpi.available === false ? <Unavailable label="Not reported" /> : formatUsd(costKpi.value)}
-          hint={
-            costKpi.available === false
-              ? truncate(costKpi.note || "No harness reported inference cost.", 96)
-              : `${formatNumber(costKpi.sample)} runs reported inference cost`
-          }
-          delta={deltaArg(costKpi, { neutral: true })}
-          icon={<CircleDollarSign />}
-          className="h-full"
-        />
       </div>
+      <details className="metrics-details mt-4 rounded-xl border border-border bg-surface/60">
+        <summary className="flex cursor-pointer items-center gap-2 rounded-xl px-4 py-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+          <SlidersHorizontal aria-hidden="true" className="h-3.5 w-3.5" />
+          Performance & resources
+          <span className="hidden font-normal sm:inline">· Security, cleanup, latency and spend</span>
+          <ChevronDown aria-hidden="true" className="details-chevron ml-auto h-4 w-4 shrink-0 transition-transform" />
+        </summary>
+        <div className="grid grid-cols-1 gap-3 border-t border-border p-3 sm:grid-cols-2 xl:grid-cols-3">
+          <KpiTile
+            label={KPI_LABELS[4]}
+            value={securityKpi.available === false ? <Unavailable label="Unavailable" /> : formatNumber(securityKpi.value)}
+            hint={
+              Number(securityKpi.value) > 0
+                ? `Among ${formatNumber(securityKpi.sample)} runs in this window`
+                : Number(securityKpi.sample) > 0
+                  ? `No security stop among ${formatNumber(securityKpi.sample)} runs`
+                  : "No runs evaluated in this window"
+            }
+            delta={deltaArg(securityKpi, { security: true })}
+            tone={Number(securityKpi.value) > 0 ? "danger" : "muted"}
+            icon={<ShieldAlert />}
+            spark={securitySpark}
+            href="#/security"
+            className="h-full"
+          />
+
+          <KpiTile
+            label={KPI_LABELS[5]}
+            value={percentValue(cleanupKpi)}
+            hint={
+              cleanupKpi.available === false
+                ? truncate(cleanupKpi.note || "No cleanup evidence in this window.", 96)
+                : `${formatNumber(cleanupKpi.sample)} runs with cleanup evidence`
+            }
+            delta={deltaArg(cleanupKpi)}
+            tone={cleanupKpi.available === false ? "muted" : "success"}
+            icon={<PackageCheck />}
+            href="#/operations"
+            className="h-full"
+          />
+
+          <KpiTile
+            label={KPI_LABELS[6]}
+            value={durationValue(p50Kpi)}
+            hint={
+              p50Kpi.available === false
+                ? truncate(p50Kpi.note || "No duration samples in this window.", 96)
+                : `${formatNumber(p50Kpi.sample)} duration samples`
+            }
+            delta={deltaArg(p50Kpi, { duration: true })}
+            icon={<Timer />}
+            spark={durationSpark}
+            className="h-full"
+          />
+
+          <KpiTile
+            label={KPI_LABELS[7]}
+            value={durationValue(p95Kpi)}
+            hint={
+              p95Kpi.available === false
+                ? truncate(p95Kpi.note || "No duration samples in this window.", 96)
+                : `${formatNumber(p95Kpi.sample)} duration samples`
+            }
+            delta={deltaArg(p95Kpi, { duration: true })}
+            icon={<Gauge />}
+            className="h-full"
+          />
+
+          <KpiTile
+            label={KPI_LABELS[8]}
+            value={
+              tokensKpi.available === false ? (
+                <Unavailable label="Not reported" />
+              ) : (
+                formatNumber(tokensKpi.value, { compact: true })
+              )
+            }
+            hint={
+              tokensKpi.available === false
+                ? truncate(tokensKpi.note || "No harness reported token usage.", 96)
+                : `${formatNumber(tokensKpi.sample)} runs reported token usage`
+            }
+            delta={deltaArg(tokensKpi, { neutral: true })}
+            icon={<Hash />}
+            className="h-full"
+          />
+
+          <KpiTile
+            label={KPI_LABELS[9]}
+            value={costKpi.available === false ? <Unavailable label="Not reported" /> : formatUsd(costKpi.value)}
+            hint={
+              costKpi.available === false
+                ? truncate(costKpi.note || "No harness reported inference cost.", 96)
+                : `${formatNumber(costKpi.sample)} runs reported inference cost`
+            }
+            delta={deltaArg(costKpi, { neutral: true })}
+            icon={<CircleDollarSign />}
+            className="h-full"
+          />
+        </div>
+      </details>
     </section>
   );
 }

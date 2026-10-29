@@ -17,7 +17,7 @@ export function ConfigSection({
   padded = true,
 }) {
   return (
-    <Card id={id} className={clsx("scroll-mt-28", className)}>
+    <Card id={id} className={clsx("scroll-mt-[calc(var(--topbar-height)+4rem)]", className)}>
       <CardHeader title={title} description={description} icon={icon} actions={actions} />
       {padded ? <CardBody className={bodyClassName}>{children}</CardBody> : <div className={bodyClassName}>{children}</div>}
       {footer ? <CardFooter>{footer}</CardFooter> : null}
