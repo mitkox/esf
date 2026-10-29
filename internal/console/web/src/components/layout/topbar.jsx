@@ -79,7 +79,7 @@ export function Topbar({
   const shortcut = modifier === "⌘" ? "⌘K" : "Ctrl K";
 
   return (
-    <header className="sticky top-0 z-40 h-14 shrink-0 border-b border-border">
+    <header className="sticky top-0 z-40 h-[var(--topbar-height)] shrink-0 border-b border-border">
       <div aria-hidden="true" className="chrome-blur absolute inset-0" />
       {refreshing ? (
         <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-px overflow-hidden bg-primary/20">
@@ -87,7 +87,7 @@ export function Topbar({
         </div>
       ) : null}
 
-      <div className="relative flex h-full items-center gap-2 px-3 sm:px-4 lg:px-5">
+      <div className="relative flex h-full items-center gap-2 px-3 sm:px-6 lg:px-8">
         <button
           type="button"
           id="console-nav-trigger"
@@ -108,10 +108,10 @@ export function Topbar({
             onClick={onOpenPalette}
             aria-label="Open command palette"
             aria-keyshortcuts="Meta+K Control+K"
-            className="flex h-8 items-center gap-2 rounded-lg border border-border bg-surface/70 px-2 text-xs text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
+            className="flex h-8 items-center gap-2 rounded-lg border border-border bg-surface/70 px-3 text-xs text-muted-foreground transition-colors hover:border-border-strong hover:text-foreground"
           >
             <Search aria-hidden="true" className="h-3.5 w-3.5" />
-            <span className="hidden xl:inline">Search</span>
+            <span className="hidden xl:inline">Jump to…</span>
             <span className="kbd hidden border-border/80 sm:inline-flex" aria-hidden="true">
               {shortcut}
             </span>
@@ -142,7 +142,7 @@ export function Topbar({
 
           <button
             type="button"
-            onClick={() => onToggleAutoRefresh?.()}
+            onClick={() => setAutoRefresh(!autoRefresh)}
             aria-pressed={autoRefresh}
             aria-label={autoRefresh ? "Disable auto-refresh" : "Enable auto-refresh"}
             title={autoRefresh ? "Auto-refresh is on (30s)" : "Auto-refresh is off"}

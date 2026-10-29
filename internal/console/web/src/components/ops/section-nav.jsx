@@ -40,7 +40,7 @@ export function SectionNav({ items = [], label = "Sections", className }) {
     <nav
       aria-label={label}
       className={clsx(
-        "chrome-blur scrollbar-none sticky top-14 z-30 -mx-4 mb-4 overflow-x-auto border-b border-border px-4 py-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8",
+        "chrome-blur scrollbar-none sticky top-[var(--topbar-height)] z-30 -mx-4 mb-4 overflow-x-auto border-b border-border px-4 py-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8",
         className,
       )}
     >

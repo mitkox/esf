@@ -7,24 +7,26 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ChartSkeleton, KpiSkeleton, Skeleton, SkeletonText, TableSkeleton } from "@/components/ui/skeleton";
 import { formatNumber, timeAgo } from "@/lib/format";
 
-const KPI_SLOTS = 10;
+const KPI_SLOTS = 4;
 
 // OverviewSkeleton mirrors the real dashboard silhouette so a slow artifact
 // store never causes a layout jump.
 export function OverviewSkeleton() {
   return (
     <div className="space-y-4" role="status" aria-label="Loading factory overview">
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: KPI_SLOTS }).map((_, index) => (
-          <KpiSkeleton key={index} />
+          <KpiSkeleton key={index} className="min-h-[156px]" />
         ))}
       </div>
 
+      <Skeleton className="h-11 w-full" />
       <div className="grid-12">
         <ChartSkeleton className="col-span-12 xl:col-span-7" height={224} />
         <ChartSkeleton className="col-span-12 xl:col-span-5" height={224} />
       </div>
 
+      <TableSkeleton rows={6} columns={6} />
       <div className="grid-12">
         {[0, 1, 2].map((index) => (
           <Card key={index} className="col-span-12 flex flex-col lg:col-span-6 xl:col-span-4">
@@ -58,7 +60,6 @@ export function OverviewSkeleton() {
         </Card>
       </div>
 
-      <TableSkeleton rows={6} columns={6} />
     </div>
   );
 }

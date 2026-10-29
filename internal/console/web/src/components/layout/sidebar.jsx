@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import clsx from "clsx";
-import { Activity, ChevronRight, Keyboard, Moon, Sun, X } from "lucide-react";
+import { Activity, Layers, ChevronRight, Keyboard, Moon, Sun, X } from "lucide-react";
 import { NAV_GROUPS, activeNavItem, hrefFor } from "@/routes";
 import { WINDOW_OPTIONS } from "@/lib/workspace";
 import { Badge, StatusDot } from "@/components/ui/badge";
@@ -17,13 +17,13 @@ const ENVIRONMENT_LABEL = {
 
 function NavList({ activeID, onNavigate }) {
   return (
-    <nav aria-label="Primary" className="scroll-thin flex-1 overflow-y-auto px-2.5 py-3">
+    <nav aria-label="Primary" className="scroll-thin flex-1 overflow-y-auto px-3 py-5">
       {NAV_GROUPS.map((group) => (
-        <div key={group.label} className="mb-4 last:mb-1">
-          <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase leading-4 tracking-[0.14em] text-muted-foreground/70">
+        <div key={group.label} className="mb-6 last:mb-1">
+          <p className="px-2.5 pb-2 text-[10px] font-semibold uppercase leading-4 tracking-[0.14em] text-muted-foreground">
             {group.label}
           </p>
-          <ul aria-label={group.label} className="space-y-0.5">
+          <ul aria-label={group.label} className="space-y-1">
             {group.items.map((item) => {
               const active = activeID === item.id;
               const Icon = navIcon(item.icon);
@@ -35,9 +35,9 @@ function NavList({ activeID, onNavigate }) {
                     onClick={onNavigate}
                     aria-current={active ? "page" : undefined}
                     className={clsx(
-                      "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] leading-5 transition-colors",
+                      "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] leading-5 transition-colors",
                       active
-                        ? "bg-muted font-medium text-foreground"
+                        ? "bg-primary/10 font-semibold text-primary"
                         : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                     )}
                   >
@@ -176,13 +176,13 @@ function SidebarContent({
 }) {
   return (
     <>
-      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-3.5">
-        <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-primary/25 bg-primary/10">
-          <span className="text-[10px] font-extrabold tracking-tight text-primary">ESF</span>
+      <div className="flex h-[var(--topbar-height)] shrink-0 items-center gap-3 px-5">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground">
+          <Layers aria-hidden="true" className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold leading-tight tracking-[-0.01em]">Factory Console</p>
-          <p className="truncate text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Software factory</p>
+          <p className="truncate text-sm font-bold leading-tight tracking-[-0.02em]">Factory Console</p>
+          <p className="truncate mt-0.5 text-[10px] tracking-[0.04em] text-muted-foreground">Engineering workspace</p>
         </div>
         {mobile ? (
           <button
@@ -244,7 +244,7 @@ export function Sidebar(props) {
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col border-r border-border bg-surface lg:flex">
+      <aside className="factory-sidebar fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col border-r border-border bg-surface lg:flex">
         <SidebarContent {...props} activeID={activeID} mobile={false} />
       </aside>
 

@@ -14,9 +14,9 @@ const VARIANTS = {
 
 const SIZES = {
   xs: "h-6 gap-1 rounded-md px-1.5 text-[11px] font-medium",
-  sm: "h-7 gap-1.5 rounded-lg px-2.5 text-xs font-medium",
-  md: "h-8 gap-1.5 rounded-lg px-3 text-xs font-semibold",
-  lg: "h-9 gap-2 rounded-lg px-3.5 text-sm font-semibold",
+  sm: "h-8 gap-1.5 rounded-lg px-2.5 text-xs font-medium",
+  md: "h-9 gap-1.5 rounded-lg px-3 text-xs font-semibold",
+  lg: "h-10 gap-2 rounded-lg px-3.5 text-sm font-semibold",
   "icon-xs": "h-6 w-6 rounded-md p-0",
   "icon-sm": "h-7 w-7 rounded-lg p-0",
   icon: "h-8 w-8 rounded-lg p-0",

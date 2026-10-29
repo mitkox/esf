@@ -73,13 +73,13 @@ export function KpiTile({
   const accentTone = TONE_TEXT[tone] ? tone : "muted";
   const body = (
     <div className="flex h-full flex-col">
-      <div className="flex items-start justify-between gap-3 px-4 pt-3.5">
+      <div className="flex items-start justify-between gap-3 px-5 pt-5">
         <div className="min-w-0">
-          <p className="truncate text-[10px] font-semibold uppercase leading-4 tracking-[0.12em] text-muted-foreground">
+          <p className="text-xs font-medium leading-4 text-muted-foreground">
             {label}
           </p>
-          <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <span className="tabular text-[26px] font-semibold leading-none tracking-[-0.02em] text-foreground">
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="tabular text-[34px] font-semibold leading-none tracking-[-0.045em] text-foreground">
               {value === null || value === undefined || value === "" ? "—" : value}
             </span>
             {deltaInfo ? (
@@ -95,7 +95,7 @@ export function KpiTile({
               </span>
             ) : null}
           </div>
-          {hint ? <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">{hint}</p> : null}
+          {hint ? <p className="mt-2 line-clamp-2 text-xs leading-snug text-muted-foreground">{hint}</p> : null}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {icon ? (
@@ -118,7 +118,7 @@ export function KpiTile({
         </div>
       </div>
       {spark && spark.length ? (
-        <div className={clsx("mt-auto px-1 pt-1", TONE_TEXT[accentTone] || TONE_TEXT.muted)}>
+        <div className={clsx("mt-auto px-5 pb-3 pt-3", TONE_TEXT[accentTone] || TONE_TEXT.muted)}>
           <Sparkline values={spark} />
         </div>
       ) : null}
@@ -135,7 +135,7 @@ export function KpiTile({
   return (
     <Card
       className={clsx(
-        "group overflow-hidden transition-colors",
+        "metric-card group overflow-hidden transition-colors",
         href && "hover:border-border-strong focus-within:border-border-strong",
         className,
       )}
