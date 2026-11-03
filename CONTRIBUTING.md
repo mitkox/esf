@@ -13,8 +13,8 @@ Report vulnerabilities through [SECURITY.md](SECURITY.md), not a public issue.
 Install:
 
 - Go 1.27.3
-- Node.js 26.12.1, plus npm, for the optional Pi runner and agent packaging
-- Python 3.15.2 and uv 0.13.6 for optional Python checks
+- Node.js 26.13.0, plus npm, for the optional Pi runner and agent packaging
+- Python 3.15.2 and uv 0.13.7 for optional Python checks
 - Git
 - the agent CLI needed for any real execution checks
 

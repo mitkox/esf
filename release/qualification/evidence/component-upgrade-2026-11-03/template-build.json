@@ -1,0 +1,83 @@
+{
+  "schema": "esf-template-build/v1",
+  "baseline": "4639f046267417bbe5f74ace18af3fbafdf2163d",
+  "recipe_sha256": "3b5ef7d63b3f3238d69260d4bd2b0ba0b8d231ad1fafbe67d141cb677a297bbe",
+  "template_id": "tpl-0914c5dd04cd48a0a5aa6be6",
+  "alias": "esf-v072-native-20261103",
+  "status": "READY",
+  "image": "localhost:32001/esf-native@sha256:83c7f9fa81aae59d77fd70ffbb6f9e6289409669d6d550b19aa88aebb6ed654d",
+  "image_platform_manifest": "localhost:32001/esf-native@sha256:afde5595a085e7a16970f5e3322c4ff8abefb6b7852b8fd481076f13c6d10972",
+  "artifact_ext4_sha256": "2b1283d466f926015277784c15a0d2981a00e84d563aa3ab50505395f57b3ad7",
+  "layers": "18 layers, 805510497 bytes",
+  "spec": "cpu=2000m, mem=2000Mi, writable layer 12Gi, dns 1.1.1.1, expose 49999/49983, probe 49983, CubeEgress CA baked",
+  "payload": [
+    {
+      "component": "opencode2",
+      "version": "opencode v2.2.5",
+      "sha256_expected": "8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050",
+      "sha256_measured": "8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050",
+      "match": true
+    },
+    {
+      "component": "claude",
+      "version": "2.1.317 (Claude Code)",
+      "sha256_expected": "eb224419e344575faa4a1f39b290b649425a10cd5ee2ef1d003480cd9ae57eb0",
+      "sha256_measured": "eb224419e344575faa4a1f39b290b649425a10cd5ee2ef1d003480cd9ae57eb0",
+      "match": true
+    },
+    {
+      "component": "codex",
+      "version": "codex-cli 0.166.0",
+      "sha256_expected": "b8a11fedf24b2dfb59a70c9e52b030f9a508dcd49cd2dd0d41956f4c785156b8",
+      "sha256_measured": "b8a11fedf24b2dfb59a70c9e52b030f9a508dcd49cd2dd0d41956f4c785156b8",
+      "match": true
+    },
+    {
+      "component": "node",
+      "version": "v26.13.0",
+      "sha256_expected": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b",
+      "sha256_measured": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b",
+      "match": true
+    },
+    {
+      "component": "unreal-agent-runner",
+      "version": "0.3.1 (from base)",
+      "sha256_expected": "d289aa2046bb79d2b063679c6e0e6b714c759f8a5ed6f969d3b3ea1eeeec03ee",
+      "sha256_measured": "d289aa2046bb79d2b063679c6e0e6b714c759f8a5ed6f969d3b3ea1eeeec03ee",
+      "match": true
+    },
+    {
+      "component": "pi-runner.mjs",
+      "version": "pi v1 (pi-durable 1.5.0)",
+      "sha256_expected": "2f2b5191139a564050c98f0784e9be63893d47685abc6ac8a4049a942b201993",
+      "sha256_measured": "2f2b5191139a564050c98f0784e9be63893d47685abc6ac8a4049a942b201993",
+      "match": true
+    },
+    {
+      "component": "python3",
+      "version": "Python 3.10.12",
+      "sha256_measured": null,
+      "match": null
+    },
+    {
+      "component": "git",
+      "version": "git version 2.34.1",
+      "sha256_measured": null,
+      "match": null
+    }
+  ],
+  "apt_packages": [
+    "ca-certificates=20260601~22.04.1",
+    "git=1:2.34.1-1ubuntu1.17",
+    "libatomic1:amd64=12.3.0-1ubuntu1~22.04.3",
+    "python3=3.10.6-1~22.04.1"
+  ],
+  "verification": {
+    "docker_build_sha256sum_checks": "all payload digests verified at build time",
+    "factory_agents_verify": "6 configured agents + Pi runtime self-check passed against this template",
+    "cube_smoke": "template READY, node v26.13.0, zero sandbox leaks",
+    "sandbox_id_used": "a582a4a145f442058af193be76215688"
+  },
+  "cleanup": "zero live sandboxes after verification (API health sandboxes:0)",
+  "built_at": "2026-11-03T09:19:09Z"
+}

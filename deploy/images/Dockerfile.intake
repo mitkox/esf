@@ -1,5 +1,5 @@
-ARG GO_BUILDER=docker.io/library/golang@sha256:b76020929b709ddb6202afc05410a0faefae20ae05e27ad548b3870092688a69
-ARG PYTHON_BASE=docker.io/library/python@sha256:c4158543ecb725b99e57d129dfd43d761d4c43e4577b5e23326aabb223cf7f4e
+ARG GO_BUILDER=docker.io/library/golang@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b
+ARG PYTHON_BASE=docker.io/library/python@sha256:8c13a3f37a6a5b71498228e902c4b9f51c1f7900d49fabf71f9a650c6120e0d0
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS build
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -7,7 +7,7 @@ RUN go mod download
 COPY . .
 ARG TARGETOS
 ARG TARGETARCH
-ARG ESF_VERSION=0.7.1
+ARG ESF_VERSION=0.7.2
 ARG ESF_COMMIT
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -buildvcs=false -trimpath \
@@ -21,7 +21,7 @@ COPY third_party/harness2 /usr/share/doc/esf/harness2
 COPY pyproject.toml uv.lock ./
 COPY tools/intake tools/intake
 COPY tools/brief_lab tools/brief_lab
-RUN python -m pip install --no-cache-dir uv==0.13.6 && \
+RUN python -m pip install --no-cache-dir uv==0.13.7 && \
     uv sync --locked --python /usr/local/bin/python3 --no-install-project && \
     useradd --uid 10001 --no-create-home esf
 USER 10001:10001

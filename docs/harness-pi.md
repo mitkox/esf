@@ -1,8 +1,8 @@
 # Pi harness v1 candidate
 
 Select Pi explicitly with `factory run --agent pi`. OpenCode remains the
-automatic default. Pi 1.4.0 has an experimental API; this adapter pins its
-published packages, dependency graph, ESF bundle, and Node 26.12.1 runtime.
+automatic default. Pi 1.5.0 has an experimental API; this adapter pins its
+published packages, dependency graph, ESF bundle, and Node 26.13.0 runtime.
 The candidate is opt-in until the model-backed acceptance matrix passes.
 
 ## Template and installation
@@ -26,7 +26,7 @@ factory run. For offline template staging,
 installs the verified Node binary and committed bundle.
 
 Rebuild the bundle and catalog in a Cube development microVM, using Node
-26.12.1 and the committed lockfile:
+26.13.0 and the committed lockfile:
 
 ```sh
 cd agents/pi
@@ -56,9 +56,9 @@ template in `[cube]`, and append:
 type = "pi"
 preinstalled = true
 binary = "/opt/esf/agents/pi-runner.mjs"
-binary_sha256 = "5e2a1d725c3b5422265b3a6c9cfb90293856865184892894dc329f8ccaf89862"
+binary_sha256 = "2f2b5191139a564050c98f0784e9be63893d47685abc6ac8a4049a942b201993"
 runtime_binary = "/opt/esf/agents/node"
-runtime_sha256 = "08f12d42fb304468e8ee86247fe686aae5b225836ea65e9d6566c11ae6ba2e8e"
+runtime_sha256 = "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b"
 provider = "local"
 base_url = "http://192.168.0.14:8000/v1"
 model = "<operator-approved-model-id>"
@@ -70,7 +70,7 @@ timeout = "30m"
 ```
 
 `api` supports `openai-completions` (default for the local gateway) and
-`openai-responses`. A model in the embedded Pi 1.4.0 catalog can omit
+`openai-responses`. A model in the embedded Pi 1.5.0 catalog can omit
 `catalog_cache`; its provider, model ID, and API must match. Custom gateways
 must supply a strict offline JSON model definition with explicit context and
 output limits. Do not guess these limits from a model name.
@@ -130,8 +130,24 @@ verification or approval authority.
 ## Evidence and acceptance
 
 The standard stdout artifact contains commit-derived JSONL audit events,
-including a final committed submission receipt. Standard stderr/result and
-prompt artifacts remain unchanged. Before teardown, the adapter validates and
+including a final committed submission receipt. Since Pi Durable 1.5 removed
+`watchEvents()`, the ESF engine derives that stream from the conversation view,
+one event per committed change. The retained vocabulary is `snapshot`,
+`entry_appended`, `message_end`, `tool_execution_start`,
+`tool_execution_update`, `tool_execution_end`, `run_start`, `run_end`,
+`compaction_start`, `compaction_end`, `compaction_failure` and
+`message_start`. The 1.4-only types `message_update` (streamed text deltas),
+`auto_retry_start`/`auto_retry_end`, `deferred_poll`, `turn_start`/`turn_end`,
+`inbox_update`, `agent_changed`, `usage_changed` and `task_failed` are no
+longer re-emitted; usage continues to be delivered through the usage channel
+and the usage sidecar. Tool arguments/results, run inputs and compaction
+reasons are likewise not re-emitted, and the stream remains opaque evidence
+that no factory gate parses. Two further differences follow from the Pi 1.5 view
+API: `run_start`/`run_end` and `tool_execution_end` can be missed when the watch
+folds two commits into one observed value, and the single durable retry also
+applies to retryable provider errors (one bounded re-send; stream retries stay
+zero). A golden-event parity test for these cases is follow-up work. Standard
+stderr/result and prompt artifacts remain unchanged. Before teardown, the adapter validates and
 the factory redacts/stores `agent/pi-terminal.json`, `agent/usage.json`, and
 `agent/recovery.json`. Each sidecar is bounded to 128 KiB. Exit zero without a
 valid matching terminal receipt fails. Sidecars are transient harness output;
@@ -176,8 +192,8 @@ verification and sandbox cleanup. Pi remains an opt-in candidate pending the
 HTTPS CubeEgress, failure, review, and recovery acceptance matrix described
 above. See [the component upgrade evidence](../release/qualification/component-upgrade-2026-10-06.md).
 
-The 0.7.1 candidate retains the 0.6.2 updates to Pi Durable, Pi AI, and Chord
-1.4.0 and Node 26.12.1. Its rebuilt bundle and exported catalog passed the runner regressions
-in Cube. Earlier model-backed results apply to their recorded versions;
+The 0.7.2 candidate moves Pi Durable, Pi AI, and Chord to 1.5.0 and the
+bundled runtime to Node 26.13.0. Its rebuilt bundle and exported catalog
+passed the runner regressions in Cube. Earlier model-backed results apply to their recorded versions;
 model-backed and HTTPS credential-injection acceptance must be repeated for
 this execution chain.

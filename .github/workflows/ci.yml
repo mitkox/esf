@@ -60,7 +60,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 26.12.1
+          node-version: 26.13.0
           cache: npm
           cache-dependency-path: internal/console/web/package-lock.json
       - name: Test issue triage
@@ -95,7 +95,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 26.12.1
+          node-version: 26.13.0
           cache: npm
           cache-dependency-path: agents/pi/package-lock.json
       - name: Build and test pinned Pi runner
@@ -118,8 +118,8 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
-          version: 0.13.6
-          checksum: f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645
+          version: 0.13.7
+          checksum: c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83
           enable-cache: true
           cache-suffix: v2
           cache-python: true

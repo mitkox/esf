@@ -1,0 +1,223 @@
+{
+  "schema": "esf-component-upgrade/v1",
+  "baseline": "4639f046267417bbe5f74ace18af3fbafdf2163d",
+  "candidate": "v0.7.2",
+  "queried_at": "2026-11-03T08:50:00+02:00/2026-11-03T11:25:00+02:00",
+  "sources": {
+    "npm": "https://registry.npmjs.org/",
+    "github": "https://api.github.com/",
+    "go_proxy": "https://proxy.golang.org/",
+    "pypi": "https://pypi.org/pypi/",
+    "python_releases": "https://www.python.org/api/v2/downloads/release/?is_published=true&pre_release=false",
+    "node_releases": "https://nodejs.org/dist/index.json",
+    "kubernetes_stable": "https://dl.k8s.io/release/stable.txt",
+    "docker_hub": "https://hub.docker.com/v2/repositories/",
+    "ghcr": "https://ghcr.io/v2/",
+    "gcr": "https://gcr.io/v2/",
+    "go_vuln": "https://vuln.go.dev"
+  },
+  "upgrades": {
+    "opencode": {
+      "previous": "2.2.0",
+      "candidate": "2.2.5",
+      "npm_integrity": "sha512-sJAwrwuVa5b+pA3O1UOiSDcC9DgdPVmtkWv6aF6q3+rOiOTCqrE41tkz1kyyE2O8BYPs4eOvBuzkQ6oEm8w5Mw==",
+      "linux_amd64_npm_integrity": "sha512-oPOT+EMmdz56HnSFPRVwZ0QTVL5defhOacnwzazu0XOuCWUtEKh8icIn323SdCLtqZtzjuU1mt6p2/13V93WWg==",
+      "linux_amd64_binary_sha256": "8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050",
+      "url": "https://registry.npmjs.org/@opencode/cli",
+      "measured_version": "opencode v2.2.5",
+      "notes": "npm dist-tag latest; measured by the model-backed acceptance run"
+    },
+    "claude": {
+      "previous": "2.1.312",
+      "candidate": "2.1.317",
+      "archive_url": "https://github.com/anthropics/claude-code/releases/download/v2.1.317/claude-linux-x64.tar.gz",
+      "archive_sha256": "153511cf79cd27c55c9f9c919cc532eb90647f7893cb3f4e78dac776991714e0",
+      "sha256sums_sha256": "64b547d73b0e2983926b2f000e3e5ff0e5e72d35677bca78bf74b52d5bf3d260",
+      "binary_sha256": "eb224419e344575faa4a1f39b290b649425a10cd5ee2ef1d003480cd9ae57eb0",
+      "url": "https://api.github.com/repos/anthropics/claude-code/releases/latest",
+      "notes": "archive digest equals GitHub asset digest and the SHASUMS256.txt line; extracted binary runs 2.1.317 (Claude Code)"
+    },
+    "codex": {
+      "previous": "0.165.0",
+      "candidate": "0.166.0",
+      "archive_url": "https://github.com/openai/codex/releases/download/rust-v0.166.0/codex-x86_64-unknown-linux-musl.tar.gz",
+      "archive_sha256": "a0bf572d2f93f056c6712a6da348e96078dc84f3885fd7be67807ef389cb3978",
+      "binary_sha256": "b8a11fedf24b2dfb59a70c9e52b030f9a508dcd49cd2dd0d41956f4c785156b8",
+      "url": "https://api.github.com/repos/openai/codex/releases/latest",
+      "notes": "archive digest equals the GitHub per-asset digest; extracted binary runs codex-cli 0.166.0"
+    },
+    "pi": {
+      "previous": "1.4.0",
+      "candidate": "1.5.0",
+      "git_commit": "f9a26365568127461c47a07a37dcb42c140a3ac5",
+      "npm_integrity": {
+        "pi-durable": "sha512-xeBP2vIo5NvsCMQ4Y/V+Z164xQEi9JWiBWHdjn4Z15EnFqV3c0FxJAX26FqyyyintrYyk+Enre94GNcvRlBA5g==",
+        "pi-ai": "sha512-VeWxNqTHSqRCf8AcY/6kvNwh+neRL6MPxZPePVztIQy6qqK9MR/YoCSN/ZgDnIyCD3pqEXgRyQbzk4KV4uvjbg==",
+        "chord": "sha512-jf555zbCM21E03DVBDPD/Tuae0lz64YjaHx/athUxNZ/H7phVVb0dWfZsaYnxaXPQ1odW8iHEoVLOlE/prvUPg=="
+      },
+      "runner_sha256": "2f2b5191139a564050c98f0784e9be63893d47685abc6ac8a4049a942b201993",
+      "third_party_notices_sha256": "b2d15429c72a7ddd16c21464165813c79dca1081182fe4ed3f406008d49e2798",
+      "model_catalog_sha256": "b785b578eaa591b7b725dcf7beb9fb9cfc82f1f8571268b73dcd7082eae0ac9f",
+      "package_lock_sha256": "f1f6147f247c667be0528776c084dd61ecc2cc6f59d8d4d026800909308c5868",
+      "url": "https://registry.npmjs.org/@earendil-works/pi-durable",
+      "notes": "git_commit cross-checked between the npm SLSA provenance and GitHub tag v1.5.0. Upstream 1.5 removed watchEvents() and stopped resending an in-flight request after a host crash; the ESF engine now derives the audit stream from the conversation view and enables exactly one durable retry to preserve supervisor-restart recovery. 17 runner regressions pass."
+    },
+    "node": {
+      "previous": "26.12.1",
+      "candidate": "26.13.0",
+      "url": "https://nodejs.org/dist/index.json",
+      "runtime_binary_sha256": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b",
+      "notes": "Node 26 current line; the Pi template copies this runtime and the console/agent package graphs build on it"
+    },
+    "uv": {
+      "previous": "0.13.6",
+      "candidate": "0.13.7",
+      "url": "https://github.com/astral-sh/uv/releases/tag/0.13.7",
+      "bundle_checksum": "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
+    },
+    "temporal": {
+      "previous": {
+        "server": "1.32.1",
+        "ui": "2.57.0",
+        "go_api": "1.64.0"
+      },
+      "candidate": {
+        "server": "1.32.2",
+        "ui": "2.58.0",
+        "go_api": "1.64.1"
+      },
+      "unchanged": {
+        "admin_tools": "1.32.1",
+        "go_sdk": "1.50.0"
+      },
+      "url": "https://api.github.com/repos/temporalio/temporal/releases/latest",
+      "notes": "temporalio/admin-tools does not publish a 1.32.2 tag (verified: tag list ends at 1.32.1, Docker Hub digest 9ef0dc5b...); admin tools 1.32.1 runs the schema setup against server 1.32.2 with zero schema updates. Local stack restarted only after a quiet window; persistence 1.19 and visibility 1.14 schemas unchanged."
+    },
+    "python_lock": {
+      "previous": {
+        "boto3": "1.43.120",
+        "botocore": "1.43.120",
+        "filelock": "4.2.4"
+      },
+      "candidate": {
+        "boto3": "1.43.123",
+        "botocore": "1.43.123",
+        "filelock": "4.2.7"
+      },
+      "also_updated": {
+        "anyio": "4.15.1 -> 4.16.0",
+        "cachetools": "7.2.6 -> 7.2.8",
+        "hf-xet": "1.7.0 -> 1.8.0",
+        "huggingface-hub": "2.3.0 -> 2.4.0",
+        "json-repair": "0.64.2 -> 0.64.4",
+        "litellm": "1.103.9 -> 1.103.10",
+        "pydantic": "2.14.1 -> 2.14.2",
+        "pydantic-core": "2.50.1 -> 2.50.2"
+      },
+      "url": "https://pypi.org/pypi/",
+      "notes": "filelock 4.2.7 stays above the enforced >=4.2.1 security floor; litellm remains <1.104 because newer releases require filelock<4"
+    },
+    "console": {
+      "previous": {
+        "lucide-react": "1.63.0",
+        "tailwindcss": "4.3.3",
+        "@tailwindcss/vite": "4.3.3",
+        "@vitejs/plugin-react": "6.1.2"
+      },
+      "candidate": {
+        "lucide-react": "1.67.0",
+        "tailwindcss": "4.3.4",
+        "@tailwindcss/vite": "4.3.4",
+        "@vitejs/plugin-react": "6.2.1"
+      },
+      "url": "https://registry.npmjs.org/lucide-react",
+      "notes": "transitive movement is limited to tailwind internals, magic-string 1.4.5 and lightningcss 1.33.0 deduplication; 17/17 frontend tests pass, the tracked dist is rebuilt deterministically and npm audit reports 0 vulnerabilities"
+    }
+  },
+  "unchanged_current": {
+    "go": "1.27.3",
+    "grpc": "1.85.0",
+    "otel": "1.47.0",
+    "x_net": "0.62.0",
+    "protobuf": "1.36.12",
+    "temporal_go_sdk": "1.50.0",
+    "temporal_admin_tools": "1.32.1",
+    "cubesandbox": "0.7.3",
+    "cubesandbox_go_sdk": "v0.7.3",
+    "cubesandbox_base_digest": "sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472",
+    "unreal": "0.3.1",
+    "python_optional": "3.15.2",
+    "python_dot_version": "3.14.10",
+    "kubectl": "1.37.2",
+    "helm": "4.3.1",
+    "postgresql": "18.6",
+    "dspy": "3.4.1",
+    "certifi": "2026.10.23",
+    "pydantic_settings": "2.16.2",
+    "govulncheck": "1.9.0",
+    "gitleaks": "8.30.1",
+    "harness2_commit": "1cfe254e8d25b15f37048c3730134686abe60335"
+  },
+  "constraint_blocked": [
+    {"package": "litellm", "locked": "1.103.10", "latest": "1.106.6", "reason": "litellm >=1.104 requires filelock<4.0, conflicting with the root filelock>=4.2.1 security minimum"},
+    {"package": "openai", "locked": "2.54.0", "latest": "3.42.1", "reason": "litellm pins openai<3.0.0"},
+    {"package": "importlib-metadata", "locked": "8.9.0", "latest": "10.1.0", "reason": "litellm pins importlib-metadata<9.0.0"},
+    {"package": "python-dateutil", "locked": "2.9.0.post0", "latest": "4.0.0", "reason": "botocore pins python-dateutil<3.0.0"}
+  ],
+  "known_unfixed": [
+    {"package": "diskcache", "version": "5.6.3", "advisory": "CVE-2025-69872 / GHSA-w8v5-vhqr-4h9v / PYSEC-2026-2447", "impact": "pickle deserialization via attacker-writable cache directory; no fixed release exists", "mitigation": "trusted/private dspy cache directories; caching can be disabled"}
+  ],
+  "images": {
+    "go": {"tag": "1.27.3", "digest": "sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b"},
+    "node": {"tag": "26.13.0-slim", "digest": "sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39"},
+    "python": {"tag": "3.15.2-slim", "digest": "sha256:8c13a3f37a6a5b71498228e902c4b9f51c1f7900d49fabf71f9a650c6120e0d0"},
+    "debian": {"tag": "trixie-slim", "digest": "sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4"},
+    "runtime": {"tag": "static-debian13", "digest": "sha256:448810357cc8e67b7208988abdba0f5ec3d3aebee0a5b13eb624979792cffc0f"},
+    "cube": {"digest": "sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472", "status": "unchanged; current"},
+    "temporal_server": {"tag": "1.32.2", "digest": "sha256:7bf69188a6232fea14869b9cef3d94aa82a1601d99517f7e86c71f22da4e0670"},
+    "temporal_admin_tools": {"tag": "1.32.1", "digest": "sha256:9ef0dc5b063bf4ffd5c1512de72e0e73e225bd2c7006a18ce69bd592a8862a83", "status": "unchanged; no 1.32.2 tag exists"},
+    "temporal_ui": {"tag": "2.58.0", "digest": "sha256:d36185e811d0ce1720b8d3ca4d9ac4dac504b67181e9b5e3d3ca72b2294f3590"},
+    "postgresql": {"tag": "18.6-alpine", "digest": "sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5", "status": "unchanged"}
+  },
+  "local_template": {
+    "recipe_sha256": "3b5ef7d63b3f3238d69260d4bd2b0ba0b8d231ad1fafbe67d141cb677a297bbe",
+    "image": "localhost:32001/esf-native@sha256:83c7f9fa81aae59d77fd70ffbb6f9e6289409669d6d550b19aa88aebb6ed654d",
+    "image_platform_manifest": "localhost:32001/esf-native@sha256:afde5595a085e7a16970f5e3322c4ff8abefb6b7852b8fd481076f13c6d10972",
+    "template_id": "tpl-0914c5dd04cd48a0a5aa6be6",
+    "alias": "esf-v072-native-20261103",
+    "status": "READY",
+    "artifact_ext4_sha256": "2b1283d466f926015277784c15a0d2981a00e84d563aa3ab50505395f57b3ad7",
+    "payload_sha256": {
+      "opencode2": "8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050",
+      "claude": "eb224419e344575faa4a1f39b290b649425a10cd5ee2ef1d003480cd9ae57eb0",
+      "codex": "b8a11fedf24b2dfb59a70c9e52b030f9a508dcd49cd2dd0d41956f4c785156b8",
+      "node": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b",
+      "unreal_agent_runner": "d289aa2046bb79d2b063679c6e0e6b714c759f8a5ed6f969d3b3ea1eeeec03ee",
+      "pi_runner": "2f2b5191139a564050c98f0784e9be63893d47685abc6ac8a4049a942b201993"
+    },
+    "registry_note": "the historical local registry publish on 127.0.0.1:32000 is broken on this host (a fresh container on port 32000 also refuses connections); the 0.7.2 chain was published and pulled through 127.0.0.1:32001"
+  },
+  "local_stack": {
+    "temporal_server": {"baseline": "1.32.1", "upgraded": "1.32.2"},
+    "temporal_ui": {"baseline": "2.57.0", "upgraded": "2.58.0"},
+    "temporal_admin_tools": {"baseline": "1.32.1", "upgraded": "1.32.1", "note": "no 1.32.2 tag published"},
+    "postgresql": {"baseline": "18.6-alpine", "upgraded": "18.6-alpine", "note": "volume and data retained; pre-upgrade dump sha256 f434745ba7b262388ba1053b899fe3c223c921067f62e3a4275420e85f37f58d"},
+    "cubesandbox": {"installed": "0.7.3", "latest_stable": "0.7.3", "action": "already current; no server upgrade available or attempted (no sudo in session)"},
+    "node_toolchain": "26.12.1 -> 26.13.0",
+    "uv_toolchain": "0.13.6 -> 0.13.7",
+    "intake_runtime": ".factory/runtimes/intake-20261103-3.14.10 (CPython 3.14.10, uv 0.13.7, 72 packages compatible)"
+  },
+  "remaining_gates": [
+    "vm soak_24h",
+    "kubernetes soak_24h",
+    "performance matrix",
+    "image SBOM/vulnerability qualification",
+    "transitive license review",
+    "hosted-provider acceptance",
+    "production deployment",
+    "restore",
+    "temporal replay",
+    "migration drill",
+    "eligible human approval"
+  ]
+}

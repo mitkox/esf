@@ -924,7 +924,7 @@
     },
     "workers-ai/@cf/deepseek-ai/deepseek-v4.1-flash-1017": {
       "id": "workers-ai/@cf/deepseek-ai/deepseek-v4.1-flash-1017",
-      "name": "Deepseek V4.1 Flash 1017",
+      "name": "DeepSeek V4.1 Flash 1017",
       "api": "openai-completions",
       "reasoning": true,
       "input": [
@@ -2229,6 +2229,45 @@
         "supportsOpenAIGrammarTools": true
       }
     },
+    "gpt-6.1-terra": {
+      "id": "gpt-6.1-terra",
+      "name": "GPT-6.1 Terra",
+      "api": "openai-responses",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "pricingKnown": false,
+      "cost": {
+        "input": 1,
+        "output": 5,
+        "cacheRead": 0.05,
+        "cacheWrite": 1.25
+      },
+      "thinkingLevels": [
+        "off",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true
+      }
+    },
     "o3": {
       "id": "o3",
       "name": "o3",
@@ -2416,7 +2455,7 @@
     },
     "@cf/deepseek-ai/deepseek-v4.1-flash-1017": {
       "id": "@cf/deepseek-ai/deepseek-v4.1-flash-1017",
-      "name": "Deepseek V4.1 Flash 1017",
+      "name": "DeepSeek V4.1 Flash 1017",
       "api": "openai-completions",
       "reasoning": true,
       "input": [
@@ -3245,6 +3284,45 @@
         "supportsLongCacheRetention": false
       }
     },
+    "accounts/fireworks/routers/glm-5p3-spot": {
+      "id": "accounts/fireworks/routers/glm-5p3-spot",
+      "name": "GLM 5.3 Spot",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1048573,
+      "maxTokens": 262144,
+      "pricingKnown": true,
+      "cost": {
+        "input": 0.98,
+        "output": 3.08,
+        "cacheRead": 0.182,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "sendSessionAffinityHeaders": true,
+        "supportsLongCacheRetention": false
+      }
+    },
     "accounts/fireworks/routers/glm-fast-latest": {
       "id": "accounts/fireworks/routers/glm-fast-latest",
       "name": "GLM 5.3 Fast (Latest)",
@@ -3377,6 +3455,49 @@
         "input": 4.5,
         "output": 22.5,
         "cacheRead": 0.45,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "sendSessionAffinityHeaders": true,
+        "supportsLongCacheRetention": false,
+        "requiresReasoningContentOnAssistantMessages": true,
+        "thinkingFormat": "openai",
+        "supportsMidConvoSystemMessages": true,
+        "supportsMidConvoToolAdditions": true
+      }
+    },
+    "accounts/fireworks/routers/kimi-k3-spot": {
+      "id": "accounts/fireworks/routers/kimi-k3-spot",
+      "name": "Kimi K3 Spot",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "pricingKnown": true,
+      "cost": {
+        "input": 2.1,
+        "output": 10.5,
+        "cacheRead": 0.21,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -3610,9 +3731,9 @@
         "max": "max"
       },
       "compat": {
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-5.6-sol": {
@@ -3650,9 +3771,9 @@
         "max": "max"
       },
       "compat": {
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-5.6-terra": {
@@ -3690,9 +3811,9 @@
         "max": "max"
       },
       "compat": {
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-6-astra": {
@@ -3729,9 +3850,9 @@
         "max": "max"
       },
       "compat": {
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-6-luna": {
@@ -3769,9 +3890,9 @@
         "max": "max"
       },
       "compat": {
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-6-sol": {
@@ -3809,9 +3930,9 @@
         "max": "max"
       },
       "compat": {
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-6.1-sol": {
@@ -3848,9 +3969,49 @@
         "max": "max"
       },
       "compat": {
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
+      }
+    },
+    "gpt-6.1-terra": {
+      "id": "gpt-6.1-terra",
+      "name": "GPT-6.1 Terra",
+      "api": "openai-responses",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "pricingKnown": false,
+      "cost": {
+        "input": 1,
+        "output": 5,
+        "cacheRead": 0.05,
+        "cacheWrite": 1.25
+      },
+      "thinkingLevels": [
+        "off",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "supportsMidConvoSystemMessages": true,
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "grok-4.5": {
@@ -4977,6 +5138,44 @@
         "supportsDeveloperRole": false
       }
     },
+    "MiniMaxAI/MiniMax-M3.1-Flash": {
+      "id": "MiniMaxAI/MiniMax-M3.1-Flash",
+      "name": "MiniMax-M3.1-Flash",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1000000,
+      "maxTokens": 512000,
+      "pricingKnown": true,
+      "cost": {
+        "input": 0.15,
+        "output": 0.6,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsDeveloperRole": false
+      }
+    },
     "moonshotai/Kimi-K2-Instruct": {
       "id": "moonshotai/Kimi-K2-Instruct",
       "name": "Kimi-K2-Instruct",
@@ -5554,35 +5753,6 @@
         "supportsDeveloperRole": false
       }
     },
-    "Qwen/Qwen3-Next-80B-A3B-Thinking": {
-      "id": "Qwen/Qwen3-Next-80B-A3B-Thinking",
-      "name": "Qwen3-Next-80B-A3B-Thinking",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 262144,
-      "maxTokens": 32768,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.3,
-        "output": 2,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsDeveloperRole": false
-      }
-    },
     "Qwen/Qwen3-VL-235B-A22B-Instruct": {
       "id": "Qwen/Qwen3-VL-235B-A22B-Instruct",
       "name": "Qwen3 VL 235B A22B Instruct",
@@ -6153,35 +6323,6 @@
         "supportsDeveloperRole": false
       }
     },
-    "XiaomiMiMo/MiMo-V2-Flash": {
-      "id": "XiaomiMiMo/MiMo-V2-Flash",
-      "name": "MiMo-V2-Flash",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 262144,
-      "maxTokens": 4096,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.1,
-        "output": 0.3,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsDeveloperRole": false
-      }
-    },
     "XiaomiMiMo/MiMo-V2.5": {
       "id": "XiaomiMiMo/MiMo-V2.5",
       "name": "MiMo-V2.5",
@@ -6253,35 +6394,6 @@
         "xhigh": "xhigh",
         "max": null
       },
-      "compat": {
-        "supportsStrictMode": true,
-        "supportsDeveloperRole": false
-      }
-    },
-    "zai-org/GLM-4.5": {
-      "id": "zai-org/GLM-4.5",
-      "name": "GLM-4.5",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 131072,
-      "maxTokens": 98304,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.6,
-        "output": 2.2,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
       "compat": {
         "supportsStrictMode": true,
         "supportsDeveloperRole": false
@@ -6675,11 +6787,97 @@
       ],
       "contextWindow": 262144,
       "maxTokens": 131072,
-      "pricingKnown": false,
+      "pricingKnown": true,
       "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
+        "input": 3,
+        "output": 15,
+        "cacheRead": 0.3,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "compat": {
+        "supportsStrictMode": false,
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": true,
+        "maxTokensField": "max_tokens",
+        "thinkingFormat": "openai",
+        "requiresReasoningContentOnAssistantMessages": true,
+        "supportsMidConvoSystemMessages": true,
+        "supportsMidConvoToolAdditions": true
+      }
+    },
+    "k3.1-pro": {
+      "id": "k3.1-pro",
+      "name": "Kimi K3.1 Pro",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "pricingKnown": true,
+      "cost": {
+        "input": 2,
+        "output": 10,
+        "cacheRead": 0.2,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "compat": {
+        "supportsStrictMode": false,
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": true,
+        "maxTokensField": "max_tokens",
+        "thinkingFormat": "openai",
+        "requiresReasoningContentOnAssistantMessages": true,
+        "supportsMidConvoSystemMessages": true,
+        "supportsMidConvoToolAdditions": true
+      }
+    },
+    "k3.1-pro-highspeed": {
+      "id": "k3.1-pro-highspeed",
+      "name": "Kimi K3.1 Pro Highspeed",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "pricingKnown": true,
+      "cost": {
+        "input": 4,
+        "output": 20,
+        "cacheRead": 0.2,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -7145,6 +7343,92 @@
         "supportsMidConvoSystemMessages": true,
         "supportsMidConvoToolAdditions": true
       }
+    },
+    "kimi-k3.1-pro": {
+      "id": "kimi-k3.1-pro",
+      "name": "Kimi K3.1 Pro",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1048576,
+      "maxTokens": 1048576,
+      "pricingKnown": true,
+      "cost": {
+        "input": 2,
+        "output": 10,
+        "cacheRead": 0.2,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": true,
+        "maxTokensField": "max_tokens",
+        "supportsStrictMode": false,
+        "thinkingFormat": "openai",
+        "requiresReasoningContentOnAssistantMessages": true,
+        "supportsMidConvoSystemMessages": true,
+        "supportsMidConvoToolAdditions": true
+      }
+    },
+    "kimi-k3.1-pro-highspeed": {
+      "id": "kimi-k3.1-pro-highspeed",
+      "name": "Kimi K3.1 Pro Highspeed",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1048576,
+      "maxTokens": 1048576,
+      "pricingKnown": true,
+      "cost": {
+        "input": 4,
+        "output": 20,
+        "cacheRead": 0.2,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": true,
+        "maxTokensField": "max_tokens",
+        "supportsStrictMode": false,
+        "thinkingFormat": "openai",
+        "requiresReasoningContentOnAssistantMessages": true,
+        "supportsMidConvoSystemMessages": true,
+        "supportsMidConvoToolAdditions": true
+      }
     }
   },
   "moonshotai-cn": {
@@ -7269,6 +7553,92 @@
         "input": 3,
         "output": 15,
         "cacheRead": 0.3,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": true,
+        "maxTokensField": "max_tokens",
+        "supportsStrictMode": false,
+        "thinkingFormat": "openai",
+        "requiresReasoningContentOnAssistantMessages": true,
+        "supportsMidConvoSystemMessages": true,
+        "supportsMidConvoToolAdditions": true
+      }
+    },
+    "kimi-k3.1-pro": {
+      "id": "kimi-k3.1-pro",
+      "name": "Kimi K3.1 Pro",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1048576,
+      "maxTokens": 1048576,
+      "pricingKnown": true,
+      "cost": {
+        "input": 1.9437,
+        "output": 10.1671,
+        "cacheRead": 0.1944,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": true,
+        "maxTokensField": "max_tokens",
+        "supportsStrictMode": false,
+        "thinkingFormat": "openai",
+        "requiresReasoningContentOnAssistantMessages": true,
+        "supportsMidConvoSystemMessages": true,
+        "supportsMidConvoToolAdditions": true
+      }
+    },
+    "kimi-k3.1-pro-highspeed": {
+      "id": "kimi-k3.1-pro-highspeed",
+      "name": "Kimi K3.1 Pro Highspeed",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1048576,
+      "maxTokens": 1048576,
+      "pricingKnown": true,
+      "cost": {
+        "input": 3.8874,
+        "output": 20.3342,
+        "cacheRead": 0.1944,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -7498,6 +7868,39 @@
       ],
       "contextWindow": 131072,
       "maxTokens": 131072,
+      "pricingKnown": false,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false,
+        "maxTokensField": "max_tokens",
+        "supportsLongCacheRetention": false,
+        "supportsStrictMode": false
+      }
+    },
+    "minimaxai/minimax-m3.1-flash": {
+      "id": "minimaxai/minimax-m3.1-flash",
+      "name": "MiniMax-M3.1-Flash",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 262144,
+      "maxTokens": 262144,
       "pricingKnown": false,
       "cost": {
         "input": 0,
@@ -7909,39 +8312,6 @@
         "supportsStrictMode": false
       }
     },
-    "z-ai/glm-5.3": {
-      "id": "z-ai/glm-5.3",
-      "name": "GLM-5.3",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
-      "pricingKnown": false,
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "compat": {
-        "supportsStore": false,
-        "supportsDeveloperRole": false,
-        "supportsReasoningEffort": false,
-        "maxTokensField": "max_tokens",
-        "supportsLongCacheRetention": false,
-        "supportsStrictMode": false
-      }
-    },
     "z-ai/glm-5.3-flash": {
       "id": "z-ai/glm-5.3-flash",
       "name": "GLM-5.3-Flash",
@@ -7977,6 +8347,34 @@
     }
   },
   "openai": {
+    "chat-latest": {
+      "id": "chat-latest",
+      "name": "Chat Latest",
+      "api": "openai-responses",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 400000,
+      "maxTokens": 128000,
+      "pricingKnown": true,
+      "cost": {
+        "input": 5,
+        "output": 30,
+        "cacheRead": 0.5,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "compat": {
+        "supportsStrictMode": true
+      }
+    },
     "gpt-4": {
       "id": "gpt-4",
       "name": "GPT-4",
@@ -8612,8 +9010,6 @@
       "compat": {
         "supportsStrictMode": true,
         "supportsOpenAIGrammarTools": true,
-        "supportsAdditionalTools": true,
-        "supportsToolSearch": true,
         "supportsMidConvoSystemMessages": true
       }
     },
@@ -8653,8 +9049,6 @@
       "compat": {
         "supportsStrictMode": true,
         "supportsOpenAIGrammarTools": true,
-        "supportsAdditionalTools": true,
-        "supportsToolSearch": true,
         "supportsMidConvoSystemMessages": true
       }
     },
@@ -8730,8 +9124,6 @@
       "compat": {
         "supportsStrictMode": true,
         "supportsOpenAIGrammarTools": true,
-        "supportsAdditionalTools": true,
-        "supportsToolSearch": true,
         "supportsMidConvoSystemMessages": true
       }
     },
@@ -8771,8 +9163,6 @@
       "compat": {
         "supportsStrictMode": true,
         "supportsOpenAIGrammarTools": true,
-        "supportsAdditionalTools": true,
-        "supportsToolSearch": true,
         "supportsMidConvoSystemMessages": true
       }
     },
@@ -8810,6 +9200,45 @@
       "compat": {
         "supportsStrictMode": true,
         "supportsOpenAIGrammarTools": true
+      }
+    },
+    "gpt-5.6-cyber": {
+      "id": "gpt-5.6-cyber",
+      "name": "GPT-5.6 Cyber",
+      "api": "openai-responses",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 400000,
+      "maxTokens": 128000,
+      "pricingKnown": true,
+      "cost": {
+        "input": 12.5,
+        "output": 75,
+        "cacheRead": 1.25,
+        "cacheWrite": 15.625
+      },
+      "thinkingLevels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true,
+        "supportsExplicitPromptCacheMode": true
       }
     },
     "gpt-5.6-luna": {
@@ -9115,6 +9544,50 @@
         "supportsMidConvoEffort": true
       }
     },
+    "gpt-6.1-terra": {
+      "id": "gpt-6.1-terra",
+      "name": "GPT-6.1 Terra",
+      "api": "openai-responses",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 272000,
+      "maxTokens": 128000,
+      "pricingKnown": false,
+      "cost": {
+        "input": 1,
+        "output": 5,
+        "cacheRead": 0.05,
+        "cacheWrite": 1.25
+      },
+      "thinkingLevels": [
+        "off",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "supportsStrictMode": true,
+        "supportsOpenAIGrammarTools": true,
+        "supportsAdditionalTools": true,
+        "supportsToolSearch": true,
+        "supportsMidConvoSystemMessages": true,
+        "supportsExplicitPromptCacheMode": true,
+        "supportsMidConvoEffort": true
+      }
+    },
     "gpt-daybreak-blue-latest": {
       "id": "gpt-daybreak-blue-latest",
       "name": "Daybreak Blue",
@@ -9191,43 +9664,6 @@
       "compat": {
         "supportsStrictMode": true,
         "supportsExplicitPromptCacheMode": true
-      }
-    },
-    "gpt-realtime-2.1": {
-      "id": "gpt-realtime-2.1",
-      "name": "GPT-Realtime-2.1",
-      "api": "openai-responses",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 128000,
-      "maxTokens": 32000,
-      "pricingKnown": true,
-      "cost": {
-        "input": 4,
-        "output": 24,
-        "cacheRead": 0.4,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "minimal",
-        "low",
-        "medium",
-        "high",
-        "xhigh"
-      ],
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": "minimal",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": null
-      },
-      "compat": {
-        "supportsStrictMode": true
       }
     },
     "o1": {
@@ -9513,46 +9949,6 @@
         "maxTokensField": "max_tokens"
       }
     },
-    "deepseek-v4-flash": {
-      "id": "deepseek-v4-flash",
-      "name": "DeepSeek V4 Flash",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 1000000,
-      "maxTokens": 384000,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.14,
-        "output": 0.28,
-        "cacheRead": 0.028,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "low",
-        "high",
-        "max"
-      ],
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": null,
-        "high": "high",
-        "xhigh": null,
-        "max": "max"
-      },
-      "compat": {
-        "supportsStore": false,
-        "supportsDeveloperRole": false,
-        "supportsStrictMode": true,
-        "maxTokensField": "max_tokens",
-        "supportsLongCacheRetention": false,
-        "requiresReasoningContentOnAssistantMessages": true
-      }
-    },
     "deepseek-v4-pro": {
       "id": "deepseek-v4-pro",
       "name": "DeepSeek V4 Pro",
@@ -9628,6 +10024,7 @@
         "supportsDeveloperRole": false,
         "supportsStrictMode": true,
         "maxTokensField": "max_tokens",
+        "supportsLongCacheRetention": false,
         "requiresReasoningContentOnAssistantMessages": true
       }
     },
@@ -10035,7 +10432,7 @@
         "input": 3,
         "output": 15,
         "cacheRead": 0.3,
-        "cacheWrite": 0
+        "cacheWrite": 3
       },
       "thinkingLevels": [
         "low",
@@ -10058,37 +10455,6 @@
         "maxTokensField": "max_tokens",
         "supportsMidConvoSystemMessages": true,
         "supportsMidConvoToolAdditions": true
-      }
-    },
-    "longcat-2.5-preview-free": {
-      "id": "longcat-2.5-preview-free",
-      "name": "LongCat 2.5 Preview Free",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
-      "pricingKnown": false,
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "compat": {
-        "supportsStore": false,
-        "supportsDeveloperRole": false,
-        "supportsStrictMode": true,
-        "maxTokensField": "max_tokens"
       }
     },
     "mimo-v2.6-flash-free": {
@@ -10216,46 +10582,6 @@
         "maxTokensField": "max_tokens"
       }
     },
-    "minimax-m3.1-flash-free": {
-      "id": "minimax-m3.1-flash-free",
-      "name": "MiniMax M3.1 Flash Free",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 1000000,
-      "maxTokens": 512000,
-      "pricingKnown": false,
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": "max"
-      },
-      "compat": {
-        "supportsStore": false,
-        "supportsDeveloperRole": false,
-        "supportsStrictMode": true,
-        "maxTokensField": "max_tokens"
-      }
-    },
     "mistral-large-4": {
       "id": "mistral-large-4",
       "name": "Mistral Large 4",
@@ -10286,37 +10612,6 @@
         "xhigh": null,
         "max": null
       },
-      "compat": {
-        "supportsStore": false,
-        "supportsDeveloperRole": false,
-        "supportsStrictMode": true,
-        "maxTokensField": "max_tokens"
-      }
-    },
-    "nemotron-3-ultra-free": {
-      "id": "nemotron-3-ultra-free",
-      "name": "Nemotron 3 Ultra Free",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 1000000,
-      "maxTokens": 128000,
-      "pricingKnown": false,
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
       "compat": {
         "supportsStore": false,
         "supportsDeveloperRole": false,
@@ -10834,9 +11129,8 @@
       },
       "compat": {
         "sessionAffinityFormat": "openai-nosession",
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-5.4-mini": {
@@ -10873,9 +11167,8 @@
       },
       "compat": {
         "sessionAffinityFormat": "openai-nosession",
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-5.4-nano": {
@@ -10948,9 +11241,8 @@
       },
       "compat": {
         "sessionAffinityFormat": "openai-nosession",
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-5.5": {
@@ -10987,9 +11279,8 @@
       },
       "compat": {
         "sessionAffinityFormat": "openai-nosession",
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-5.5-pro": {
@@ -11063,9 +11354,9 @@
       },
       "compat": {
         "sessionAffinityFormat": "openai-nosession",
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-5.6-sol": {
@@ -11103,9 +11394,9 @@
       },
       "compat": {
         "sessionAffinityFormat": "openai-nosession",
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-5.6-terra": {
@@ -11143,9 +11434,9 @@
       },
       "compat": {
         "sessionAffinityFormat": "openai-nosession",
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-6-astra": {
@@ -11183,9 +11474,9 @@
       },
       "compat": {
         "sessionAffinityFormat": "openai-nosession",
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-6-luna": {
@@ -11224,9 +11515,9 @@
       },
       "compat": {
         "sessionAffinityFormat": "openai-nosession",
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-6-sol": {
@@ -11265,9 +11556,9 @@
       },
       "compat": {
         "sessionAffinityFormat": "openai-nosession",
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "gpt-6.1-sol": {
@@ -11305,9 +11596,9 @@
       },
       "compat": {
         "sessionAffinityFormat": "openai-nosession",
-        "supportsOpenAIGrammarTools": true,
         "supportsMidConvoSystemMessages": true,
-        "supportsAdditionalTools": true
+        "supportsAdditionalTools": true,
+        "supportsOpenAIGrammarTools": true
       }
     },
     "grok-4.5": {
@@ -11868,6 +12159,37 @@
         "maxTokensField": "max_tokens"
       }
     },
+    "iceman-contributor-free": {
+      "id": "iceman-contributor-free",
+      "name": "Iceman Contributor Free",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 262144,
+      "maxTokens": 131072,
+      "pricingKnown": false,
+      "cost": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsStrictMode": true,
+        "maxTokensField": "max_tokens"
+      }
+    },
     "kimi-k2.7-code": {
       "id": "kimi-k2.7-code",
       "name": "Kimi K2.7 Code",
@@ -11914,7 +12236,7 @@
         "input": 3,
         "output": 15,
         "cacheRead": 0.3,
-        "cacheWrite": 0
+        "cacheWrite": 3
       },
       "thinkingLevels": [
         "max"
@@ -11925,6 +12247,46 @@
         "low": null,
         "medium": null,
         "high": null,
+        "xhigh": null,
+        "max": "max"
+      },
+      "compat": {
+        "supportsStore": false,
+        "supportsDeveloperRole": false,
+        "supportsStrictMode": true,
+        "maxTokensField": "max_tokens",
+        "supportsMidConvoSystemMessages": true,
+        "supportsMidConvoToolAdditions": true
+      }
+    },
+    "kimi-k3.1-pro": {
+      "id": "kimi-k3.1-pro",
+      "name": "Kimi K3.1 Pro",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "pricingKnown": true,
+      "cost": {
+        "input": 2,
+        "output": 10,
+        "cacheRead": 0.2,
+        "cacheWrite": 2
+      },
+      "thinkingLevels": [
+        "low",
+        "high",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
         "xhigh": null,
         "max": "max"
       },
@@ -11952,37 +12314,6 @@
         "input": 0.3,
         "output": 1.2,
         "cacheRead": 0.006,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "compat": {
-        "supportsStore": false,
-        "supportsDeveloperRole": false,
-        "supportsStrictMode": true,
-        "maxTokensField": "max_tokens"
-      }
-    },
-    "longcat-2.5-preview-free": {
-      "id": "longcat-2.5-preview-free",
-      "name": "LongCat 2.5 Preview Free",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 1000000,
-      "maxTokens": 131072,
-      "pricingKnown": false,
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -12123,9 +12454,9 @@
         "maxTokensField": "max_tokens"
       }
     },
-    "minimax-m3.1-flash-free": {
-      "id": "minimax-m3.1-flash-free",
-      "name": "MiniMax M3.1 Flash Free",
+    "minimax-m3.1-flash": {
+      "id": "minimax-m3.1-flash",
+      "name": "MiniMax M3.1 Flash",
       "api": "openai-completions",
       "reasoning": true,
       "input": [
@@ -12133,11 +12464,11 @@
       ],
       "contextWindow": 1000000,
       "maxTokens": 512000,
-      "pricingKnown": false,
+      "pricingKnown": true,
       "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
+        "input": 0.15,
+        "output": 0.6,
+        "cacheRead": 0.015,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -12392,171 +12723,6 @@
     }
   },
   "openrouter": {
-    "~anthropic/claude-fable-latest": {
-      "id": "~anthropic/claude-fable-latest",
-      "name": "Anthropic: Claude Fable Latest",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 1000000,
-      "maxTokens": 128000,
-      "pricingKnown": true,
-      "cost": {
-        "input": 10,
-        "output": 50,
-        "cacheRead": 0.25,
-        "cacheWrite": 12.5
-      },
-      "thinkingLevels": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": "max"
-      },
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "cacheControlFormat": "anthropic",
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "~anthropic/claude-haiku-latest": {
-      "id": "~anthropic/claude-haiku-latest",
-      "name": "Anthropic: Claude Haiku Latest",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 1000000,
-      "maxTokens": 128000,
-      "pricingKnown": false,
-      "cost": {
-        "input": 0.1,
-        "output": 0.5,
-        "cacheRead": 0.01,
-        "cacheWrite": 0.125
-      },
-      "thinkingLevels": [
-        "off",
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": "max"
-      },
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "cacheControlFormat": "anthropic",
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "~anthropic/claude-opus-latest": {
-      "id": "~anthropic/claude-opus-latest",
-      "name": "Anthropic: Claude Opus Latest",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 1000000,
-      "maxTokens": 128000,
-      "pricingKnown": true,
-      "cost": {
-        "input": 4,
-        "output": 20,
-        "cacheRead": 0.2,
-        "cacheWrite": 5
-      },
-      "thinkingLevels": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": "max"
-      },
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "cacheControlFormat": "anthropic",
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "~anthropic/claude-sonnet-latest": {
-      "id": "~anthropic/claude-sonnet-latest",
-      "name": "Anthropic: Claude Sonnet Latest",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 1000000,
-      "maxTokens": 128000,
-      "pricingKnown": true,
-      "cost": {
-        "input": 2,
-        "output": 10,
-        "cacheRead": 0.1,
-        "cacheWrite": 2.5
-      },
-      "thinkingLevels": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": "max"
-      },
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "cacheControlFormat": "anthropic",
-        "sendSessionAffinityHeaders": true
-      }
-    },
     "~deepseek/deepseek-flash-latest": {
       "id": "~deepseek/deepseek-flash-latest",
       "name": "DeepSeek: DeepSeek Flash Latest",
@@ -12569,9 +12735,9 @@
       "maxTokens": 943718,
       "pricingKnown": true,
       "cost": {
-        "input": 0.07,
+        "input": 0.035,
         "output": 0.5,
-        "cacheRead": 0.008,
+        "cacheRead": 0.005,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -12608,9 +12774,9 @@
       "maxTokens": 393216,
       "pricingKnown": true,
       "cost": {
-        "input": 0.1307,
+        "input": 0.1035,
         "output": 8,
-        "cacheRead": 0.13,
+        "cacheRead": 0.1,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -12647,9 +12813,9 @@
       "maxTokens": 943718,
       "pricingKnown": true,
       "cost": {
-        "input": 0.0422,
-        "output": 0.1729,
-        "cacheRead": 0.0275,
+        "input": 0.059,
+        "output": 0.3,
+        "cacheRead": 0.035,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -12763,9 +12929,9 @@
       "maxTokens": 131072,
       "pricingKnown": true,
       "cost": {
-        "input": 0.238,
-        "output": 16,
-        "cacheRead": 0.228,
+        "input": 0.1495,
+        "output": 7.15,
+        "cacheRead": 0.07475,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -12963,10 +13129,10 @@
       "maxTokens": 128000,
       "pricingKnown": false,
       "cost": {
-        "input": 2,
-        "output": 12,
-        "cacheRead": 0.2,
-        "cacheWrite": 2.5
+        "input": 1,
+        "output": 5,
+        "cacheRead": 0.05,
+        "cacheWrite": 1.25
       },
       "thinkingLevels": [
         "off",
@@ -13070,9 +13236,9 @@
       "maxTokens": 131072,
       "pricingKnown": true,
       "cost": {
-        "input": 0.0413,
-        "output": 0.0773,
-        "cacheRead": 0.03,
+        "input": 0.0285,
+        "output": 0.0923,
+        "cacheRead": 0.0285,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -13108,9 +13274,9 @@
       "maxTokens": 943718,
       "pricingKnown": true,
       "cost": {
-        "input": 0.079,
+        "input": 0.0699,
         "output": 1.4,
-        "cacheRead": 0.078,
+        "cacheRead": 0.0689,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -14017,39 +14183,6 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "arcee-ai/trinity-large-thinking": {
-      "id": "arcee-ai/trinity-large-thinking",
-      "name": "Arcee AI: Trinity Large Thinking",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 262144,
-      "maxTokens": 80000,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.25,
-        "output": 0.8,
-        "cacheRead": 0.06,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "thinkingLevelMap": {
-        "off": null
-      },
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
     "auto": {
       "id": "auto",
       "name": "Auto",
@@ -14472,7 +14605,7 @@
         "text"
       ],
       "contextWindow": 163840,
-      "maxTokens": 32768,
+      "maxTokens": 147456,
       "pricingKnown": true,
       "cost": {
         "input": 0.25,
@@ -14566,13 +14699,13 @@
       "input": [
         "text"
       ],
-      "contextWindow": 131072,
-      "maxTokens": 65536,
+      "contextWindow": 163840,
+      "maxTokens": 147456,
       "pricingKnown": true,
       "cost": {
-        "input": 0.28,
-        "output": 0.42,
-        "cacheRead": 0.028,
+        "input": 0.26,
+        "output": 0.38,
+        "cacheRead": 0.13,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -14668,12 +14801,12 @@
         "text"
       ],
       "contextWindow": 1048576,
-      "maxTokens": 131072,
+      "maxTokens": 943718,
       "pricingKnown": true,
       "cost": {
-        "input": 0.04444,
-        "output": 0.13332,
-        "cacheRead": 0.001414,
+        "input": 0.119,
+        "output": 0.238,
+        "cacheRead": 0.0238,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -14747,13 +14880,13 @@
       "input": [
         "text"
       ],
-      "contextWindow": 1024000,
-      "maxTokens": 384000,
+      "contextWindow": 1048576,
+      "maxTokens": 393216,
       "pricingKnown": true,
       "cost": {
-        "input": 0.388716,
-        "output": 0.777432,
-        "cacheRead": 0.032393,
+        "input": 1.6,
+        "output": 3.2,
+        "cacheRead": 0.135,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -14787,12 +14920,12 @@
         "text"
       ],
       "contextWindow": 1048576,
-      "maxTokens": 393216,
+      "maxTokens": 943718,
       "pricingKnown": true,
       "cost": {
-        "input": 0.66,
-        "output": 1.98,
-        "cacheRead": 0.022,
+        "input": 0.115,
+        "output": 4,
+        "cacheRead": 0.11,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -14827,12 +14960,12 @@
         "text"
       ],
       "contextWindow": 1048576,
-      "maxTokens": 393216,
+      "maxTokens": 943718,
       "pricingKnown": true,
       "cost": {
-        "input": 0.0342,
-        "output": 0.1368,
-        "cacheRead": 0.000684,
+        "input": 0.045,
+        "output": 0.5,
+        "cacheRead": 0.006,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -16077,12 +16210,12 @@
         "text"
       ],
       "contextWindow": 262144,
-      "maxTokens": 235929,
+      "maxTokens": 32768,
       "pricingKnown": true,
       "cost": {
-        "input": 0.0765,
-        "output": 0.255,
-        "cacheRead": 0.0425,
+        "input": 0.074,
+        "output": 0.223,
+        "cacheRead": 0.037,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -16205,7 +16338,7 @@
       "pricingKnown": true,
       "cost": {
         "input": 0.06,
-        "output": 0.25,
+        "output": 0.15,
         "cacheRead": 0.015,
         "cacheWrite": 0
       },
@@ -16415,8 +16548,8 @@
       "input": [
         "text"
       ],
-      "contextWindow": 262144,
-      "maxTokens": 235929,
+      "contextWindow": 1000000,
+      "maxTokens": 262144,
       "pricingKnown": true,
       "cost": {
         "input": 0.075,
@@ -16431,6 +16564,39 @@
         "medium",
         "high"
       ],
+      "compat": {
+        "supportsDeveloperRole": false,
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
+    },
+    "liquid/lfm-2.5-2.6b": {
+      "id": "liquid/lfm-2.5-2.6b",
+      "name": "LiquidAI: LFM2.5-2.6B",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 128000,
+      "maxTokens": 8192,
+      "pricingKnown": true,
+      "cost": {
+        "input": 0.35,
+        "output": 0.5,
+        "cacheRead": 0.04,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "thinkingLevelMap": {
+        "off": null
+      },
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
@@ -17185,21 +17351,21 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "minimax/minimax-m3.1-flash:free": {
-      "id": "minimax/minimax-m3.1-flash:free",
-      "name": "MiniMax: MiniMax M3.1 Flash (free)",
+    "minimax/minimax-m3.1-flash": {
+      "id": "minimax/minimax-m3.1-flash",
+      "name": "MiniMax: MiniMax M3.1 Flash",
       "api": "openai-completions",
       "reasoning": true,
       "input": [
         "text"
       ],
-      "contextWindow": 1000000,
+      "contextWindow": 1048576,
       "maxTokens": 524288,
-      "pricingKnown": false,
+      "pricingKnown": true,
       "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
+        "input": 0.15,
+        "output": 0.6,
+        "cacheRead": 0.015,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -17240,33 +17406,6 @@
         "input": 0.3,
         "output": 0.9,
         "cacheRead": 0.03,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off"
-      ],
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "mistralai/codestral-2508:batch": {
-      "id": "mistralai/codestral-2508:batch",
-      "name": "Mistral: Codestral 2508 (batch)",
-      "api": "openai-completions",
-      "reasoning": false,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 256000,
-      "maxTokens": 204800,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.15,
-        "output": 0.45,
-        "cacheRead": 0.015,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -17387,33 +17526,6 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "mistralai/ministral-8b-2512:batch": {
-      "id": "mistralai/ministral-8b-2512:batch",
-      "name": "Mistral: Ministral 3 8B 2512 (batch)",
-      "api": "openai-completions",
-      "reasoning": false,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 262144,
-      "maxTokens": 209715,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.075,
-        "output": 0.075,
-        "cacheRead": 0.0075,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off"
-      ],
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
     "mistralai/mistral-large": {
       "id": "mistralai/mistral-large",
       "name": "Mistral Large",
@@ -17495,33 +17607,6 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "mistralai/mistral-large-2512:batch": {
-      "id": "mistralai/mistral-large-2512:batch",
-      "name": "Mistral: Mistral Large 3 2512 (batch)",
-      "api": "openai-completions",
-      "reasoning": false,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 262144,
-      "maxTokens": 209715,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.25,
-        "output": 0.75,
-        "cacheRead": 0.025,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off"
-      ],
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
     "mistralai/mistral-large-4-0": {
       "id": "mistralai/mistral-large-4-0",
       "name": "Mistral: Mistral Large 4",
@@ -17534,9 +17619,9 @@
       "maxTokens": 262144,
       "pricingKnown": true,
       "cost": {
-        "input": 1.36,
-        "output": 4.18,
-        "cacheRead": 0.14,
+        "input": 0.7,
+        "output": 2.1,
+        "cacheRead": 0.07,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -17687,33 +17772,6 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "mistralai/mistral-medium-3.1:batch": {
-      "id": "mistralai/mistral-medium-3.1:batch",
-      "name": "Mistral: Mistral Medium 3.1 (batch)",
-      "api": "openai-completions",
-      "reasoning": false,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 131072,
-      "maxTokens": 104857,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.2,
-        "output": 1,
-        "cacheRead": 0.02,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off"
-      ],
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
     "mistralai/mistral-nemo": {
       "id": "mistralai/mistral-nemo",
       "name": "Mistral: Mistral Nemo",
@@ -17805,43 +17863,6 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "mistralai/mistral-small-2603:batch": {
-      "id": "mistralai/mistral-small-2603:batch",
-      "name": "Mistral: Mistral Small 4 (batch)",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 262144,
-      "maxTokens": 209715,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.075,
-        "output": 0.3,
-        "cacheRead": 0.0075,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "high"
-      ],
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "xhigh": null,
-        "max": null
-      },
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
     "mistralai/mistral-small-3.1-24b-instruct": {
       "id": "mistralai/mistral-small-3.1-24b-instruct",
       "name": "Mistral: Mistral Small 3.1 24B",
@@ -17877,12 +17898,12 @@
       "input": [
         "text"
       ],
-      "contextWindow": 256000,
+      "contextWindow": 128000,
       "maxTokens": 16384,
       "pricingKnown": true,
       "cost": {
-        "input": 0.09375,
-        "output": 0.25,
+        "input": 0.075,
+        "output": 0.2,
         "cacheRead": 0,
         "cacheWrite": 0
       },
@@ -18112,9 +18133,9 @@
       "maxTokens": 235929,
       "pricingKnown": true,
       "cost": {
-        "input": 0.6712,
-        "output": 3.35,
-        "cacheRead": 0.18,
+        "input": 0.6,
+        "output": 3.5,
+        "cacheRead": 0.15,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -18145,9 +18166,9 @@
       "maxTokens": 131072,
       "pricingKnown": true,
       "cost": {
-        "input": 0.239,
-        "output": 11.936,
-        "cacheRead": 0.21,
+        "input": 0.192,
+        "output": 15,
+        "cacheRead": 0.182,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -18187,6 +18208,45 @@
         "input": 2.28,
         "output": 11.4,
         "cacheRead": 0.228,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "off",
+        "low",
+        "high",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": null,
+        "high": "high",
+        "xhigh": null,
+        "max": "max"
+      },
+      "compat": {
+        "supportsDeveloperRole": false,
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
+    },
+    "moonshotai/kimi-k3.1-pro": {
+      "id": "moonshotai/kimi-k3.1-pro",
+      "name": "MoonshotAI: Kimi K3.1 Pro",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "pricingKnown": true,
+      "cost": {
+        "input": 2,
+        "output": 10,
+        "cacheRead": 0.2,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -18263,7 +18323,7 @@
       "cost": {
         "input": 0.06,
         "output": 0.24,
-        "cacheRead": 0,
+        "cacheRead": 0.012,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -18319,51 +18379,13 @@
       "input": [
         "text"
       ],
-      "contextWindow": 262144,
-      "maxTokens": 235929,
+      "contextWindow": 1048576,
+      "maxTokens": 262144,
       "pricingKnown": true,
       "cost": {
         "input": 0.3,
         "output": 2.4,
         "cacheRead": 0.15,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "low",
-        "medium"
-      ],
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": null,
-        "low": "low",
-        "medium": "medium",
-        "high": null,
-        "xhigh": null,
-        "max": null
-      },
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "nvidia/nemotron-3-super-120b-a12b:free": {
-      "id": "nvidia/nemotron-3-super-120b-a12b:free",
-      "name": "NVIDIA: Nemotron 3 Super (free)",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 262144,
-      "maxTokens": 235929,
-      "pricingKnown": false,
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -18587,32 +18609,6 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "openai/gpt-3.5-turbo": {
-      "id": "openai/gpt-3.5-turbo",
-      "name": "OpenAI: GPT-3.5 Turbo",
-      "api": "openai-completions",
-      "reasoning": false,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 16385,
-      "maxTokens": 4096,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.5,
-        "output": 1.5,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off"
-      ],
-      "compat": {
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
     "openai/gpt-3.5-turbo-0613": {
       "id": "openai/gpt-3.5-turbo-0613",
       "name": "OpenAI: GPT-3.5 Turbo (older v0613)",
@@ -18665,32 +18661,6 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "openai/gpt-3.5-turbo:batch": {
-      "id": "openai/gpt-3.5-turbo:batch",
-      "name": "OpenAI: GPT-3.5 Turbo (batch)",
-      "api": "openai-completions",
-      "reasoning": false,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 16385,
-      "maxTokens": 4096,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.25,
-        "output": 0.75,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off"
-      ],
-      "compat": {
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
     "openai/gpt-4": {
       "id": "openai/gpt-4",
       "name": "OpenAI: GPT-4",
@@ -18705,32 +18675,6 @@
       "cost": {
         "input": 30,
         "output": 60,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off"
-      ],
-      "compat": {
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "openai/gpt-4-turbo": {
-      "id": "openai/gpt-4-turbo",
-      "name": "OpenAI: GPT-4 Turbo",
-      "api": "openai-completions",
-      "reasoning": false,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 128000,
-      "maxTokens": 4096,
-      "pricingKnown": true,
-      "cost": {
-        "input": 10,
-        "output": 30,
         "cacheRead": 0,
         "cacheWrite": 0
       },
@@ -18856,12 +18800,12 @@
         "text"
       ],
       "contextWindow": 1047576,
-      "maxTokens": 32768,
+      "maxTokens": 942818,
       "pricingKnown": true,
       "cost": {
         "input": 0.1,
         "output": 0.4,
-        "cacheRead": 0.025,
+        "cacheRead": 0.03,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -21460,6 +21404,165 @@
         "sendSessionAffinityHeaders": true
       }
     },
+    "openai/gpt-6.1-terra": {
+      "id": "openai/gpt-6.1-terra",
+      "name": "OpenAI: GPT-6.1 Terra",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "pricingKnown": false,
+      "cost": {
+        "input": 1,
+        "output": 5,
+        "cacheRead": 0.05,
+        "cacheWrite": 1.25
+      },
+      "thinkingLevels": [
+        "off",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true,
+        "supportsMidConvoSystemMessages": true
+      }
+    },
+    "openai/gpt-6.1-terra-pro": {
+      "id": "openai/gpt-6.1-terra-pro",
+      "name": "OpenAI: GPT-6.1 Terra Pro",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "pricingKnown": false,
+      "cost": {
+        "input": 1,
+        "output": 5,
+        "cacheRead": 0.05,
+        "cacheWrite": 1.25
+      },
+      "thinkingLevels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
+    },
+    "openai/gpt-6.1-terra-pro:batch": {
+      "id": "openai/gpt-6.1-terra-pro:batch",
+      "name": "OpenAI: GPT-6.1 Terra Pro (batch)",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "pricingKnown": false,
+      "cost": {
+        "input": 0.5,
+        "output": 2.5,
+        "cacheRead": 0.025,
+        "cacheWrite": 0.625
+      },
+      "thinkingLevels": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": null,
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
+    },
+    "openai/gpt-6.1-terra:batch": {
+      "id": "openai/gpt-6.1-terra:batch",
+      "name": "OpenAI: GPT-6.1 Terra (batch)",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1050000,
+      "maxTokens": 128000,
+      "pricingKnown": false,
+      "cost": {
+        "input": 0.5,
+        "output": 2.5,
+        "cacheRead": 0.025,
+        "cacheWrite": 0.625
+      },
+      "thinkingLevels": [
+        "off",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": null,
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
+    },
     "openai/gpt-audio": {
       "id": "openai/gpt-audio",
       "name": "OpenAI: GPT Audio",
@@ -21621,12 +21724,12 @@
         "text"
       ],
       "contextWindow": 131072,
-      "maxTokens": 32768,
+      "maxTokens": 117964,
       "pricingKnown": true,
       "cost": {
-        "input": 0.018,
-        "output": 0.09,
-        "cacheRead": 0.009,
+        "input": 0.03,
+        "output": 0.13,
+        "cacheRead": 0.03,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -21718,38 +21821,6 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "openai/o1": {
-      "id": "openai/o1",
-      "name": "OpenAI: o1",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 200000,
-      "maxTokens": 100000,
-      "pricingKnown": true,
-      "cost": {
-        "input": 15,
-        "output": 60,
-        "cacheRead": 7.5,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "thinkingLevelMap": {
-        "off": null
-      },
-      "compat": {
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
     "openai/o3": {
       "id": "openai/o3",
       "name": "OpenAI: o3",
@@ -21775,73 +21846,6 @@
       ],
       "thinkingLevelMap": {
         "off": null
-      },
-      "compat": {
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "openai/o3-mini": {
-      "id": "openai/o3-mini",
-      "name": "OpenAI: o3 Mini",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 200000,
-      "maxTokens": 100000,
-      "pricingKnown": true,
-      "cost": {
-        "input": 1.1,
-        "output": 4.4,
-        "cacheRead": 0.55,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "thinkingLevelMap": {
-        "off": null
-      },
-      "compat": {
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "openai/o3-mini-high": {
-      "id": "openai/o3-mini-high",
-      "name": "OpenAI: o3 Mini High",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 200000,
-      "maxTokens": 100000,
-      "pricingKnown": true,
-      "cost": {
-        "input": 1.1,
-        "output": 4.4,
-        "cacheRead": 0.55,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "high"
-      ],
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "xhigh": null,
-        "max": null
       },
       "compat": {
         "thinkingFormat": "openrouter",
@@ -21945,73 +21949,6 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "openai/o4-mini": {
-      "id": "openai/o4-mini",
-      "name": "OpenAI: o4 Mini",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 200000,
-      "maxTokens": 100000,
-      "pricingKnown": true,
-      "cost": {
-        "input": 1.1,
-        "output": 4.4,
-        "cacheRead": 0.275,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "thinkingLevelMap": {
-        "off": null
-      },
-      "compat": {
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "openai/o4-mini-high": {
-      "id": "openai/o4-mini-high",
-      "name": "OpenAI: o4 Mini High",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 200000,
-      "maxTokens": 100000,
-      "pricingKnown": true,
-      "cost": {
-        "input": 1.1,
-        "output": 4.4,
-        "cacheRead": 0.275,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "high"
-      ],
-      "thinkingLevelMap": {
-        "off": null,
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "xhigh": null,
-        "max": null
-      },
-      "compat": {
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
     "openai/o4-mini:batch": {
       "id": "openai/o4-mini:batch",
       "name": "OpenAI: o4 Mini (batch)",
@@ -22084,7 +22021,7 @@
         "text"
       ],
       "contextWindow": 2000000,
-      "maxTokens": 4096,
+      "maxTokens": 65536,
       "pricingKnown": false,
       "cost": {
         "input": 0,
@@ -22199,6 +22136,48 @@
         "sendSessionAffinityHeaders": true
       }
     },
+    "particle-ai/particle-1": {
+      "id": "particle-ai/particle-1",
+      "name": "Particle AI: Particle-1",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
+      "pricingKnown": true,
+      "cost": {
+        "input": 0.05,
+        "output": 0.5,
+        "cacheRead": 0.003,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "thinkingLevelMap": {
+        "off": "none",
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "compat": {
+        "supportsDeveloperRole": false,
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
+    },
     "perceptron/perceptron-mk1.5": {
       "id": "perceptron/perceptron-mk1.5",
       "name": "Perceptron: Perceptron Mk1.5",
@@ -22239,130 +22218,6 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "poolside/laguna-s-2.1": {
-      "id": "poolside/laguna-s-2.1",
-      "name": "Poolside: Laguna S 2.1",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 1048576,
-      "maxTokens": 131072,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.09,
-        "output": 0.18,
-        "cacheRead": 0.009,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "poolside/laguna-s-2.1:free": {
-      "id": "poolside/laguna-s-2.1:free",
-      "name": "Poolside: Laguna S 2.1 (free)",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 262144,
-      "maxTokens": 32768,
-      "pricingKnown": false,
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "poolside/laguna-xs-2.1": {
-      "id": "poolside/laguna-xs-2.1",
-      "name": "Poolside: Laguna XS 2.1",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 262144,
-      "maxTokens": 32768,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.06,
-        "output": 0.12,
-        "cacheRead": 0.03,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "poolside/laguna-xs-2.1:free": {
-      "id": "poolside/laguna-xs-2.1:free",
-      "name": "Poolside: Laguna XS 2.1 (free)",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 262144,
-      "maxTokens": 32768,
-      "pricingKnown": false,
-      "cost": {
-        "input": 0,
-        "output": 0,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
     "prism-ml/ternary-bonsai-2-27b": {
       "id": "prism-ml/ternary-bonsai-2-27b",
       "name": "PrismML: Ternary Bonsai 2 27B",
@@ -22394,6 +22249,37 @@
         "xhigh": "xhigh",
         "max": null
       },
+      "compat": {
+        "supportsDeveloperRole": false,
+        "thinkingFormat": "openrouter",
+        "supportsStrictMode": true,
+        "sendSessionAffinityHeaders": true
+      }
+    },
+    "prism-ml/ternary-bonsai-2-9b": {
+      "id": "prism-ml/ternary-bonsai-2-9b",
+      "name": "PrismML: Ternary Bonsai 2 9B",
+      "api": "openai-completions",
+      "reasoning": true,
+      "input": [
+        "text"
+      ],
+      "contextWindow": 262144,
+      "maxTokens": 65536,
+      "pricingKnown": true,
+      "cost": {
+        "input": 0.08,
+        "output": 0.13,
+        "cacheRead": 0.04,
+        "cacheWrite": 0
+      },
+      "thinkingLevels": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
       "compat": {
         "supportsDeveloperRole": false,
         "thinkingFormat": "openrouter",
@@ -22616,9 +22502,9 @@
       "maxTokens": 235929,
       "pricingKnown": true,
       "cost": {
-        "input": 0.09,
+        "input": 0.1,
         "output": 0.3,
-        "cacheRead": 0,
+        "cacheRead": 0.1,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -22797,39 +22683,6 @@
         "sendSessionAffinityHeaders": true
       }
     },
-    "qwen/qwen3-next-80b-a3b-thinking": {
-      "id": "qwen/qwen3-next-80b-a3b-thinking",
-      "name": "Qwen: Qwen3 Next 80B A3B Thinking",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 262144,
-      "maxTokens": 235929,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.15,
-        "output": 1.2,
-        "cacheRead": 0,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "thinkingLevelMap": {
-        "off": null
-      },
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
     "qwen/qwen3-vl-235b-a22b-instruct": {
       "id": "qwen/qwen3-vl-235b-a22b-instruct",
       "name": "Qwen: Qwen3 VL 235B A22B Instruct",
@@ -22984,12 +22837,12 @@
         "text"
       ],
       "contextWindow": 262144,
-      "maxTokens": 65536,
+      "maxTokens": 81920,
       "pricingKnown": true,
       "cost": {
-        "input": 0.27,
-        "output": 2.16,
-        "cacheRead": 0.27,
+        "input": 0.26,
+        "output": 2.6,
+        "cacheRead": 0,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -23046,12 +22899,12 @@
         "text"
       ],
       "contextWindow": 262144,
-      "maxTokens": 65536,
+      "maxTokens": 235929,
       "pricingKnown": true,
       "cost": {
-        "input": 0.39,
-        "output": 2.34,
-        "cacheRead": 0,
+        "input": 0.5,
+        "output": 3.6,
+        "cacheRead": 0.3,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -23077,12 +22930,12 @@
         "text"
       ],
       "contextWindow": 262144,
-      "maxTokens": 65536,
+      "maxTokens": 235929,
       "pricingKnown": true,
       "cost": {
-        "input": 0.08,
-        "output": 0.13,
-        "cacheRead": 0.04,
+        "input": 0.17,
+        "output": 0.25,
+        "cacheRead": 0,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -23204,9 +23057,9 @@
       "maxTokens": 65536,
       "pricingKnown": true,
       "cost": {
-        "input": 0.25,
-        "output": 2,
-        "cacheRead": 0.025,
+        "input": 0.45,
+        "output": 2.7,
+        "cacheRead": 0,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -23236,8 +23089,8 @@
       "pricingKnown": true,
       "cost": {
         "input": 0.1,
-        "output": 0.95,
-        "cacheRead": 0.05,
+        "output": 0.9,
+        "cacheRead": 0.025,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -23448,8 +23301,8 @@
       "input": [
         "text"
       ],
-      "contextWindow": 1010000,
-      "maxTokens": 909000,
+      "contextWindow": 1000000,
+      "maxTokens": 131072,
       "pricingKnown": true,
       "cost": {
         "input": 2,
@@ -23487,12 +23340,12 @@
         "text"
       ],
       "contextWindow": 262144,
-      "maxTokens": 65536,
+      "maxTokens": 235929,
       "pricingKnown": true,
       "cost": {
-        "input": 0.04,
-        "output": 1.35,
-        "cacheRead": 0.018,
+        "input": 0.15,
+        "output": 1.875,
+        "cacheRead": 0.0375,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -23701,12 +23554,12 @@
         "text"
       ],
       "contextWindow": 1048576,
-      "maxTokens": 943718,
+      "maxTokens": 131072,
       "pricingKnown": true,
       "cost": {
-        "input": 0.3,
+        "input": 0.25,
         "output": 1,
-        "cacheRead": 0.04,
+        "cacheRead": 0.05,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -24058,9 +23911,9 @@
       "maxTokens": 128000,
       "pricingKnown": true,
       "cost": {
-        "input": 0.0825,
-        "output": 0.33,
-        "cacheRead": 0.020625,
+        "input": 0.132,
+        "output": 0.528,
+        "cacheRead": 0.033,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -24134,9 +23987,9 @@
       "maxTokens": 64000,
       "pricingKnown": true,
       "cost": {
-        "input": 0.7506,
-        "output": 2.2509,
-        "cacheRead": 0.0378,
+        "input": 0.834,
+        "output": 2.501,
+        "cacheRead": 0.042,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -24333,7 +24186,7 @@
         "text"
       ],
       "contextWindow": 1000000,
-      "maxTokens": 4096,
+      "maxTokens": 65536,
       "pricingKnown": false,
       "cost": {
         "input": 0,
@@ -24443,46 +24296,6 @@
         "high": "high",
         "xhigh": "xhigh",
         "max": "max"
-      },
-      "compat": {
-        "supportsDeveloperRole": false,
-        "thinkingFormat": "openrouter",
-        "supportsStrictMode": true,
-        "sendSessionAffinityHeaders": true
-      }
-    },
-    "upstage/solar-pro-3": {
-      "id": "upstage/solar-pro-3",
-      "name": "Upstage: Solar Pro 3",
-      "api": "openai-completions",
-      "reasoning": true,
-      "input": [
-        "text"
-      ],
-      "contextWindow": 131072,
-      "maxTokens": 117964,
-      "pricingKnown": true,
-      "cost": {
-        "input": 0.15,
-        "output": 0.6,
-        "cacheRead": 0.015,
-        "cacheWrite": 0
-      },
-      "thinkingLevels": [
-        "off",
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
-      "thinkingLevelMap": {
-        "off": "none",
-        "minimal": "minimal",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": null,
-        "max": null
       },
       "compat": {
         "supportsDeveloperRole": false,
@@ -24799,13 +24612,13 @@
       "input": [
         "text"
       ],
-      "contextWindow": 1050000,
-      "maxTokens": 945000,
+      "contextWindow": 1000000,
+      "maxTokens": 65536,
       "pricingKnown": true,
       "cost": {
-        "input": 0.119,
-        "output": 0.238,
-        "cacheRead": 0.00255,
+        "input": 0.4,
+        "output": 2,
+        "cacheRead": 0.08,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -24830,13 +24643,13 @@
       "input": [
         "text"
       ],
-      "contextWindow": 1050000,
-      "maxTokens": 945000,
+      "contextWindow": 262144,
+      "maxTokens": 235929,
       "pricingKnown": true,
       "cost": {
-        "input": 0.3045,
-        "output": 0.609,
-        "cacheRead": 0.0028,
+        "input": 0.48,
+        "output": 1.8,
+        "cacheRead": 0.096,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -25078,13 +24891,13 @@
       "input": [
         "text"
       ],
-      "contextWindow": 204800,
+      "contextWindow": 202752,
       "maxTokens": 131072,
       "pricingKnown": true,
       "cost": {
-        "input": 0.55,
-        "output": 2.2,
-        "cacheRead": 0.11,
+        "input": 0.5,
+        "output": 2,
+        "cacheRead": 0.1,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -25140,13 +24953,13 @@
       "input": [
         "text"
       ],
-      "contextWindow": 204800,
+      "contextWindow": 202752,
       "maxTokens": 131072,
       "pricingKnown": true,
       "cost": {
-        "input": 0.54,
-        "output": 1.98,
-        "cacheRead": 0.099,
+        "input": 0.6,
+        "output": 2.2,
+        "cacheRead": 0.11,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -25299,9 +25112,9 @@
       "maxTokens": 943718,
       "pricingKnown": true,
       "cost": {
-        "input": 0.0341,
-        "output": 7,
-        "cacheRead": 0.033,
+        "input": 0.006,
+        "output": 6.8,
+        "cacheRead": 0.005,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -25337,9 +25150,9 @@
       "maxTokens": 943718,
       "pricingKnown": true,
       "cost": {
-        "input": 0.079,
-        "output": 1.4,
-        "cacheRead": 0.078,
+        "input": 0.08,
+        "output": 3.6,
+        "cacheRead": 0.076,
         "cacheWrite": 0
       },
       "thinkingLevels": [
@@ -25371,13 +25184,13 @@
       "input": [
         "text"
       ],
-      "contextWindow": 1048575,
-      "maxTokens": 943717,
+      "contextWindow": 1048576,
+      "maxTokens": 131072,
       "pricingKnown": true,
       "cost": {
-        "input": 0.15,
-        "output": 0.5,
-        "cacheRead": 0.03,
+        "input": 0.0285,
+        "output": 0.0923,
+        "cacheRead": 0.0285,
         "cacheWrite": 0
       },
       "thinkingLevels": [

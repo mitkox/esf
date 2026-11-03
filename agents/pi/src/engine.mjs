@@ -4,7 +4,7 @@ import { createModels, createProvider } from '@earendil-works/pi-ai/models';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
 import { openAIResponsesApi } from '@earendil-works/pi-ai/api/openai-responses.lazy';
 import { AssistantMessageEventStream } from '@earendil-works/pi-ai/utils/event-stream';
-import { createRegistry, defineExtension, Harness, section, watchEvents } from '@earendil-works/pi-durable';
+import { createRegistry, defineExtension, Harness, section } from '@earendil-works/pi-durable';
 import { NodeExecutionEnv } from '@earendil-works/pi-durable/env/node';
 import { createReadTool, createWriteTool, createEditTool, createBashTool } from '@earendil-works/pi-durable/tools';
 import { openNodeJsonlStorage } from '@earendil-works/pi-durable/storage/jsonl/node';
@@ -17,6 +17,58 @@ The factory independently verifies your changes. Your final answer is not verifi
 If blocked, write ../.factory/blocked.json beside the repository with a nonempty reason and optional detail, then stop.
 An interrupted tool may have partially changed files. Inspect the current tree before making more changes.
 Do not create background/daemon processes or access destinations outside operator policy.`;
+
+// pi-durable 1.5 removed watchEvents(): the render-oriented event stream is
+// replaced by the conversation's structural view. The audit stream is derived
+// from that view instead, one event per committed change, so the supervisor
+// keeps recording the same agent boundaries (entries, runs, tools, spend).
+const liveState = view => view.docs['pi.live'] ?? {};
+const toolSlots = live => new Map((live.tools ?? []).map(slot => [slot.callId, slot]));
+
+function viewEvent(view) {
+  return { type: 'snapshot', conversation: view.conversation.id, entries: view.entries, before: view.before, docs: view.docs };
+}
+
+function viewEvents(previous, next) {
+  const events = [];
+  const knownEntries = new Set(previous.entries.map(entry => entry.id));
+  for (const entry of next.entries) {
+    if (knownEntries.has(entry.id)) continue;
+    events.push(entry.kind === 'pi.assistant' ? { type: 'message_end', entry } : { type: 'entry_appended', entry });
+  }
+  const oldLive = liveState(previous), newLive = liveState(next);
+  const oldSlots = toolSlots(oldLive), newSlots = toolSlots(newLive);
+  for (const [callId, slot] of newSlots) {
+    const old = oldSlots.get(callId);
+    // A sequential round keeps later calls pending until their turn; start is
+    // reported when the slot actually runs, as the removed event stream did.
+    if (slot.status !== 'pending' && old?.status !== 'running' && old?.status !== 'done')
+      events.push({ type: 'tool_execution_start', toolCallId: callId, toolName: slot.name });
+    if (old && slot.output !== old.output)
+      events.push({ type: 'tool_execution_update', toolCallId: callId, toolName: slot.name, output: slot.output });
+    if (slot.status === 'done' && old?.status !== 'done')
+      events.push({ type: 'tool_execution_end', toolCallId: callId, toolName: slot.name, entry: slot.entry });
+  }
+  if (!oldLive.run && newLive.run)
+    events.push({ type: 'run_start', taskId: newLive.run.taskId, turns: newLive.run.turns });
+  if (oldLive.run && !newLive.run)
+    events.push({ type: 'run_end', taskId: oldLive.run.taskId, runFailure: newLive.runFailure });
+  const oldCompactions = new Set((oldLive.compactions ?? []).map(task => task.taskId));
+  for (const compaction of newLive.compactions ?? []) {
+    if (!oldCompactions.has(compaction.taskId))
+      events.push({ type: 'compaction_start', taskId: compaction.taskId, trigger: compaction.trigger, attempt: compaction.attempt });
+  }
+  const runningCompactions = new Set((newLive.compactions ?? []).map(task => task.taskId));
+  for (const compaction of oldLive.compactions ?? []) {
+    if (!runningCompactions.has(compaction.taskId)) events.push({ type: 'compaction_end', taskId: compaction.taskId });
+  }
+  if (newLive.compactionFailure && newLive.compactionFailure !== oldLive.compactionFailure)
+    events.push({ type: 'compaction_failure', ...newLive.compactionFailure });
+  const generation = newLive.generation;
+  if (generation && generation.attempt !== oldLive.generation?.attempt)
+    events.push({ type: 'message_start', attempt: generation.attempt });
+  return events;
+}
 
 export async function engine(request, channel) {
   const r = validateRequest(request);
@@ -70,21 +122,28 @@ export async function engine(request, channel) {
     const storage = await openNodeJsonlStorage(path.join(r.state_dir, 'journal'), context, { fsync: true });
     harness = await Harness.open(storage, { models, registry,
       env: target => new NodeExecutionEnv({ cwd: target.cwd ?? r.repository_dir }),
-      settings: { toolExecution: 'sequential', retry: { enabled: false },
+      // pi-durable 1.5 no longer resends a request that was in flight when the
+      // host died; it charges the attempt to `settings.retry` instead. ESF's
+      // supervisor restarts the engine and expects the same submission to
+      // resume, so allow exactly that one durable retry. Provider errors that
+      // pi-ai judges non-retryable still fail without another request.
+      settings: { toolExecution: 'sequential', retry: { enabled: true, maxRetries: 1, baseDelayMs: 100 },
         stream: { maxRetries: 0, maxTokens: metadata.maxTokens },
         compaction: { enabled: true, reserveTokens: metadata.maxTokens,
           keepRecentTokens: Math.min(20_000, Math.floor(metadata.contextWindow / 4)), backgroundTokens: 0 } },
     }, context);
     root = await harness.root(context, { agent: { model: { provider: r.provider, modelId: r.model },
       thinkingLevel: r.thinking_level, cwd: r.repository_dir } });
-    events = await watchEvents(harness, root.id, context);
-    await channel.audit(events.snapshot);
-    await channel.usage(events.snapshot.usage);
-    events.start(async batch => {
-      for (const event of batch) {
-        await channel.audit(event);
-        if (event.type === 'usage_changed' || event.type === 'snapshot') await channel.usage(event.usage);
-      }
+    events = await root.watch(context, { min: 100, max: 200 });
+    let view = events.value;
+    await channel.audit(viewEvent(view));
+    if (view.docs['pi.usage']) await channel.usage(view.docs['pi.usage']);
+    events.start(async call => {
+      if (call.kind !== 'value') return;
+      for (const event of viewEvents(view, call.value)) await channel.audit(event);
+      const usage = call.value.docs['pi.usage'];
+      if (usage && usage !== view.docs['pi.usage']) await channel.usage(usage);
+      view = call.value;
     });
     // submit() is idempotent by requestId. It also starts recovered pending
     // work, so a committed answer is returned without another model request.

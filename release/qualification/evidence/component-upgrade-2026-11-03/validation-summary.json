@@ -1,0 +1,156 @@
+{
+  "schema": "esf-validation-summary/v1",
+  "candidate": "v0.7.2",
+  "source_baseline": "4639f046267417bbe5f74ace18af3fbafdf2163d",
+  "validated_code_commit": "4639f046267417bbe5f74ace18af3fbafdf2163d (working tree candidate, uncommitted)",
+  "validated_at": "2026-11-03T09:10:00Z/2026-11-03T09:35:00Z",
+  "checks": {
+    "release_inventory": {
+      "status": "pass",
+      "detail": "scripts/verify-release-inventory.py exit 0 (host and again inside Cube)"
+    },
+    "pi_inventory": {
+      "status": "pass",
+      "detail": "scripts/verify-pi-inventory.py exit 0"
+    },
+    "gofmt": {
+      "status": "pass",
+      "detail": "no unformatted tracked Go files"
+    },
+    "go_vet": {
+      "status": "pass",
+      "detail": "go vet ./... exit 0"
+    },
+    "shellcheck": {
+      "status": "pass",
+      "detail": "shellcheck deployments/dev/temporal/scripts/*.sh scripts/*.sh exit 0"
+    },
+    "govulncheck": {
+      "status": "pass",
+      "detail": "No vulnerabilities found (govulncheck v1.9.0, module graph of the candidate)"
+    },
+    "factory_version": {
+      "status": "pass",
+      "detail": "ESF 0.7.2 (commit 4639f04, go1.27.3, config schema 1)"
+    },
+    "cube_go_tests": {
+      "status": "pass",
+      "detail": "17 test binaries / 731 tests / all exit 0, executed inside disposable Cube microVM a582a4a145f442058af193be76215688 on template tpl-0914c5dd04cd48a0a5aa6be6",
+      "evidence": "cube-test.json"
+    },
+    "cube_release_checks": {
+      "status": "pass",
+      "detail": "release inventory and scripts/tests qualification unittest (3 tests) inside Cube, exit 0"
+    },
+    "cube_secret_scan": {
+      "status": "pass",
+      "detail": "gitleaks 8.30.1 inside Cube found no leaks in two scans (each with sandbox cleanup verified, 0 remaining): the working-tree pack and the frozen 655-file release tree (archive sha256 1f5b59124f96a39cb1801fc0dc636b190574195c688b147a4e61d12dce123834); a host-side `git ls-files` scan of the release tree was likewise clean"
+    },
+    "agents_verify": {
+      "status": "pass",
+      "detail": "six configured agents + Pi runtime self-check against the new template: opencode2 8d060e1d, claude eb224419, codex b8a11fed, unreal d289aa20, pi runner 2f2b5191, node 0adde40d, harness-opt-fix f343b3e1"
+    },
+    "factory_doctor": {
+      "status": "pass",
+      "detail": "all checks passed; warnings: open-egress acknowledgment, no alert webhook, require_non_root=false"
+    },
+    "cube_smoke": {
+      "status": "pass",
+      "detail": "template READY; in-VM smoke showed node v26.13.0, git 2.34.1, python 3.10.12; sandbox destroyed and cleanup verified with 0 leaks"
+    },
+    "acceptance_conformance": {
+      "status": "pass",
+      "detail": "run-c5c6d6d271b052482d540f59: FACTORY RESULT SUCCEEDED, VERIFICATION PASSED, CLEANUP PASSED (remaining=0), deterministic gates unchanged; model-free fixture acceptance",
+      "evidence": "acceptance.json"
+    },
+    "acceptance_model_backed": {
+      "status": "pass",
+      "detail": "run-578cc37728348f206d7cdb40: opencode v2.2.5 via opencode-go/deepseek-v4.1-flash, AGENT SUCCESS, VERIFICATION PASSED, CLEANUP PASSED (remaining=0); egress probe Unknown/ProbeInconclusive because the local profile acknowledges open egress",
+      "evidence": "acceptance.json"
+    },
+    "console_tests": {
+      "status": "pass",
+      "detail": "17/17 node tests; production build deterministic (two builds produced 46/46 byte-identical files); tracked dist rebuilt from source"
+    },
+    "npm_audits": {
+      "status": "pass",
+      "detail": "console, agents/opencode and agents/pi locked graphs: 0 vulnerabilities at audit-level=high"
+    },
+    "pi_runner_tests": {
+      "status": "pass",
+      "detail": "17/17 pi runner regressions pass after the 1.5.0 engine adaptation"
+    },
+    "python_lock_and_runtime": {
+      "status": "pass",
+      "detail": "uv.lock refreshed; local intake runtime rebuilt at .factory/runtimes/intake-20261103-3.14.10 on CPython 3.14.10 with uv 0.13.7; uv pip check reports 72 installed packages compatible"
+    },
+    "sbom": {
+      "status": "pass",
+      "detail": "CycloneDX 1.6 SBOM generated (329 components, valid urn:uuid serial number)"
+    },
+    "temporal_stack_upgrade": {
+      "status": "pass",
+      "detail": "local dev stack upgraded to server 1.32.2 / UI 2.58.0 with admin tools 1.32.1, PostgreSQL 18.6 data retained; schemas 1.19/1.14 unchanged and compatible; cluster SERVING, UI HTTP 200"
+    },
+    "cubesandbox_baseline": {
+      "status": "pass",
+      "detail": "installed one-click release is v0.7.3-amd64 (latest published stable); cube API, CubeMaster CLI, proxy/lifecycle/egress images and systemd units verified; no server upgrade available or attempted"
+    },
+    "cleanup": {
+      "status": "pass",
+      "detail": "factory sandboxes: none after both acceptance runs; Cube API health sandboxes:0; cube-test and cube-smoke sandboxes destroyed and cleanup verified"
+    },
+    "acceptance_model_backed_pi": {
+      "status": "pass",
+      "detail": "run-7f1309adbe645092399e09a3: Pi 1.5.0 agent via opencode-go/deepseek-v4.1-flash, AGENT SUCCESS, VERIFICATION PASSED, CLEANUP PASSED (remaining=0); validates the 1.5 engine adaptation end to end",
+      "evidence": "acceptance.json"
+    },
+    "independent_review": {
+      "status": "pass",
+      "detail": "two independent read-only reviews returned approve-with-fixes with no blocker or high findings; supported findings (inventory baseline, Pi audit/retry documentation and limitations, optional-harness archive pins, evidence timestamp/ID/scan-count consistency, stale wording) were fixed before commit"
+    }
+  },
+  "fixed_during_validation": [
+    {
+      "finding": "the historical local registry publish on 127.0.0.1:32000 refused connections on this host, including for a freshly created container on that port",
+      "fix": "published and pulled the 0.7.2 image chain through 127.0.0.1:32001; recorded as a local environment workaround, not a product change"
+    },
+    {
+      "finding": "the shared Temporal task queue 'factory' had a pre-existing worker from another session whose startup configuration lacked the new local repository registration, so the first acceptance dispatch was rejected by policy",
+      "fix": "ran the acceptance suite on an isolated task queue and data directory (factory-upgrade-validation); the run then passed and leaked no sandboxes"
+    },
+    {
+      "finding": "pi-durable 1.5.0 removed watchEvents() and changed in-flight-request recovery semantics",
+      "fix": "adapted the ESF Pi engine to derive its audit stream from the conversation view and to enable exactly one durable retry; 17 runner regressions pass"
+    },
+    {
+      "finding": "temporalio/admin-tools has no 1.32.2 release",
+      "fix": "kept admin tools at 1.32.1 while upgrading server to 1.32.2; schema setup reports zero updates and both schemas remain compatible"
+    },
+    {
+      "finding": "the in-Cube release checks require a portable CPython 3.12 runtime because the tool invokes bin/python3.12",
+      "fix": "installed a portable CPython 3.12.16 into the local scratch toolchain dir and packed it for the in-Cube checks"
+    }
+  ],
+  "pre_existing_state": {
+    "dirty_at_start": [
+      ".entire/settings.json (checkpoint tool formatting)",
+      "go.sum (indirect sums added by a prior build)"
+    ],
+    "note": "the go.sum working-tree delta was normalized by go mod tidy and now contains only the candidate's module changes; .entire/settings.json remains an unrelated pre-existing local modification and is not part of this candidate"
+  },
+  "remaining_gates": [
+    "vm soak_24h",
+    "kubernetes soak_24h",
+    "performance matrix",
+    "image SBOM/vulnerability qualification",
+    "transitive license review",
+    "hosted-provider acceptance",
+    "production deployment",
+    "restore",
+    "temporal replay",
+    "migration drill",
+    "eligible human approval"
+  ],
+  "note": "Local validation only. Passing these checks does not satisfy the remaining production gates and is not production approval."
+}

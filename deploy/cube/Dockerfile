@@ -1,6 +1,6 @@
-# ESF v0.7.1 Cube template recipe. Qualification is recorded separately.
-ARG NODE_BASE=docker.io/library/node@sha256:94816674c62774da0d099a947bf4613b9e1972a2733abd0d0cd80e795f8411d0
-ARG DEBIAN_BASE=docker.io/library/debian@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31
+# ESF v0.7.2 Cube template recipe. Qualification is recorded separately.
+ARG NODE_BASE=docker.io/library/node@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39
+ARG DEBIAN_BASE=docker.io/library/debian@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
 ARG CUBE_BASE=ghcr.io/tencentcloud/cubesandbox-base@sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472
 
 FROM ${NODE_BASE} AS opencode
@@ -8,7 +8,7 @@ ARG TARGETARCH
 WORKDIR /src/agents/opencode
 COPY agents/opencode/package.json agents/opencode/package-lock.json ./
 RUN test "$TARGETARCH" = amd64 && npm ci --ignore-scripts && \
-    echo '87a4d6ac3c1b5691d4fb5e88f473992016b37ede6611c5cb7092fcdb1d91fad0  node_modules/@opencode/cli-linux-x64-baseline/bin/opencode' | sha256sum -c -
+    echo '8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050  node_modules/@opencode/cli-linux-x64-baseline/bin/opencode' | sha256sum -c -
 
 FROM ${DEBIAN_BASE} AS unreal
 ARG TARGETARCH
@@ -26,7 +26,7 @@ RUN test "$TARGETARCH" = amd64 && apt-get update && apt-get install -y --no-inst
 COPY --from=opencode /src/agents/opencode/node_modules/@opencode/cli-linux-x64-baseline/bin/opencode /opt/esf/agents/opencode2
 COPY --from=unreal /tmp/unreal-agent-runner /opt/esf/agents/unreal-agent-runner
 RUN chmod 0755 /opt/esf/agents/opencode2 /opt/esf/agents/unreal-agent-runner && \
-    echo '87a4d6ac3c1b5691d4fb5e88f473992016b37ede6611c5cb7092fcdb1d91fad0  /opt/esf/agents/opencode2' | sha256sum -c - && \
+    echo '8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050  /opt/esf/agents/opencode2' | sha256sum -c - && \
     echo 'd289aa2046bb79d2b063679c6e0e6b714c759f8a5ed6f969d3b3ea1eeeec03ee  /opt/esf/agents/unreal-agent-runner' | sha256sum -c -
 ENV PATH=/opt/esf/agents:${PATH}
 WORKDIR /workspace
