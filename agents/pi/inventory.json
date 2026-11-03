@@ -3,23 +3,23 @@
   "contract_version": "esf/pi/v1",
   "support_status": "candidate; build and unit tests passed in Cube; provider qualification pending",
   "pi_durable": {
-    "version": "1.4.0",
+    "version": "1.5.0",
     "license": "MIT",
-    "git_commit": "4a080252f06caf63a525d7873c5d94d3c23887e0",
+    "git_commit": "f9a26365568127461c47a07a37dcb42c140a3ac5",
     "minimum_node": "22.19.0"
   },
   "runner": {
     "path": "/opt/esf/agents/pi-runner.mjs",
-    "sha256": "5e2a1d725c3b5422265b3a6c9cfb90293856865184892894dc329f8ccaf89862"
+    "sha256": "2f2b5191139a564050c98f0784e9be63893d47685abc6ac8a4049a942b201993"
   },
   "runtime": {
     "path": "/opt/esf/agents/node",
-    "version": "26.12.1",
+    "version": "26.13.0",
     "license": "MIT",
-    "image": "docker.io/library/node@sha256:94816674c62774da0d099a947bf4613b9e1972a2733abd0d0cd80e795f8411d0",
-    "sha256": "08f12d42fb304468e8ee86247fe686aae5b225836ea65e9d6566c11ae6ba2e8e"
+    "image": "docker.io/library/node@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39",
+    "sha256": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b"
   },
-  "package_lock_sha256": "0ebb286a05905a6fcff53f4844b6576f2401e85b4c073a0a13f66d9f5de69436",
-  "model_catalog_sha256": "ed8544172c8355a6e1abc399b774ec3b3bfd8c0e65afcff104444fc867181a75",
-  "third_party_notices_sha256": "b87af99ee6908ace6b2d96a5a00202b206aa0ee80d2fee9095dc6c90725ccab8"
+  "package_lock_sha256": "f1f6147f247c667be0528776c084dd61ecc2cc6f59d8d4d026800909308c5868",
+  "model_catalog_sha256": "b785b578eaa591b7b725dcf7beb9fb9cfc82f1f8571268b73dcd7082eae0ac9f",
+  "third_party_notices_sha256": "b2d15429c72a7ddd16c21464165813c79dca1081182fe4ed3f406008d49e2798"
 }

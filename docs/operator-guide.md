@@ -21,7 +21,7 @@ or deletes templates.
 | Template | `cubemastercli tpl list`, pick a `READY` row | `tpl-your-ready-template` |
 | Proxy node | data-plane host for `Host: <port>-<id>.cube.app` | `192.0.2.10` |
 | Proxy port | `ss -tlnp` on the proxy node | `80` |
-| Version | `/usr/local/services/cubetoolbox/VERSION.txt` | `v0.7.1-amd64` |
+| Version | `/usr/local/services/cubetoolbox/VERSION.txt` | `v0.7.3-amd64` |
 
 ```bash
 # Confirm the endpoint first: the SDK's default is port 3000, which is NOT this

@@ -1,0 +1,638 @@
+{
+  "schema": "esf-acceptance/v1",
+  "candidate": "v0.7.2",
+  "factory_version": "0.7.2",
+  "template": "tpl-0914c5dd04cd48a0a5aa6be6",
+  "task_queue_isolated": "factory-upgrade-validation",
+  "runs": {
+    "conformance": {
+      "run_id": "run-c5c6d6d271b052482d540f59",
+      "workflow_id": "factory-run-run-c5c6d6d271b052482d540f59",
+      "factory_result": "SUCCEEDED",
+      "agent_harness": "conformance",
+      "agent_result": "SUCCESS",
+      "verification_result": "SUCCESS",
+      "sandbox_id": "d654c05577b347fc86e1f4b10db67aa1",
+      "sandbox_template": "tpl-0914c5dd04cd48a0a5aa6be6",
+      "sandbox_provider": "cubesandbox",
+      "cube_version_if_available": "0.7.3",
+      "factory_version": "0.7.2",
+      "repository": "local:/home/mitko/dev/esf/testdata/e2e-repo-work",
+      "repository_kind": "local",
+      "requested_revision": "b8eac2059ecc7696ad974029408feb611d6d7a1c",
+      "resulting_sha_if_any": "b8eac2059ecc7696ad974029408feb611d6d7a1c",
+      "verification_profile": "default",
+      "egress_policy": "local-model",
+      "egress_summary": "internet=allowed",
+      "started_at": "2026-11-03T09:21:50.77472628Z",
+      "completed_at": "2026-11-03T09:21:52.853943956Z",
+      "duration": 2079217676,
+      "verification_mutated_tree": false,
+      "resource_digest": "sha256:65f44be039db48431006e72808af8a4bac10343cd67996bbb7a0405e193410c3",
+      "cleanup": {
+        "attempted": true,
+        "duration": 80608848,
+        "finished_at": "2026-11-03T09:21:52.829168432Z",
+        "outcome": "SUCCESS",
+        "remaining_sandboxes": 0,
+        "sandbox_id": "d654c05577b347fc86e1f4b10db67aa1",
+        "verified": true
+      },
+      "hardening": {
+        "behavior": {
+          "findings": null,
+          "ruleset_version": "1",
+          "scanned_lines": 16,
+          "tripped": false
+        },
+        "egress_probe": {
+          "agent_uid": 0,
+          "agent_user": "root",
+          "canary": {
+            "decided": true,
+            "detail": "http_200",
+            "reachable": true,
+            "url": "https://example.com/"
+          },
+          "duration": 95815345,
+          "expect_deny": false,
+          "metadata": {
+            "decided": false,
+            "detail": "curl_rc=7",
+            "reachable": false,
+            "url": "http://169.254.169.254/latest/meta-data/"
+          },
+          "notes": [
+            "the metadata probe was undecided (inconclusive): curl_rc=7"
+          ],
+          "policy": "local-model",
+          "probed_at": "2026-11-03T09:21:52.066693277Z",
+          "raw": "ESF_PROBE identity 0 root\nESF_PROBE canary reachable http_200\nESF_PROBE metadata unknown curl_rc=7"
+        },
+        "gate_integrity": {
+          "allowed": false,
+          "checked": true,
+          "gate_paths": [
+            "build.sh",
+            "python3.12",
+            "test.sh"
+          ],
+          "method": "tree-hash"
+        }
+      },
+      "intake": {
+        "ambiguity": {
+          "confidence": 0.38,
+          "level": "clear",
+          "probabilities": {
+            "ambiguous": 0.07,
+            "clear": 0.66,
+            "partial": 0.27
+          },
+          "value": 0.41000000000000003
+        },
+        "duration_ms": 782,
+        "model": "jev-latest",
+        "program": "intake-v1",
+        "ready": {
+          "confidence": 0.28,
+          "probability": 0.64,
+          "value": true
+        },
+        "status": "ok",
+        "task_type": {
+          "confidence": 0.55,
+          "probabilities": {
+            "bugfix": 0.17,
+            "docs": 0,
+            "feature": 0.64,
+            "other": 0.19,
+            "refactor": 0
+          },
+          "value": "feature"
+        }
+      },
+      "conditions": [
+        {
+          "last_transition_time": "2026-11-03T09:21:50.806408155Z",
+          "message": "scope=default",
+          "reason": "PolicyAccepted",
+          "status": "True",
+          "type": "Validated"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:21:51.70230948Z",
+          "message": "sandbox=d654c05577b347fc86e1f4b10db67aa1 template=tpl-0914c5dd04cd48a0a5aa6be6",
+          "reason": "Created",
+          "status": "True",
+          "type": "SandboxReady"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:21:51.729838481Z",
+          "message": "workspace= digest=",
+          "reason": "Provisioned",
+          "status": "True",
+          "type": "WorkspacePrepared"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:21:52.003991123Z",
+          "message": "sha=b8eac2059ecc7696ad974029408feb611d6d7a1c",
+          "reason": "CheckedOut",
+          "status": "True",
+          "type": "RepositoryPrepared"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:21:52.052386765Z",
+          "message": "path=/workspace/.factory/inventory.json digest=sha256:f32f5f742f9383b678e845fb05f595ba508d81906a28339280e74507008af098",
+          "reason": "Published",
+          "status": "True",
+          "type": "InventoryWritten"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:21:52.183889341Z",
+          "message": "expect_deny=false internet=reachable metadata=unknown uid=0",
+          "reason": "ProbeInconclusive",
+          "status": "Unknown",
+          "type": "EgressVerified"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:21:52.337757661Z",
+          "reason": "NotBlocked",
+          "status": "False",
+          "type": "AgentBlocked"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:21:52.337757661Z",
+          "message": "attempt=1 duration=49.507186ms",
+          "reason": "ExitZero",
+          "status": "True",
+          "type": "AgentCompleted"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:21:52.737827807Z",
+          "message": "drift=false",
+          "reason": "PostVerification",
+          "status": "True",
+          "type": "ArtifactsCollected"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:21:52.487377878Z",
+          "message": "method=tree-hash gates=3",
+          "reason": "Unmodified",
+          "status": "True",
+          "type": "GateIntegrity"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:21:52.518186989Z",
+          "message": "no findings",
+          "reason": "Clean",
+          "status": "True",
+          "type": "BehaviorScanned"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:21:52.737827807Z",
+          "reason": "AllGatesPassed",
+          "status": "True",
+          "type": "Verified"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:21:52.737827807Z",
+          "reason": "WithinBudget",
+          "status": "False",
+          "type": "BudgetExceeded"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:21:52.853943956Z",
+          "message": "remaining=0",
+          "reason": "NoSandboxesRemain",
+          "status": "True",
+          "type": "CleanupVerified"
+        }
+      ],
+      "patch_sha256": "365194a7478c8a4a35e3f59104b27496b1a3eb1f52166cc27c78bfdae8af2769",
+      "patch_path": ".factory/component-upgrade-20261103/state/runs/run-c5c6d6d271b052482d540f59/changes.patch"
+    },
+    "model_backed_opencode2": {
+      "run_id": "run-578cc37728348f206d7cdb40",
+      "workflow_id": "factory-run-run-578cc37728348f206d7cdb40",
+      "factory_result": "SUCCEEDED",
+      "agent_harness": "opencode2",
+      "agent_result": "SUCCESS",
+      "agent_version_if_available": "opencode v2.2.5",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "verification_result": "SUCCESS",
+      "sandbox_id": "a08ad75d88fa4f6c968c4c90a59ff4bd",
+      "sandbox_template": "tpl-0914c5dd04cd48a0a5aa6be6",
+      "sandbox_provider": "cubesandbox",
+      "cube_version_if_available": "0.7.3",
+      "factory_version": "0.7.2",
+      "repository": "local:/home/mitko/dev/esf/testdata/e2e-repo-work",
+      "repository_kind": "local",
+      "requested_revision": "1ed568f367cb54ee5ab8ba7dceb3e656ba2b416b",
+      "resulting_sha_if_any": "1ed568f367cb54ee5ab8ba7dceb3e656ba2b416b",
+      "verification_profile": "default",
+      "egress_policy": "local-model",
+      "egress_summary": "internet=allowed",
+      "started_at": "2026-11-03T09:22:02.157405142Z",
+      "completed_at": "2026-11-03T09:22:14.558585775Z",
+      "duration": 12401180633,
+      "verification_mutated_tree": false,
+      "resource_digest": "sha256:65f44be039db48431006e72808af8a4bac10343cd67996bbb7a0405e193410c3",
+      "cleanup": {
+        "attempted": true,
+        "duration": 119338591,
+        "finished_at": "2026-11-03T09:22:14.536361798Z",
+        "outcome": "SUCCESS",
+        "remaining_sandboxes": 0,
+        "sandbox_id": "a08ad75d88fa4f6c968c4c90a59ff4bd",
+        "verified": true
+      },
+      "hardening": {
+        "behavior": {
+          "findings": null,
+          "ruleset_version": "1",
+          "scanned_lines": 28,
+          "tripped": false
+        },
+        "egress_probe": {
+          "agent_uid": 0,
+          "agent_user": "root",
+          "canary": {
+            "decided": false,
+            "detail": "curl_rc=7",
+            "reachable": false,
+            "url": "https://example.com/"
+          },
+          "duration": 48119582,
+          "expect_deny": true,
+          "metadata": {
+            "decided": false,
+            "detail": "curl_rc=7",
+            "reachable": false,
+            "url": "http://169.254.169.254/latest/meta-data/"
+          },
+          "notes": [
+            "the public-internet probe was undecided (inconclusive): curl_rc=7",
+            "the metadata probe was undecided (inconclusive): curl_rc=7"
+          ],
+          "policy": "local-model",
+          "probed_at": "2026-11-03T09:22:04.317490642Z",
+          "raw": "ESF_PROBE identity 0 root\nESF_PROBE canary unknown curl_rc=7\nESF_PROBE metadata unknown curl_rc=7"
+        },
+        "gate_integrity": {
+          "allowed": false,
+          "checked": true,
+          "gate_paths": [
+            "build.sh",
+            "python3.12",
+            "test.sh"
+          ],
+          "method": "tree-hash"
+        }
+      },
+      "intake": {
+        "ambiguity": {
+          "confidence": 0.35,
+          "level": "clear",
+          "probabilities": {
+            "ambiguous": 0.08,
+            "clear": 0.65,
+            "partial": 0.27
+          },
+          "value": 0.43000000000000005
+        },
+        "duration_ms": 609,
+        "model": "jev-latest",
+        "program": "intake-v1",
+        "ready": {
+          "confidence": 0.30000000000000004,
+          "probability": 0.65,
+          "value": true
+        },
+        "status": "ok",
+        "task_type": {
+          "confidence": 0.6,
+          "probabilities": {
+            "bugfix": 0.16,
+            "docs": 0,
+            "feature": 0.68,
+            "other": 0.16,
+            "refactor": 0
+          },
+          "value": "feature"
+        }
+      },
+      "conditions": [
+        {
+          "last_transition_time": "2026-11-03T09:22:02.191402309Z",
+          "message": "scope=default",
+          "reason": "PolicyAccepted",
+          "status": "True",
+          "type": "Validated"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:22:02.911341534Z",
+          "message": "sandbox=a08ad75d88fa4f6c968c4c90a59ff4bd template=tpl-0914c5dd04cd48a0a5aa6be6",
+          "reason": "Created",
+          "status": "True",
+          "type": "SandboxReady"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:22:04.006894894Z",
+          "message": "workspace= digest=",
+          "reason": "Provisioned",
+          "status": "True",
+          "type": "WorkspacePrepared"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:22:04.240869507Z",
+          "message": "sha=1ed568f367cb54ee5ab8ba7dceb3e656ba2b416b",
+          "reason": "CheckedOut",
+          "status": "True",
+          "type": "RepositoryPrepared"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:22:04.287101502Z",
+          "message": "path=/workspace/.factory/inventory.json digest=sha256:c6cece68cdd81d12b1ad3bcb2ce55aaa35f4de6a95571593747cdc2e12c7c4c2",
+          "reason": "Published",
+          "status": "True",
+          "type": "InventoryWritten"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:22:04.387413459Z",
+          "message": "expect_deny=true internet=unknown metadata=unknown uid=0",
+          "reason": "ProbeInconclusive",
+          "status": "Unknown",
+          "type": "EgressVerified"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:22:14.003157949Z",
+          "reason": "NotBlocked",
+          "status": "False",
+          "type": "AgentBlocked"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:22:14.003157949Z",
+          "message": "attempt=1 duration=9.487273485s",
+          "reason": "ExitZero",
+          "status": "True",
+          "type": "AgentCompleted"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:22:14.406211609Z",
+          "message": "drift=false",
+          "reason": "PostVerification",
+          "status": "True",
+          "type": "ArtifactsCollected"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:22:14.154810556Z",
+          "message": "method=tree-hash gates=3",
+          "reason": "Unmodified",
+          "status": "True",
+          "type": "GateIntegrity"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:22:14.184503304Z",
+          "message": "no findings",
+          "reason": "Clean",
+          "status": "True",
+          "type": "BehaviorScanned"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:22:14.406211609Z",
+          "reason": "AllGatesPassed",
+          "status": "True",
+          "type": "Verified"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:22:14.406211609Z",
+          "reason": "WithinBudget",
+          "status": "False",
+          "type": "BudgetExceeded"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:22:14.558585775Z",
+          "message": "remaining=0",
+          "reason": "NoSandboxesRemain",
+          "status": "True",
+          "type": "CleanupVerified"
+        }
+      ],
+      "patch_sha256": "365194a7478c8a4a35e3f59104b27496b1a3eb1f52166cc27c78bfdae8af2769",
+      "patch_path": ".factory/component-upgrade-20261103/state/runs/run-578cc37728348f206d7cdb40/changes.patch"
+    },
+    "model_backed_pi": {
+      "run_id": "run-7f1309adbe645092399e09a3",
+      "workflow_id": "factory-run-run-7f1309adbe645092399e09a3",
+      "factory_result": "SUCCEEDED",
+      "agent_harness": "pi",
+      "agent_result": "SUCCESS",
+      "agent_version_if_available": "pi-durable:1.5.0;runner-sha256:2f2b5191139a564050c98f0784e9be63893d47685abc6ac8a4049a942b201993;node-sha256:0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b",
+      "model": "deepseek-v4.1-flash",
+      "verification_result": "SUCCESS",
+      "sandbox_id": "8209b59a85674bf3972171572f74078e",
+      "sandbox_template": "tpl-0914c5dd04cd48a0a5aa6be6",
+      "sandbox_provider": "cubesandbox",
+      "cube_version_if_available": "0.7.3",
+      "factory_version": "0.7.2",
+      "repository": "local:/home/mitko/dev/esf/testdata/e2e-repo-work",
+      "repository_kind": "local",
+      "requested_revision": "f304e6a2daaed648f87210a8f3c728f144b6964d",
+      "resulting_sha_if_any": "f304e6a2daaed648f87210a8f3c728f144b6964d",
+      "verification_profile": "default",
+      "egress_policy": "local-model",
+      "egress_summary": "internet=allowed",
+      "started_at": "2026-11-03T09:29:29.527755754Z",
+      "completed_at": "2026-11-03T09:29:44.365696571Z",
+      "duration": 14837940817,
+      "verification_mutated_tree": false,
+      "resource_digest": "sha256:65f44be039db48431006e72808af8a4bac10343cd67996bbb7a0405e193410c3",
+      "cleanup": {
+        "attempted": true,
+        "duration": 85164847,
+        "finished_at": "2026-11-03T09:29:44.339159251Z",
+        "outcome": "SUCCESS",
+        "remaining_sandboxes": 0,
+        "sandbox_id": "8209b59a85674bf3972171572f74078e",
+        "verified": true
+      },
+      "hardening": {
+        "behavior": {
+          "findings": null,
+          "ruleset_version": "1",
+          "scanned_lines": 71,
+          "tripped": false
+        },
+        "egress_probe": {
+          "agent_uid": 0,
+          "agent_user": "root",
+          "canary": {
+            "decided": false,
+            "detail": "curl_rc=7",
+            "reachable": false,
+            "url": "https://example.com/"
+          },
+          "duration": 46436989,
+          "expect_deny": true,
+          "metadata": {
+            "decided": false,
+            "detail": "curl_rc=7",
+            "reachable": false,
+            "url": "http://169.254.169.254/latest/meta-data/"
+          },
+          "notes": [
+            "the public-internet probe was undecided (inconclusive): curl_rc=7",
+            "the metadata probe was undecided (inconclusive): curl_rc=7"
+          ],
+          "policy": "local-model",
+          "probed_at": "2026-11-03T09:29:31.280648564Z",
+          "raw": "ESF_PROBE identity 0 root\nESF_PROBE canary unknown curl_rc=7\nESF_PROBE metadata unknown curl_rc=7"
+        },
+        "gate_integrity": {
+          "allowed": false,
+          "checked": true,
+          "gate_paths": [
+            "build.sh",
+            "python3.12",
+            "test.sh"
+          ],
+          "method": "tree-hash"
+        }
+      },
+      "intake": {
+        "ambiguity": {
+          "confidence": 0.4,
+          "level": "clear",
+          "probabilities": {
+            "ambiguous": 0.07,
+            "clear": 0.67,
+            "partial": 0.26
+          },
+          "value": 0.4
+        },
+        "duration_ms": 652,
+        "model": "jev-latest",
+        "program": "intake-v1",
+        "ready": {
+          "confidence": 0.26,
+          "probability": 0.63,
+          "value": true
+        },
+        "status": "ok",
+        "task_type": {
+          "confidence": 0.56,
+          "probabilities": {
+            "bugfix": 0.14,
+            "docs": 0,
+            "feature": 0.65,
+            "other": 0.21,
+            "refactor": 0
+          },
+          "value": "feature"
+        }
+      },
+      "conditions": [
+        {
+          "last_transition_time": "2026-11-03T09:29:29.564203343Z",
+          "message": "scope=default",
+          "reason": "PolicyAccepted",
+          "status": "True",
+          "type": "Validated"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:29:30.341962774Z",
+          "message": "sandbox=8209b59a85674bf3972171572f74078e template=tpl-0914c5dd04cd48a0a5aa6be6",
+          "reason": "Created",
+          "status": "True",
+          "type": "SandboxReady"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:29:30.976250786Z",
+          "message": "workspace= digest=",
+          "reason": "Provisioned",
+          "status": "True",
+          "type": "WorkspacePrepared"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:29:31.20143931Z",
+          "message": "sha=f304e6a2daaed648f87210a8f3c728f144b6964d",
+          "reason": "CheckedOut",
+          "status": "True",
+          "type": "RepositoryPrepared"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:29:31.247232018Z",
+          "message": "path=/workspace/.factory/inventory.json digest=sha256:dce8acf43e2eb37e61825b2d79fee7c2cbe5beea021e8bc2614a1a5ef935bf9b",
+          "reason": "Published",
+          "status": "True",
+          "type": "InventoryWritten"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:29:31.347102218Z",
+          "message": "expect_deny=true internet=unknown metadata=unknown uid=0",
+          "reason": "ProbeInconclusive",
+          "status": "Unknown",
+          "type": "EgressVerified"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:29:43.851311306Z",
+          "reason": "NotBlocked",
+          "status": "False",
+          "type": "AgentBlocked"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:29:43.851311306Z",
+          "message": "attempt=1 duration=12.264013492s",
+          "reason": "ExitZero",
+          "status": "True",
+          "type": "AgentCompleted"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:29:44.243308736Z",
+          "message": "drift=false",
+          "reason": "PostVerification",
+          "status": "True",
+          "type": "ArtifactsCollected"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:29:43.995368784Z",
+          "message": "method=tree-hash gates=3",
+          "reason": "Unmodified",
+          "status": "True",
+          "type": "GateIntegrity"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:29:44.024070714Z",
+          "message": "no findings",
+          "reason": "Clean",
+          "status": "True",
+          "type": "BehaviorScanned"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:29:44.243308736Z",
+          "reason": "AllGatesPassed",
+          "status": "True",
+          "type": "Verified"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:29:44.243308736Z",
+          "reason": "WithinBudget",
+          "status": "False",
+          "type": "BudgetExceeded"
+        },
+        {
+          "last_transition_time": "2026-11-03T09:29:44.365696571Z",
+          "message": "remaining=0",
+          "reason": "NoSandboxesRemain",
+          "status": "True",
+          "type": "CleanupVerified"
+        }
+      ],
+      "patch_sha256": "365194a7478c8a4a35e3f59104b27496b1a3eb1f52166cc27c78bfdae8af2769",
+      "patch_path": ".factory/component-upgrade-20261103/state/runs/run-7f1309adbe645092399e09a3/changes.patch"
+    }
+  },
+  "leak_check": "`factory sandboxes` reported no live sandboxes after all three runs; Cube API health reported sandboxes:0",
+  "note": "Three runs passed deterministic gates, produced a verified patch, and verified cleanup: a model-free conformance run, a model-backed OpenCode 2.2.5 run and a model-backed Pi 1.5.0 run (the latter exercises the 1.5 engine adaptation) on opencode-go/deepseek-v4.1-flash through CubeEgress. Sandboxes: conformance d654c05577b347fc86e1f4b10db67aa1, opencode2 a08ad75d88fa4f6c968c4c90a59ff4bd, pi 8209b59a85674bf3972171572f74078e; all destroyed and cleanup verified. The model-backed runs' egress probe is Unknown/ProbeInconclusive because the local profile acknowledges open egress."
+}

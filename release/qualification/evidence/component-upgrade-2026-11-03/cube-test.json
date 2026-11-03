@@ -1,0 +1,157 @@
+{
+  "schema": "esf-cube-test/v1",
+  "template": "tpl-0914c5dd04cd48a0a5aa6be6",
+  "sandbox_id": "a582a4a145f442058af193be76215688",
+  "source_commit": "4639f046267417bbe5f74ace18af3fbafdf2163d",
+  "source_sha256": "f29acd66b4204156c91ae34c1c9182ba590ee4fcdd7debeef9df616a83a7a6ca",
+  "python_runtime_sha256": "e2fa3a3a122f928af76dfea055c247abb0630b79fce898fcefaeaaf5caf96594",
+  "scanner_sha256": "88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509",
+  "cleanup_verified": true,
+  "remaining_owned": 0,
+  "all_exit_zero": true,
+  "binaries": [
+    {
+      "binary": "cmd_factory.test",
+      "exit_code": 0,
+      "sha256": "0f258e714cf568eb5d8a4b3cfa173a330fdbf11bababb1a17bd7b5e168b39779",
+      "duration": "32.120972ms"
+    },
+    {
+      "binary": "cmd_turn-executor.test",
+      "exit_code": 0,
+      "sha256": "89f0499d2d41339aa2e770f1b91180f4fd5d3488b9b7800162a6a71a50509966",
+      "duration": "19.573554ms"
+    },
+    {
+      "binary": "internal_agentharness.test",
+      "exit_code": 0,
+      "sha256": "5472e6bf2fa5ccdfd7b0104549a29d37a8f6f516f6106610679089c1bb0b0d90",
+      "duration": "16.644506ms"
+    },
+    {
+      "binary": "internal_console.test",
+      "exit_code": 0,
+      "sha256": "aea423c48044f91f9f078c03a91cbef4f3a1434fa904782a67936264b7070af1",
+      "duration": "194.083187ms"
+    },
+    {
+      "binary": "internal_factory.test",
+      "exit_code": 0,
+      "sha256": "02dfc7b2b005d4de618eec62e203f6a685a2beac85ef5d5b4091eab3f7b69ec4",
+      "duration": "5.405926775s"
+    },
+    {
+      "binary": "internal_factoryartifacts.test",
+      "exit_code": 0,
+      "sha256": "e4d9ad5c8e4b19492c50a35fe51b3567c0c708797c0c68c04ff23289a55206b4",
+      "duration": "110.508594ms"
+    },
+    {
+      "binary": "internal_harnessprofile.test",
+      "exit_code": 0,
+      "sha256": "394f98f673affc50a8fe38adec48885c7ad9956cf916404121807a0cd3090ea8",
+      "duration": "86.038235ms"
+    },
+    {
+      "binary": "internal_httpsecurity.test",
+      "exit_code": 0,
+      "sha256": "c185516e16c38f8cf347d5302dd698026485ac98a69235ed5e2877724f10cd8b",
+      "duration": "11.980329ms"
+    },
+    {
+      "binary": "internal_inferencebudget.test",
+      "exit_code": 0,
+      "sha256": "4df738506e583fb8af0871b18af9777dd3b5d5808864194530428d7329f3b65d",
+      "duration": "67.065273ms"
+    },
+    {
+      "binary": "internal_notify.test",
+      "exit_code": 0,
+      "sha256": "cc802980a9da04ca5408605c15dd12675c6f519ead0137bcde31b37c4135133f",
+      "duration": "137.625208ms"
+    },
+    {
+      "binary": "internal_repository.test",
+      "exit_code": 0,
+      "sha256": "ac95478d02ceaf54f8c5a7309d4569bc9cdd943200852d4cb11f08d556068172",
+      "duration": "52.233491ms"
+    },
+    {
+      "binary": "internal_sandbox.test",
+      "exit_code": 0,
+      "sha256": "dcce441c08cbd8d0f8367c85026e0d3889c613730d3e2fb0b45b04cd2058c3b8",
+      "duration": "11.656659ms"
+    },
+    {
+      "binary": "internal_sandbox_cube.test",
+      "exit_code": 0,
+      "sha256": "7bd861ba27489effd92ff620176ae4997738c1f3ba7aefdbe3aea8ad4be8f724",
+      "duration": "45.347479ms"
+    },
+    {
+      "binary": "internal_secretfile.test",
+      "exit_code": 0,
+      "sha256": "2405cf7de75e5eec524f06328fef7130613722428bab023d95bcb15ed2bd100e",
+      "duration": "11.748823ms"
+    },
+    {
+      "binary": "internal_threatmon.test",
+      "exit_code": 0,
+      "sha256": "d6c6047e3f37462fcaecf6cb6a1242ec42b4694044992978c0367dbe78f28a63",
+      "duration": "16.960241ms"
+    },
+    {
+      "binary": "internal_turnexec.test",
+      "exit_code": 0,
+      "sha256": "cc26266aa6e5946c83177ad4009adf2c27871b4f0bdf90b9cb71531a0191c95d",
+      "duration": "1.490683545s"
+    },
+    {
+      "binary": "internal_verification.test",
+      "exit_code": 0,
+      "sha256": "6cef3c9f7cc5755806de2705f1a6a70ad5444725f2e04c205b4681c5d651578d",
+      "duration": "11.081085ms"
+    }
+  ],
+  "checks": [
+    {
+      "argv": [
+        "/workspace/python-runtime/bin/python3.12",
+        "scripts/verify-release-inventory.py"
+      ],
+      "exit_code": 0,
+      "duration": "151.867028ms"
+    },
+    {
+      "argv": [
+        "/workspace/python-runtime/bin/python3.12",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_*.py"
+      ],
+      "exit_code": 0,
+      "duration": "192.898155ms"
+    }
+  ],
+  "test_pass_records": 731,
+  "secret_scan": {
+    "exit_code": 0,
+    "findings": 0
+  },
+  "note": "17 test binaries, 731 tests passed, every run exit 0; release inventory and qualification unittest checks passed inside Cube; gitleaks 8.30.1 found no leaks in the 547-file source tree.",
+  "source_note": "the packed source tree is the staged release working tree used for the in-Cube checks; source_sha256 identifies that archive",
+  "final_release_tree_secret_scan": {
+    "files": 655,
+    "source_sha256": "1f5b59124f96a39cb1801fc0dc636b190574195c688b147a4e61d12dce123834",
+    "scanner": "gitleaks 8.30.1 (in Cube)",
+    "exit_code": 0,
+    "findings": 0,
+    "cleanup_verified": true,
+    "remaining_owned": 0,
+    "note": "scan run on the staged release tree immediately before this evidence field was recorded"
+  }
+}

@@ -1,0 +1,1681 @@
+{
+  "schema": "esf-local-stack-upgrade/v1",
+  "release": "0.7.2",
+  "generated_at": "2026-11-03T11:40:00+02:00",
+  "owner": "teammate local-upgrader (task-3)",
+  "host": {
+    "os": "Linux",
+    "workspace": "/home/mitko/dev/esf",
+    "constraints": [
+      "no sudo / root operations in this session",
+      "docker + docker group available",
+      "only writable repo paths: .factory/component-upgrade-20261103/ and gitignored deployments/dev/temporal/.env",
+      "do not restart Cube services; do not touch orphan sandbox 8e8b89feca3f4e9fbd154eeacf5291a0"
+    ]
+  },
+  "summary": {
+    "status": "upgraded",
+    "temporal_server": {
+      "baseline": "1.32.1",
+      "upgraded": "1.32.2"
+    },
+    "temporal_admin_tools": {
+      "baseline": "1.32.1",
+      "upgraded": "1.32.1",
+      "note": "unchanged by design: temporalio/admin-tools does not publish a 1.32.2 tag (verified: manifest missing); admin-tools 1.32.1 runs the schema setup against server 1.32.2"
+    },
+    "temporal_ui": {
+      "baseline": "2.57.0",
+      "upgraded": "2.58.0"
+    },
+    "postgresql": {
+      "baseline": "18.6-alpine",
+      "upgraded": "18.6-alpine",
+      "unchanged": true
+    },
+    "persistence_schema": {
+      "baseline": "1.19",
+      "upgraded": "1.19",
+      "min_compatible_version": "1.0",
+      "compatible": true
+    },
+    "visibility_schema": {
+      "baseline": "1.14",
+      "upgraded": "1.14",
+      "min_compatible_version": "0.1",
+      "compatible": true
+    },
+    "data_preserved": true,
+    "cube_sandbox": {
+      "version": "v0.7.3-amd64",
+      "status": "already current, no server upgrade available or attempted (no sudo)"
+    },
+    "backup_sha256": "f434745ba7b262388ba1053b899fe3c223c921067f62e3a4275420e85f37f58d"
+  },
+  "timeline": [
+    {
+      "at": "2026-11-03T11:00:46+02:00",
+      "event": "baseline captured (containers, versions, schema, workflows)"
+    },
+    {
+      "at": "2026-11-03T11:01:30+02:00",
+      "event": "BLOCKER reported to Lead: 2 RUNNING workflows incl. active factory run with live worker pollers; upgrade held"
+    },
+    {
+      "at": "2026-11-03T11:02:33+02:00",
+      "event": "first pg_dumpall backup + rollback env/compose/image state captured"
+    },
+    {
+      "at": "2026-11-03T11:03:00-11:18:30+02:00",
+      "event": "waited for sustained quiet window; other sessions ran short factory workflows; upgrade held"
+    },
+    {
+      "at": "2026-11-03T11:18:18+02:00",
+      "event": "quiet window confirmed by idle-watch2.sh: no active factory run for ~3 min (only parked 3-week-old workflow remained); 8 idle worker pollers"
+    },
+    {
+      "at": "2026-11-03T11:18:30+02:00",
+      "event": "upgrade started: fresh pg_dumpall, .env pins changed, compose config verified, pull, up -d"
+    },
+    {
+      "at": "2026-11-03T11:18:42+02:00",
+      "event": "wait-ready.sh: Temporal development stack is ready; server 1.32.2 healthy, UI 2.58.0 up"
+    },
+    {
+      "at": "2026-11-03T11:18:43+02:00",
+      "event": "post-upgrade snapshot: schema unchanged; workflow identity/status set identical"
+    },
+    {
+      "at": "2026-11-03T11:19:52+02:00",
+      "event": "full upgraded evidence collected (UI 200 + serverVersion 1.32.2, workers reconnected, Cube baseline)"
+    }
+  ],
+  "baseline": {
+    "schema": "esf-local-stack-upgrade/v1",
+    "release": "0.7.2",
+    "phase": "baseline",
+    "collected_at": "2026-11-03T11:07:07+02:00",
+    "host": {
+      "os": "Linux",
+      "workspace": "/home/mitko/dev/esf",
+      "constraints": [
+        "no sudo / root operations in this session",
+        "docker + docker group available",
+        "only writable repo paths: .factory/component-upgrade-20261103/ and gitignored deployments/dev/temporal/.env",
+        "do not restart Cube services; do not touch orphan sandbox 8e8b89feca3f4e9fbd154eeacf5291a0"
+      ]
+    },
+    "env_pins": {
+      "COMPOSE_PROJECT_NAME": "factory-temporal",
+      "TEMPORAL_VERSION": "1.32.1",
+      "TEMPORAL_ADMINTOOLS_VERSION": "1.32.1",
+      "TEMPORAL_UI_VERSION": "2.57.0",
+      "POSTGRESQL_VERSION": "18.6-alpine",
+      "POSTGRESQL_DATA_VOLUME": "factory-temporal-postgresql-data-v18",
+      "TEMPORAL_SCHEMA_MODE": "upgrade",
+      "TEMPORAL_HOST_PORT": "7233",
+      "TEMPORAL_UI_PORT": "8233"
+    },
+    "compose_project": "factory-temporal",
+    "temporal_containers": [
+      {
+        "name": "factory-temporal-postgresql",
+        "image": "postgres:18.6-alpine",
+        "status": "running",
+        "started_at": "2026-10-29T09:34:54.705857729Z",
+        "ports": [
+          "5432/tcp"
+        ],
+        "health": "healthy",
+        "exit_code": 0
+      },
+      {
+        "name": "factory-temporal-ui",
+        "image": "temporalio/ui:2.57.0",
+        "status": "running",
+        "started_at": "2026-10-29T09:34:54.702243183Z",
+        "ports": [
+          "8080/tcp"
+        ],
+        "health": null,
+        "exit_code": 0
+      },
+      {
+        "name": "factory-temporal-ui-rollback-20261015",
+        "image": "sha256:3899d5cf749b5555c9f798d46f2423b1d6190ea391ca713db5d1bba961759e58",
+        "status": "exited",
+        "started_at": "2026-10-14T22:01:07.501158245Z",
+        "ports": [],
+        "health": null,
+        "exit_code": 2
+      },
+      {
+        "name": "factory-temporal-rollback-20261015",
+        "image": "sha256:c3e752127759616bb1615e0f9ba0e21635aeb5fdeb922de4f371c350955f46ae",
+        "status": "exited",
+        "started_at": "2026-10-14T22:01:07.330047818Z",
+        "ports": [],
+        "health": null,
+        "exit_code": 0
+      },
+      {
+        "name": "factory-temporal-postgresql-rollback-20261015",
+        "image": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+        "status": "exited",
+        "started_at": "2026-10-14T22:01:07.186081657Z",
+        "ports": [],
+        "health": null,
+        "exit_code": 0
+      },
+      {
+        "name": "factory-temporal-create-namespace",
+        "image": "temporalio/admin-tools:1.32.1",
+        "status": "exited",
+        "started_at": "2026-10-14T21:59:15.418606223Z",
+        "ports": [],
+        "health": null,
+        "exit_code": 0
+      },
+      {
+        "name": "factory-temporal",
+        "image": "temporalio/server:1.32.1",
+        "status": "running",
+        "started_at": "2026-10-29T09:34:55.334748312Z",
+        "ports": [
+          "7233/tcp"
+        ],
+        "health": "healthy",
+        "exit_code": 0
+      },
+      {
+        "name": "factory-temporal-admin-tools",
+        "image": "temporalio/admin-tools:1.32.1",
+        "status": "exited",
+        "started_at": "2026-10-14T21:59:08.924654346Z",
+        "ports": [],
+        "health": null,
+        "exit_code": 0
+      }
+    ],
+    "temporal_images": {
+      "postgres:18.6-alpine": {
+        "id": "sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5",
+        "repo_digests": [
+          "postgres@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5"
+        ]
+      },
+      "temporalio/ui:2.57.0": {
+        "id": "sha256:d944f959d0923c35cd991a17a0edbe087770eff843724b181933e0cfdd563ab2",
+        "repo_digests": [
+          "temporalio/ui@sha256:d944f959d0923c35cd991a17a0edbe087770eff843724b181933e0cfdd563ab2"
+        ]
+      },
+      "sha256:3899d5cf749b5555c9f798d46f2423b1d6190ea391ca713db5d1bba961759e58": {
+        "id": "sha256:3899d5cf749b5555c9f798d46f2423b1d6190ea391ca713db5d1bba961759e58",
+        "repo_digests": [
+          "temporalio/ui@sha256:3899d5cf749b5555c9f798d46f2423b1d6190ea391ca713db5d1bba961759e58"
+        ]
+      },
+      "sha256:c3e752127759616bb1615e0f9ba0e21635aeb5fdeb922de4f371c350955f46ae": {
+        "id": "sha256:c3e752127759616bb1615e0f9ba0e21635aeb5fdeb922de4f371c350955f46ae",
+        "repo_digests": [
+          "temporalio/server@sha256:c3e752127759616bb1615e0f9ba0e21635aeb5fdeb922de4f371c350955f46ae"
+        ]
+      },
+      "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea": {
+        "id": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+        "repo_digests": [
+          "postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea"
+        ]
+      },
+      "temporalio/admin-tools:1.32.1": {
+        "id": "sha256:9ef0dc5b063bf4ffd5c1512de72e0e73e225bd2c7006a18ce69bd592a8862a83",
+        "repo_digests": [
+          "temporalio/admin-tools@sha256:9ef0dc5b063bf4ffd5c1512de72e0e73e225bd2c7006a18ce69bd592a8862a83"
+        ]
+      },
+      "temporalio/server:1.32.1": {
+        "id": "sha256:acecbab5b0b8ae9cf4012b508866ca97feda3709577bf157b537239f40029049",
+        "repo_digests": [
+          "temporalio/server@sha256:acecbab5b0b8ae9cf4012b508866ca97feda3709577bf157b537239f40029049"
+        ]
+      }
+    },
+    "temporal_admin_tools": {
+      "cli_version": "temporal version 1.9.1 (Server 1.32.0, UI 2.54.1)",
+      "cluster_health": "SERVING",
+      "cluster_describe": "ClusterName  PersistenceStore  VisibilityStore\n  active       postgres12        postgres12"
+    },
+    "postgresql": {
+      "server_version": "postgres (PostgreSQL) 18.6",
+      "databases": [
+        "postgres",
+        "template0",
+        "template1",
+        "temporal",
+        "temporal_visibility"
+      ],
+      "persistence_schema": {
+        "db": "temporal",
+        "version": "1.19",
+        "min_compatible_version": "1.0",
+        "raw_row": "0|temporal|1.19|1.0"
+      },
+      "visibility_schema": {
+        "db": "temporal_visibility",
+        "version": "1.14",
+        "min_compatible_version": "0.1",
+        "raw_row": "0|temporal_visibility|1.14|0.1"
+      },
+      "row_counts": "executions=59 current_executions=31 history_node=1538 history_tree=91 namespaces=2 task_queues=122"
+    },
+    "temporal_workflows": {
+      "running_count": 1,
+      "running_raw": "Status               WorkflowId                        Type            StartTime \n  Running  factory-run-hop-gate-task10-ecfd8cc  SoftwareChangeWorkflow  3 weeks ago",
+      "workflows_listed": 29,
+      "namespaces": [
+        "default",
+        "temporal-system"
+      ],
+      "task_queue_pollers": {
+        "superagent-esf": {
+          "pollers": [
+            "UNVERSIONED activity superagent-esf-worker@hp-z2-2:1783903 31 seconds ago 100000",
+            "UNVERSIONED workflow superagent-esf-worker@hp-z2-2:1783903 27 seconds ago 100000"
+          ],
+          "poller_count": 2
+        },
+        "factory": {
+          "pollers": [
+            "UNVERSIONED workflow factory-worker@hp-z2-2:1750505 43 seconds ago 100000",
+            "UNVERSIONED activity factory-worker@hp-z2-2:1750505 34 seconds ago 100000"
+          ],
+          "poller_count": 2
+        },
+        "hop-task10": {
+          "pollers": [],
+          "poller_count": 0
+        }
+      },
+      "history_running_total": 3
+    },
+    "temporal_ui": {
+      "/": {
+        "http_code": "200"
+      },
+      "/api/v1/system-info": {
+        "http_code": "200"
+      },
+      "/api/v1/cluster-info": {
+        "http_code": "200"
+      },
+      "system_info": {
+        "serverVersion": "1.32.1",
+        "capabilities": {
+          "signalAndQueryHeader": true,
+          "internalErrorDifferentiation": true,
+          "activityFailureIncludeHeartbeat": true,
+          "supportsSchedules": true,
+          "encodedFailureAttributes": true,
+          "buildIdBasedVersioning": true,
+          "upsertMemo": true,
+          "eagerWorkflowStart": true,
+          "sdkMetadata": true,
+          "countGroupByExecutionStatus": true,
+          "nexus": true,
+          "serverScaledDeployments": true
+        }
+      },
+      "root_html_bytes": 2477,
+      "visible_version_strings": []
+    },
+    "backup": {
+      "dir": "/home/mitko/dev/esf/.factory/component-upgrade-20261103/backups",
+      "dir_mode": "0o700",
+      "files": [
+        {
+          "name": "collect-local-stack.py",
+          "bytes": 12610,
+          "mode": "0o600",
+          "sha256": "dbc1456f005be50b98b8da5f6de5e3294f1933b09c54387ad12ae01b8b1d964a"
+        },
+        {
+          "name": "compose-config.resolved.before-upgrade-20261103T1102.yaml",
+          "bytes": 3749,
+          "mode": "0o600",
+          "sha256": "58bb018cef0d78a9b832ca6d1f4e01965c4018a949660dbfdfd09130cfa3a36d"
+        },
+        {
+          "name": "compose-ps.before-upgrade-20261103T1102.json",
+          "bytes": 8250,
+          "mode": "0o600",
+          "sha256": "c09299401c6c8030124ebc37e550ea56fc407256f00303486f49abca2422a6db"
+        },
+        {
+          "name": "idle-watch.log",
+          "bytes": 605,
+          "mode": "0o664",
+          "sha256": "a030da850f695d5debff2983563d19da5db12f585b6ed5f4cae9f3706cee09b9"
+        },
+        {
+          "name": "idle-watch.sh",
+          "bytes": 1482,
+          "mode": "0o700",
+          "sha256": "ba79ec6c7a116f8f5858e6ced9e7d6a85b83724dedb2665ed8423db486a0ea82"
+        },
+        {
+          "name": "rollback-baseline-20261103T1102.txt",
+          "bytes": 2737,
+          "mode": "0o600",
+          "sha256": "05ac35aea9545a3ec51e8e8bcf8f8eb2279f5f43fe00930b6efe564f7bdf3fde"
+        },
+        {
+          "name": "temporal-postgresql-20261103-pre-upgrade.sql",
+          "bytes": 3553368,
+          "mode": "0o600",
+          "sha256": "e5a31230258582e136d1886d189a5ce3b34ff792ecdc86f0cbd68d4caee0768d"
+        },
+        {
+          "name": "temporal-postgresql-20261103-pre-upgrade.sql.sha256",
+          "bytes": 155,
+          "mode": "0o600",
+          "sha256": "693b73f8aa67bc8dbabe5f7e71b61f42e61a80c76d2f920f69e85196b5586d61"
+        },
+        {
+          "name": "temporal.env.before-upgrade-20261103T1102",
+          "bytes": 1371,
+          "mode": "0o600",
+          "sha256": "32609f29ce99d4684340bf7a05b2953a7180ea13ea7590ed80eb370a04b96641"
+        }
+      ]
+    },
+    "cube_sandbox": {
+      "version_txt": "release_version=v0.7.3-amd64\ngit_commit=4411c96ba8658a959de34693f54f4918db2a432f\nbuilt_at=2026-10-12T08:20:32Z\nmanifest=release-manifest.json\n",
+      "release_manifest": {
+        "release_version": "v0.7.3-amd64",
+        "built_at": "2026-10-12T08:20:32Z",
+        "built_by": "github-actions",
+        "git_commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+        "components": {
+          "cubemaster": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:99656072671668529fbcb8bfec8ac34b17e75cd248675c2523bb03b535601a47"
+          },
+          "cubemastercli": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:618cef19f963eb1d4ada5345bedc3ba794081493bb514c13ea41b940f45160bb"
+          },
+          "templatecenter": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:b135709d0164d22f4a223a15df0fe3341f7e20e29f0ebb948c2d2812d33f1133"
+          },
+          "cubelet": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:e9700acc6abf9d6f1f2d01f249121d420d26f09c8b07390189add646b47d7491"
+          },
+          "cubecli": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:2b76015af9e14aadde5be64947c3b485f44daa3032e0bc3fff9cd6de88e78bad"
+          },
+          "cube-api": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:04062d27a4e25377018cd343e4c97cc515367d4340e99ca1880c3b2ef5e87b1f"
+          },
+          "cubeops": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:2f5997c95ebd240e35188378c2e2c0dde415e0ac745b42ac1f25c233ec7cbeb4"
+          },
+          "cubeopscli": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:369e3f178d90d3a8439af290ffffe8ecc1a694ffd8eb19b2cf38ced57be36049"
+          },
+          "cube-agent": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:4aad80af6f06abb49f306fe0269fe636484699b762570e57221c8f3e085b033b"
+          },
+          "containerd-shim-cube-rs": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:fbb95e6324b092c57c132ac55b73b3450fe2a5f634456bce117a0f737f55a6ff"
+          },
+          "cube-runtime": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:6bca54798b6130dce383167a733108a16f6892b15ca6bccb6b8ee8daf691ed17"
+          },
+          "cube-egress": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z"
+          },
+          "cube-lifecycle-manager": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z"
+          },
+          "s3lvol": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:d0b1bdc4825bece97df29caab1aef5f1fd1f390be65f4e23d10193dcdc11bb7b"
+          }
+        },
+        "guest_image": {
+          "version": "guest-image-260820-1",
+          "digest_sha256": "sha256:8262a7eb9cacf423ea9c03f6bf3ae8921b00684f4a18022fe11792b37ea69228",
+          "base_image": "cube-sandbox-guest-image:one-click",
+          "agent_version": "v0.7.3"
+        },
+        "kernel": {
+          "version": "sha256-665d550c5eed",
+          "vmlinux_digest_sha256": "sha256:665d550c5eedb5652259156501032a82f8a7b2d52cfbbfc506cce5dda9f64bdf",
+          "pvm_version": "sha256-10c21b61578a",
+          "vmlinux_pvm_digest_sha256": "sha256:10c21b61578a0b1c814da7d8b27526c9d81f34f542e55cb93c8274676e16e4a0"
+        }
+      },
+      "release_manifest_sha256": "92acd3934144fde75db66410069d11e6925c4ecf768142d3cef33e85ede2ee0a  /usr/local/services/cubetoolbox/release-manifest.json",
+      "systemd_units": [
+        "cube-sandbox-coredns.service|active|running",
+        "cube-sandbox-cube-api.service|active|running",
+        "cube-sandbox-cube-egress-net.service|active|exited",
+        "cube-sandbox-cube-egress.service|active|running",
+        "cube-sandbox-cube-lifecycle-manager.service|active|running",
+        "cube-sandbox-cube-proxy.service|active|running",
+        "cube-sandbox-cube-templatecenter.service|active|running",
+        "cube-sandbox-cubelet.service|active|running",
+        "cube-sandbox-cubemaster.service|active|running",
+        "cube-sandbox-cubeops.service|active|running",
+        "cube-sandbox-dns.service|active|exited",
+        "cube-sandbox-minio.service|active|running",
+        "cube-sandbox-mysql.service|active|running",
+        "cube-sandbox-redis.service|active|running",
+        "cube-sandbox-webui.service|active|running"
+      ],
+      "cubemastercli_version": "cubemastercli v0.7.3 (4411c96ba8658a959de34693f54f4918db2a432f) built at 2026-10-12T08:20:32Z",
+      "docker_images": [
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-proxy:v0.7.3|fc6b30158793|564MB",
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-lifecycle-manager:v0.7.3|5fe19381b770|18.3MB",
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-egress:v0.7.3|fd195fde8b7d|405MB",
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-proxy:v0.7.2|6927d351fe3f|564MB",
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-lifecycle-manager:v0.7.2|a4ddb1e49724|18.3MB",
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-egress:v0.7.2|d3722e31d66c|404MB",
+        "cube-sandbox-image.tencentcloudcr.com/opensource/redis:7-alpine|6ab0b6e73817|57.8MB",
+        "cube-sandbox-image.tencentcloudcr.com/opensource/mysql:8.0|7dcddc01f13b|1.1GB",
+        "cube-sandbox-image.tencentcloudcr.com/opensource/coredns/coredns:1.14.2|e7e6440cfd1e|103MB",
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/minio:RELEASE.2025-09-07T16-13-09Z|37a173a1c304|241MB",
+        "cube-sandbox-image.tencentcloudcr.com/opensource/openresty:1.21.4.1-6-alpine-fat|a0e1c2d5ea07|555MB"
+      ],
+      "api_health": "{\"status\":\"ok\",\"sandboxes\":0}",
+      "template_registry": {
+        "32000": {
+          "http_code": null,
+          "exit_code": 7
+        },
+        "32001": {
+          "http_code": "200",
+          "exit_code": 0
+        }
+      },
+      "note": "CubeSandbox v0.7.3 is the latest published stable release; already current, no server upgrade available or attempted (no sudo in this session)."
+    }
+  },
+  "upgraded": {
+    "schema": "esf-local-stack-upgrade/v1",
+    "release": "0.7.2",
+    "phase": "upgraded",
+    "collected_at": "2026-11-03T11:19:52+02:00",
+    "host": {
+      "os": "Linux",
+      "workspace": "/home/mitko/dev/esf",
+      "constraints": [
+        "no sudo / root operations in this session",
+        "docker + docker group available",
+        "only writable repo paths: .factory/component-upgrade-20261103/ and gitignored deployments/dev/temporal/.env",
+        "do not restart Cube services; do not touch orphan sandbox 8e8b89feca3f4e9fbd154eeacf5291a0"
+      ]
+    },
+    "env_pins": {
+      "COMPOSE_PROJECT_NAME": "factory-temporal",
+      "TEMPORAL_VERSION": "1.32.2",
+      "TEMPORAL_ADMINTOOLS_VERSION": "1.32.1",
+      "TEMPORAL_UI_VERSION": "2.58.0",
+      "POSTGRESQL_VERSION": "18.6-alpine",
+      "POSTGRESQL_DATA_VOLUME": "factory-temporal-postgresql-data-v18",
+      "TEMPORAL_SCHEMA_MODE": "upgrade",
+      "TEMPORAL_HOST_PORT": "7233",
+      "TEMPORAL_UI_PORT": "8233"
+    },
+    "compose_project": "factory-temporal",
+    "temporal_containers": [
+      {
+        "name": "factory-temporal-ui",
+        "image": "temporalio/ui:2.58.0",
+        "status": "running",
+        "started_at": "2026-11-03T09:18:41.93266668Z",
+        "ports": [
+          "8080/tcp"
+        ],
+        "health": null,
+        "exit_code": 0
+      },
+      {
+        "name": "factory-temporal",
+        "image": "temporalio/server:1.32.2",
+        "status": "running",
+        "started_at": "2026-11-03T09:18:36.281404732Z",
+        "ports": [
+          "7233/tcp"
+        ],
+        "health": "healthy",
+        "exit_code": 0
+      },
+      {
+        "name": "factory-temporal-postgresql",
+        "image": "postgres:18.6-alpine",
+        "status": "running",
+        "started_at": "2026-10-29T09:34:54.705857729Z",
+        "ports": [
+          "5432/tcp"
+        ],
+        "health": "healthy",
+        "exit_code": 0
+      },
+      {
+        "name": "factory-temporal-ui-rollback-20261015",
+        "image": "sha256:3899d5cf749b5555c9f798d46f2423b1d6190ea391ca713db5d1bba961759e58",
+        "status": "exited",
+        "started_at": "2026-10-14T22:01:07.501158245Z",
+        "ports": [],
+        "health": null,
+        "exit_code": 2
+      },
+      {
+        "name": "factory-temporal-rollback-20261015",
+        "image": "sha256:c3e752127759616bb1615e0f9ba0e21635aeb5fdeb922de4f371c350955f46ae",
+        "status": "exited",
+        "started_at": "2026-10-14T22:01:07.330047818Z",
+        "ports": [],
+        "health": null,
+        "exit_code": 0
+      },
+      {
+        "name": "factory-temporal-postgresql-rollback-20261015",
+        "image": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+        "status": "exited",
+        "started_at": "2026-10-14T22:01:07.186081657Z",
+        "ports": [],
+        "health": null,
+        "exit_code": 0
+      },
+      {
+        "name": "factory-temporal-create-namespace",
+        "image": "temporalio/admin-tools:1.32.1",
+        "status": "exited",
+        "started_at": "2026-11-03T09:18:42.090078072Z",
+        "ports": [],
+        "health": null,
+        "exit_code": 0
+      },
+      {
+        "name": "factory-temporal-admin-tools",
+        "image": "temporalio/admin-tools:1.32.1",
+        "status": "exited",
+        "started_at": "2026-11-03T09:18:35.621821127Z",
+        "ports": [],
+        "health": null,
+        "exit_code": 0
+      }
+    ],
+    "temporal_images": {
+      "temporalio/ui:2.58.0": {
+        "id": "sha256:d36185e811d0ce1720b8d3ca4d9ac4dac504b67181e9b5e3d3ca72b2294f3590",
+        "repo_digests": [
+          "temporalio/ui@sha256:d36185e811d0ce1720b8d3ca4d9ac4dac504b67181e9b5e3d3ca72b2294f3590"
+        ]
+      },
+      "temporalio/server:1.32.2": {
+        "id": "sha256:7bf69188a6232fea14869b9cef3d94aa82a1601d99517f7e86c71f22da4e0670",
+        "repo_digests": [
+          "temporalio/server@sha256:7bf69188a6232fea14869b9cef3d94aa82a1601d99517f7e86c71f22da4e0670"
+        ]
+      },
+      "postgres:18.6-alpine": {
+        "id": "sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5",
+        "repo_digests": [
+          "postgres@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5"
+        ]
+      },
+      "sha256:3899d5cf749b5555c9f798d46f2423b1d6190ea391ca713db5d1bba961759e58": {
+        "id": "sha256:3899d5cf749b5555c9f798d46f2423b1d6190ea391ca713db5d1bba961759e58",
+        "repo_digests": [
+          "temporalio/ui@sha256:3899d5cf749b5555c9f798d46f2423b1d6190ea391ca713db5d1bba961759e58"
+        ]
+      },
+      "sha256:c3e752127759616bb1615e0f9ba0e21635aeb5fdeb922de4f371c350955f46ae": {
+        "id": "sha256:c3e752127759616bb1615e0f9ba0e21635aeb5fdeb922de4f371c350955f46ae",
+        "repo_digests": [
+          "temporalio/server@sha256:c3e752127759616bb1615e0f9ba0e21635aeb5fdeb922de4f371c350955f46ae"
+        ]
+      },
+      "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea": {
+        "id": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+        "repo_digests": [
+          "postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea"
+        ]
+      },
+      "temporalio/admin-tools:1.32.1": {
+        "id": "sha256:9ef0dc5b063bf4ffd5c1512de72e0e73e225bd2c7006a18ce69bd592a8862a83",
+        "repo_digests": [
+          "temporalio/admin-tools@sha256:9ef0dc5b063bf4ffd5c1512de72e0e73e225bd2c7006a18ce69bd592a8862a83"
+        ]
+      }
+    },
+    "temporal_admin_tools": {
+      "cli_version": "temporal version 1.9.1 (Server 1.32.0, UI 2.54.1)",
+      "cluster_health": "SERVING",
+      "cluster_describe": "ClusterName  PersistenceStore  VisibilityStore\n  active       postgres12        postgres12"
+    },
+    "postgresql": {
+      "server_version": "postgres (PostgreSQL) 18.6",
+      "databases": [
+        "postgres",
+        "template0",
+        "template1",
+        "temporal",
+        "temporal_visibility"
+      ],
+      "persistence_schema": {
+        "db": "temporal",
+        "version": "1.19",
+        "min_compatible_version": "1.0",
+        "raw_row": "0|temporal|1.19|1.0"
+      },
+      "visibility_schema": {
+        "db": "temporal_visibility",
+        "version": "1.14",
+        "min_compatible_version": "0.1",
+        "raw_row": "0|temporal_visibility|1.14|0.1"
+      },
+      "row_counts": "executions=69 current_executions=41 history_node=1990 history_tree=103 namespaces=2 task_queues=130"
+    },
+    "temporal_workflows": {
+      "running_count": 1,
+      "running_raw": "Status               WorkflowId                        Type            StartTime \n  Running  factory-run-hop-gate-task10-ecfd8cc  SoftwareChangeWorkflow  3 weeks ago",
+      "workflows_listed": 39,
+      "namespaces": [
+        "default",
+        "temporal-system"
+      ],
+      "task_queue_pollers": {
+        "superagent-esf": {
+          "pollers": [
+            "UNVERSIONED workflow superagent-esf-worker@hp-z2-2:1958128 45 seconds ago 100000",
+            "UNVERSIONED activity superagent-esf-worker@hp-z2-2:1958128 17 seconds ago 100000"
+          ],
+          "poller_count": 2
+        },
+        "factory": {
+          "pollers": [
+            "UNVERSIONED activity factory-worker@hp-z2-2:1750505 22 seconds ago 100000",
+            "UNVERSIONED workflow factory-worker@hp-z2-2:1750505 17 seconds ago 100000"
+          ],
+          "poller_count": 2
+        },
+        "hop-task10": {
+          "pollers": [],
+          "poller_count": 0
+        }
+      },
+      "history_running_total": 3
+    },
+    "temporal_ui": {
+      "/": {
+        "http_code": "200"
+      },
+      "/api/v1/system-info": {
+        "http_code": "200"
+      },
+      "/api/v1/cluster-info": {
+        "http_code": "200"
+      },
+      "system_info": {
+        "serverVersion": "1.32.2",
+        "capabilities": {
+          "signalAndQueryHeader": true,
+          "internalErrorDifferentiation": true,
+          "activityFailureIncludeHeartbeat": true,
+          "supportsSchedules": true,
+          "encodedFailureAttributes": true,
+          "buildIdBasedVersioning": true,
+          "upsertMemo": true,
+          "eagerWorkflowStart": true,
+          "sdkMetadata": true,
+          "countGroupByExecutionStatus": true,
+          "nexus": true,
+          "serverScaledDeployments": true
+        }
+      },
+      "root_html_bytes": 2477,
+      "visible_version_strings": []
+    },
+    "backup": {
+      "dir": "/home/mitko/dev/esf/.factory/component-upgrade-20261103/backups",
+      "dir_mode": "0o700",
+      "files": [
+        {
+          "name": "collect-local-stack.py",
+          "bytes": 12610,
+          "mode": "0o600",
+          "sha256": "dbc1456f005be50b98b8da5f6de5e3294f1933b09c54387ad12ae01b8b1d964a"
+        },
+        {
+          "name": "compose-config.resolved.after-upgrade.yaml",
+          "bytes": 3749,
+          "mode": "0o600",
+          "sha256": "f992fba9b9101e114056177e3ee19f26750609efc09d96856b5b981b094b2052"
+        },
+        {
+          "name": "compose-config.resolved.before-upgrade-20261103T1102.yaml",
+          "bytes": 3749,
+          "mode": "0o600",
+          "sha256": "58bb018cef0d78a9b832ca6d1f4e01965c4018a949660dbfdfd09130cfa3a36d"
+        },
+        {
+          "name": "compose-ps-after.txt",
+          "bytes": 1129,
+          "mode": "0o600",
+          "sha256": "7e755544840c6f9ba06cc4def74ed7fab8dad3f4a5d2c5e5ed3e254ec69ad275"
+        },
+        {
+          "name": "compose-ps-before.txt",
+          "bytes": 1051,
+          "mode": "0o600",
+          "sha256": "e0d4b15140d8067961790a18a36851ab969c485ddc01d1329642c6372c224ac7"
+        },
+        {
+          "name": "compose-ps.before-upgrade-20261103T1102.json",
+          "bytes": 8250,
+          "mode": "0o600",
+          "sha256": "c09299401c6c8030124ebc37e550ea56fc407256f00303486f49abca2422a6db"
+        },
+        {
+          "name": "containers-after.txt",
+          "bytes": 197,
+          "mode": "0o600",
+          "sha256": "ae4176d33c7463ef042af549572e437b56cd09c846c4ca5784d1eb5e88f96027"
+        },
+        {
+          "name": "containers-before.txt",
+          "bytes": 182,
+          "mode": "0o600",
+          "sha256": "c666ecb58223a0330cbb3317a1c7683a1ddb4f739783a17e1067d72a625577e9"
+        },
+        {
+          "name": "counts-after.txt",
+          "bytes": 84,
+          "mode": "0o600",
+          "sha256": "3fce8c6c84e150c638a9fc9e94a2c36d573275dbd595cd1fbb4b8078c597236c"
+        },
+        {
+          "name": "counts-before.txt",
+          "bytes": 84,
+          "mode": "0o600",
+          "sha256": "10bbaf85f72be5667e495725f2bfe69cfeb712cbfd8326a168750cb87c885d65"
+        },
+        {
+          "name": "idle-watch.log",
+          "bytes": 2200,
+          "mode": "0o664",
+          "sha256": "ba6e39689c0a64dfc92f063e30820c6fbb1e34da05bc08bc927c00a1189822b7"
+        },
+        {
+          "name": "idle-watch.sh",
+          "bytes": 1482,
+          "mode": "0o700",
+          "sha256": "ba79ec6c7a116f8f5858e6ced9e7d6a85b83724dedb2665ed8423db486a0ea82"
+        },
+        {
+          "name": "idle-watch2.log",
+          "bytes": 5262,
+          "mode": "0o664",
+          "sha256": "edba6036f8a5aeb6ede50d8197249e38fed3f8fd9c24dae11136c99202f77991"
+        },
+        {
+          "name": "idle-watch2.sh",
+          "bytes": 2108,
+          "mode": "0o700",
+          "sha256": "e0b976579cec4811f43af92e193744c7911eb93005771d8fceef56cbf6e204f1"
+        },
+        {
+          "name": "namespaces-after.txt",
+          "bytes": 1820,
+          "mode": "0o600",
+          "sha256": "f9c7f51a88bc32ce253172f333152d525abcd52d9a69278273df871bde765e74"
+        },
+        {
+          "name": "namespaces-before.txt",
+          "bytes": 1820,
+          "mode": "0o600",
+          "sha256": "f9c7f51a88bc32ce253172f333152d525abcd52d9a69278273df871bde765e74"
+        },
+        {
+          "name": "rollback-baseline-20261103T1102.txt",
+          "bytes": 2737,
+          "mode": "0o600",
+          "sha256": "05ac35aea9545a3ec51e8e8bcf8f8eb2279f5f43fe00930b6efe564f7bdf3fde"
+        },
+        {
+          "name": "rollback-temporal.sh",
+          "bytes": 1479,
+          "mode": "0o700",
+          "sha256": "dbf2b7e2b3f96e5ace8c630ae24dea5420cc36a7a3aa1e7af5ed57f4be0ee433"
+        },
+        {
+          "name": "running-workflows-at-upgrade.txt",
+          "bytes": 168,
+          "mode": "0o664",
+          "sha256": "22c13d14b1c1c1c368431e72277a95b406c3f4eb29b9a4976dfd18ac920fa7e7"
+        },
+        {
+          "name": "schema-persistence-after.txt",
+          "bytes": 20,
+          "mode": "0o600",
+          "sha256": "3701ceb4c6cdea765929f496906ffe5336d7499188cb9509f10d9e6f90604dda"
+        },
+        {
+          "name": "schema-persistence-before.txt",
+          "bytes": 20,
+          "mode": "0o600",
+          "sha256": "3701ceb4c6cdea765929f496906ffe5336d7499188cb9509f10d9e6f90604dda"
+        },
+        {
+          "name": "schema-visibility-after.txt",
+          "bytes": 31,
+          "mode": "0o600",
+          "sha256": "d19ab189ad54ecde1b9e8868f324d982571cbee6995627d5acc895e82a05c5df"
+        },
+        {
+          "name": "schema-visibility-before.txt",
+          "bytes": 31,
+          "mode": "0o600",
+          "sha256": "d19ab189ad54ecde1b9e8868f324d982571cbee6995627d5acc895e82a05c5df"
+        },
+        {
+          "name": "temporal-postgresql-20261103-pre-upgrade-final.sql",
+          "bytes": 4569404,
+          "mode": "0o600",
+          "sha256": "f434745ba7b262388ba1053b899fe3c223c921067f62e3a4275420e85f37f58d"
+        },
+        {
+          "name": "temporal-postgresql-20261103-pre-upgrade-final.sql.sha256",
+          "bytes": 181,
+          "mode": "0o600",
+          "sha256": "d3c07571a0ab3b33452c546d61532777e94da8d7e667a5b4c0b604a7027bfd2e"
+        },
+        {
+          "name": "temporal-postgresql-20261103-pre-upgrade.sql",
+          "bytes": 3553368,
+          "mode": "0o600",
+          "sha256": "e5a31230258582e136d1886d189a5ce3b34ff792ecdc86f0cbd68d4caee0768d"
+        },
+        {
+          "name": "temporal-postgresql-20261103-pre-upgrade.sql.sha256",
+          "bytes": 155,
+          "mode": "0o600",
+          "sha256": "693b73f8aa67bc8dbabe5f7e71b61f42e61a80c76d2f920f69e85196b5586d61"
+        },
+        {
+          "name": "temporal.env.before-upgrade-20261103T1102",
+          "bytes": 1371,
+          "mode": "0o600",
+          "sha256": "32609f29ce99d4684340bf7a05b2953a7180ea13ea7590ed80eb370a04b96641"
+        },
+        {
+          "name": "temporal.env.upgrade-start-20261103T111832",
+          "bytes": 1371,
+          "mode": "0o600",
+          "sha256": "32609f29ce99d4684340bf7a05b2953a7180ea13ea7590ed80eb370a04b96641"
+        },
+        {
+          "name": "upgrade-run.log",
+          "bytes": 3706,
+          "mode": "0o664",
+          "sha256": "d2d5c5b145e858fb655c081e1c4fc4995ebfe0d2c436137b90d7f3f4583c6a4f"
+        },
+        {
+          "name": "upgrade-temporal.sh",
+          "bytes": 7456,
+          "mode": "0o700",
+          "sha256": "6093fd36d5e21490d24beca82c8cbdb0fb79ad3105d74579a4bc1f97664e900c"
+        },
+        {
+          "name": "upgrade-window.marker",
+          "bytes": 65,
+          "mode": "0o664",
+          "sha256": "91c4bcccad469f472e46b6a79bd308ace4dbf28fd7896fa75a505ff9d8ccb8fc"
+        },
+        {
+          "name": "workflows-after.json",
+          "bytes": 51708,
+          "mode": "0o600",
+          "sha256": "afbf183da137ae50e3418a26d9688130194b18ccc7c0e54b4106b86474ff73be"
+        },
+        {
+          "name": "workflows-before.json",
+          "bytes": 51708,
+          "mode": "0o600",
+          "sha256": "afbf183da137ae50e3418a26d9688130194b18ccc7c0e54b4106b86474ff73be"
+        }
+      ]
+    },
+    "cube_sandbox": {
+      "version_txt": "release_version=v0.7.3-amd64\ngit_commit=4411c96ba8658a959de34693f54f4918db2a432f\nbuilt_at=2026-10-12T08:20:32Z\nmanifest=release-manifest.json\n",
+      "release_manifest": {
+        "release_version": "v0.7.3-amd64",
+        "built_at": "2026-10-12T08:20:32Z",
+        "built_by": "github-actions",
+        "git_commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+        "components": {
+          "cubemaster": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:99656072671668529fbcb8bfec8ac34b17e75cd248675c2523bb03b535601a47"
+          },
+          "cubemastercli": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:618cef19f963eb1d4ada5345bedc3ba794081493bb514c13ea41b940f45160bb"
+          },
+          "templatecenter": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:b135709d0164d22f4a223a15df0fe3341f7e20e29f0ebb948c2d2812d33f1133"
+          },
+          "cubelet": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:e9700acc6abf9d6f1f2d01f249121d420d26f09c8b07390189add646b47d7491"
+          },
+          "cubecli": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:2b76015af9e14aadde5be64947c3b485f44daa3032e0bc3fff9cd6de88e78bad"
+          },
+          "cube-api": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:04062d27a4e25377018cd343e4c97cc515367d4340e99ca1880c3b2ef5e87b1f"
+          },
+          "cubeops": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:2f5997c95ebd240e35188378c2e2c0dde415e0ac745b42ac1f25c233ec7cbeb4"
+          },
+          "cubeopscli": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:369e3f178d90d3a8439af290ffffe8ecc1a694ffd8eb19b2cf38ced57be36049"
+          },
+          "cube-agent": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:4aad80af6f06abb49f306fe0269fe636484699b762570e57221c8f3e085b033b"
+          },
+          "containerd-shim-cube-rs": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:fbb95e6324b092c57c132ac55b73b3450fe2a5f634456bce117a0f737f55a6ff"
+          },
+          "cube-runtime": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:6bca54798b6130dce383167a733108a16f6892b15ca6bccb6b8ee8daf691ed17"
+          },
+          "cube-egress": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z"
+          },
+          "cube-lifecycle-manager": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z"
+          },
+          "s3lvol": {
+            "version": "v0.7.3",
+            "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+            "build_time": "2026-10-12T08:20:32Z",
+            "digest_sha256": "sha256:d0b1bdc4825bece97df29caab1aef5f1fd1f390be65f4e23d10193dcdc11bb7b"
+          }
+        },
+        "guest_image": {
+          "version": "guest-image-260820-1",
+          "digest_sha256": "sha256:8262a7eb9cacf423ea9c03f6bf3ae8921b00684f4a18022fe11792b37ea69228",
+          "base_image": "cube-sandbox-guest-image:one-click",
+          "agent_version": "v0.7.3"
+        },
+        "kernel": {
+          "version": "sha256-665d550c5eed",
+          "vmlinux_digest_sha256": "sha256:665d550c5eedb5652259156501032a82f8a7b2d52cfbbfc506cce5dda9f64bdf",
+          "pvm_version": "sha256-10c21b61578a",
+          "vmlinux_pvm_digest_sha256": "sha256:10c21b61578a0b1c814da7d8b27526c9d81f34f542e55cb93c8274676e16e4a0"
+        }
+      },
+      "release_manifest_sha256": "92acd3934144fde75db66410069d11e6925c4ecf768142d3cef33e85ede2ee0a  /usr/local/services/cubetoolbox/release-manifest.json",
+      "systemd_units": [
+        "cube-sandbox-coredns.service|active|running",
+        "cube-sandbox-cube-api.service|active|running",
+        "cube-sandbox-cube-egress-net.service|active|exited",
+        "cube-sandbox-cube-egress.service|inactive|dead",
+        "cube-sandbox-cube-lifecycle-manager.service|active|running",
+        "cube-sandbox-cube-proxy.service|active|running",
+        "cube-sandbox-cube-templatecenter.service|active|running",
+        "cube-sandbox-cubelet.service|active|running",
+        "cube-sandbox-cubemaster.service|active|running",
+        "cube-sandbox-cubeops.service|active|running",
+        "cube-sandbox-dns.service|active|exited",
+        "cube-sandbox-minio.service|active|running",
+        "cube-sandbox-mysql.service|active|running",
+        "cube-sandbox-redis.service|active|running",
+        "cube-sandbox-webui.service|active|running"
+      ],
+      "cubemastercli_version": "cubemastercli v0.7.3 (4411c96ba8658a959de34693f54f4918db2a432f) built at 2026-10-12T08:20:32Z",
+      "docker_images": [
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-proxy:v0.7.3|fc6b30158793|564MB",
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-lifecycle-manager:v0.7.3|5fe19381b770|18.3MB",
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-egress:v0.7.3|fd195fde8b7d|405MB",
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-proxy:v0.7.2|6927d351fe3f|564MB",
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-lifecycle-manager:v0.7.2|a4ddb1e49724|18.3MB",
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-egress:v0.7.2|d3722e31d66c|404MB",
+        "cube-sandbox-image.tencentcloudcr.com/opensource/redis:7-alpine|6ab0b6e73817|57.8MB",
+        "cube-sandbox-image.tencentcloudcr.com/opensource/mysql:8.0|7dcddc01f13b|1.1GB",
+        "cube-sandbox-image.tencentcloudcr.com/opensource/coredns/coredns:1.14.2|e7e6440cfd1e|103MB",
+        "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/minio:RELEASE.2025-09-07T16-13-09Z|37a173a1c304|241MB",
+        "cube-sandbox-image.tencentcloudcr.com/opensource/openresty:1.21.4.1-6-alpine-fat|a0e1c2d5ea07|555MB"
+      ],
+      "api_health": "{\"status\":\"ok\",\"sandboxes\":0}",
+      "template_registry": {
+        "32000": {
+          "http_code": null,
+          "exit_code": 7
+        },
+        "32001": {
+          "http_code": "200",
+          "exit_code": 0
+        }
+      },
+      "note": "CubeSandbox v0.7.3 is the latest published stable release; already current, no server upgrade available or attempted (no sudo in this session)."
+    }
+  },
+  "upgrade": {
+    "method": "docker compose --project-directory deployments/dev/temporal up -d after editing gitignored .env pins; existing PostgreSQL 18.6 container/volume untouched (no recreate: started 2026-10-29, volume factory-temporal-postgresql-data-v18 retained)",
+    "window": {
+      "criterion": "0 non-stale RUNNING workflows in namespace default sustained ~3 min (24 samples); idle worker pollers allowed (they reconnect)",
+      "ready_at": "2026-11-03T11:18:18+02:00",
+      "quiet_since": "~2026-11-03T11:15:14+02:00",
+      "active_running_workflows_at_restart": 0,
+      "excluded_preexisting_workflow": {
+        "workflow_id": "factory-run-hop-gate-task10-ecfd8cc",
+        "reason": "3 weeks old, CancelRequested=true, activity parked with no pollers on hop-task10; cannot make progress and is untouched by a patch restart",
+        "history_length": 73
+      },
+      "idle_worker_pollers_at_restart": 8,
+      "worker_identities_observed": {
+        "immediately_before_restart": [
+          "superagent-esf-worker@hp-z2-2:1783903",
+          "factory-worker@hp-z2-2:1750505"
+        ],
+        "after_restart": [
+          "superagent-esf-worker@hp-z2-2:1958128",
+          "factory-worker@hp-z2-2:1750505"
+        ]
+      },
+      "note": "No factory run was in flight at restart; idle pollers were present and reconnected transparently. Other sessions started new runs after the upgrade (observed: workflow task started on queue superagent-esf at 09:19:10Z)."
+    },
+    "env_changes": {
+      "file": "deployments/dev/temporal/.env (gitignored)",
+      "TEMPORAL_VERSION": "1.32.1 -> 1.32.2",
+      "TEMPORAL_UI_VERSION": "2.57.0 -> 2.58.0",
+      "TEMPORAL_ADMINTOOLS_VERSION": "1.32.1 (unchanged: no 1.32.2 tag exists)",
+      "POSTGRESQL_VERSION": "18.6-alpine (unchanged)",
+      "POSTGRESQL_DATA_VOLUME": "factory-temporal-postgresql-data-v18 (unchanged)",
+      "TEMPORAL_SCHEMA_MODE": "upgrade (unchanged)"
+    },
+    "compose_config_resolved_images": {
+      "before": [
+        "postgres:18.6-alpine",
+        "temporalio/server:1.32.1",
+        "temporalio/admin-tools:1.32.1",
+        "temporalio/admin-tools:1.32.1",
+        "temporalio/ui:2.57.0"
+      ],
+      "after": [
+        "postgres:18.6-alpine",
+        "temporalio/server:1.32.2",
+        "temporalio/admin-tools:1.32.1",
+        "temporalio/admin-tools:1.32.1",
+        "temporalio/ui:2.58.0"
+      ],
+      "files": {
+        "before": ".factory/component-upgrade-20261103/backups/compose-config.resolved.before-upgrade-20261103T1102.yaml",
+        "after": ".factory/component-upgrade-20261103/backups/compose-config.resolved.after-upgrade.yaml"
+      }
+    },
+    "pulled_images": {
+      "temporalio/server:1.32.2": {
+        "image_id": "sha256:7bf69188a6232fea14869b9cef3d94aa82a1601d99517f7e86c71f22da4e0670",
+        "repo_digest": "temporalio/server@sha256:7bf69188a6232fea14869b9cef3d94aa82a1601d99517f7e86c71f22da4e0670",
+        "version_label": "1.32.2"
+      },
+      "temporalio/ui:2.58.0": {
+        "image_id": "sha256:d36185e811d0ce1720b8d3ca4d9ac4dac504b67181e9b5e3d3ca72b2294f3590",
+        "repo_digest": "temporalio/ui@sha256:d36185e811d0ce1720b8d3ca4d9ac4dac504b67181e9b5e3d3ca72b2294f3590",
+        "version_label": "2.58.0"
+      }
+    },
+    "verification": {
+      "cluster_health": "SERVING",
+      "server_reachable_127_0_0_1_7233": true,
+      "ui_http_200_127_0_0_1_8233": true,
+      "ui_system_info_serverVersion": "1.32.2",
+      "ui_visible_version_string_exposed": null,
+      "ui_visible_version_string_note": "UI serves a 2478-byte app shell with no version string; /api/v1/system-info exposes serverVersion only. UI 2.58.0 evidenced by image tag and org.opencontainers.image.version label.",
+      "ui_image_version_label": "2.58.0",
+      "admin_tools_cli": "temporal version 1.9.1 (Server 1.32.0, UI 2.54.1) - CLI embedded versions, container tag is 1.32.1",
+      "admin_tools_schema_setup_exit": 0,
+      "admin_tools_schema_setup_log": "UpdateSchemaTask: found zero updates from current version 1.19 (persistence) and 1.14 (visibility)",
+      "create_namespace_exit": 0,
+      "create_namespace_log": "Namespace default already exists",
+      "containers_after": {
+        "factory-temporal-ui": {
+          "image": "temporalio/ui:2.58.0",
+          "state": "running",
+          "health": null,
+          "exit_code": 0
+        },
+        "factory-temporal": {
+          "image": "temporalio/server:1.32.2",
+          "state": "running",
+          "health": "healthy",
+          "exit_code": 0
+        },
+        "factory-temporal-postgresql": {
+          "image": "postgres:18.6-alpine",
+          "state": "running",
+          "health": "healthy",
+          "exit_code": 0
+        },
+        "factory-temporal-ui-rollback-20261015": {
+          "image": "sha256:3899d5cf749b5555c9f798d46f2423b1d6190ea391ca713db5d1bba961759e58",
+          "state": "exited",
+          "health": null,
+          "exit_code": 2
+        },
+        "factory-temporal-rollback-20261015": {
+          "image": "sha256:c3e752127759616bb1615e0f9ba0e21635aeb5fdeb922de4f371c350955f46ae",
+          "state": "exited",
+          "health": null,
+          "exit_code": 0
+        },
+        "factory-temporal-postgresql-rollback-20261015": {
+          "image": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+          "state": "exited",
+          "health": null,
+          "exit_code": 0
+        },
+        "factory-temporal-create-namespace": {
+          "image": "temporalio/admin-tools:1.32.1",
+          "state": "exited",
+          "health": null,
+          "exit_code": 0
+        },
+        "factory-temporal-admin-tools": {
+          "image": "temporalio/admin-tools:1.32.1",
+          "state": "exited",
+          "health": null,
+          "exit_code": 0
+        }
+      },
+      "containers_before": {
+        "factory-temporal-postgresql": {
+          "image": "postgres:18.6-alpine",
+          "state": "running",
+          "health": "healthy",
+          "exit_code": 0
+        },
+        "factory-temporal-ui": {
+          "image": "temporalio/ui:2.57.0",
+          "state": "running",
+          "health": null,
+          "exit_code": 0
+        },
+        "factory-temporal-ui-rollback-20261015": {
+          "image": "sha256:3899d5cf749b5555c9f798d46f2423b1d6190ea391ca713db5d1bba961759e58",
+          "state": "exited",
+          "health": null,
+          "exit_code": 2
+        },
+        "factory-temporal-rollback-20261015": {
+          "image": "sha256:c3e752127759616bb1615e0f9ba0e21635aeb5fdeb922de4f371c350955f46ae",
+          "state": "exited",
+          "health": null,
+          "exit_code": 0
+        },
+        "factory-temporal-postgresql-rollback-20261015": {
+          "image": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+          "state": "exited",
+          "health": null,
+          "exit_code": 0
+        },
+        "factory-temporal-create-namespace": {
+          "image": "temporalio/admin-tools:1.32.1",
+          "state": "exited",
+          "health": null,
+          "exit_code": 0
+        },
+        "factory-temporal": {
+          "image": "temporalio/server:1.32.1",
+          "state": "running",
+          "health": "healthy",
+          "exit_code": 0
+        },
+        "factory-temporal-admin-tools": {
+          "image": "temporalio/admin-tools:1.32.1",
+          "state": "exited",
+          "health": null,
+          "exit_code": 0
+        }
+      },
+      "namespaces": [
+        "default",
+        "temporal-system"
+      ],
+      "schema_versions": {
+        "persistence": {
+          "db": "temporal",
+          "version": "1.19",
+          "min_compatible_version": "1.0",
+          "raw_row": "0|temporal|1.19|1.0"
+        },
+        "visibility": {
+          "db": "temporal_visibility",
+          "version": "1.14",
+          "min_compatible_version": "0.1",
+          "raw_row": "0|temporal_visibility|1.14|0.1"
+        }
+      },
+      "schema_versions_unchanged": true,
+      "workflow_identity_status_diff": "identical: 38 workflow records before and after; 0 missing, 0 new, 0 status changes",
+      "sample_history_checks": {
+        "factory-run-hop-gate-task10-ecfd8cc": {
+          "status": "RUNNING (parked, pre-existing)",
+          "history_length": 73,
+          "unchanged": true
+        },
+        "factory-run-esf-superagent-hello-unreal-20261103T085936Z": {
+          "status": "COMPLETED",
+          "history_length": 89,
+          "history_size": 38069,
+          "unchanged": true
+        }
+      },
+      "row_counts": {
+        "before": "executions=59 current_executions=31 history_node=1538 history_tree=91 namespaces=2 task_queues=122",
+        "after": "executions=69 current_executions=41 history_node=1990 history_tree=103 namespaces=2 task_queues=130",
+        "note": "Append-only growth from internal system workflows and new post-upgrade runs; factory workflow identities/statuses and sampled histories unchanged. No deletions: executions 68->69, current_executions 40->41, namespaces 2->2."
+      },
+      "worker_reconnect": true,
+      "evidence_files": {
+        "upgrade_log": ".factory/component-upgrade-20261103/backups/upgrade-run.log",
+        "window_log": ".factory/component-upgrade-20261103/backups/idle-watch2.log",
+        "workflows_before": ".factory/component-upgrade-20261103/backups/workflows-before.json",
+        "workflows_after": ".factory/component-upgrade-20261103/backups/workflows-after.json",
+        "counts_before": ".factory/component-upgrade-20261103/backups/counts-before.txt",
+        "counts_after": ".factory/component-upgrade-20261103/backups/counts-after.txt",
+        "containers_before": ".factory/component-upgrade-20261103/backups/containers-before.txt",
+        "containers_after": ".factory/component-upgrade-20261103/backups/containers-after.txt",
+        "schema_persistence_before": ".factory/component-upgrade-20261103/backups/schema-persistence-before.txt",
+        "schema_persistence_after": ".factory/component-upgrade-20261103/backups/schema-persistence-after.txt",
+        "schema_visibility_before": ".factory/component-upgrade-20261103/backups/schema-visibility-before.txt",
+        "schema_visibility_after": ".factory/component-upgrade-20261103/backups/schema-visibility-after.txt"
+      }
+    }
+  },
+  "backup": {
+    "dir": ".factory/component-upgrade-20261103/backups",
+    "dir_mode": "0o700",
+    "final_pre_upgrade_dump": {
+      "path": ".factory/component-upgrade-20261103/backups/temporal-postgresql-20261103-pre-upgrade-final.sql",
+      "bytes": 4569404,
+      "mode": "0o600",
+      "sha256": "f434745ba7b262388ba1053b899fe3c223c921067f62e3a4275420e85f37f58d"
+    },
+    "initial_baseline_dump": {
+      "path": ".factory/component-upgrade-20261103/backups/temporal-postgresql-20261103-pre-upgrade.sql",
+      "bytes": 3553368,
+      "mode": "0o600",
+      "sha256": "e5a31230258582e136d1886d189a5ce3b34ff792ecdc86f0cbd68d4caee0768d"
+    },
+    "method": "docker exec factory-temporal-postgresql pg_dumpall -U temporal > <file> (server-side 18.6 pg_dumpall over unix socket; credentials from deployments/dev/temporal/.env, never printed)",
+    "restore_hint": "restore into a fresh PostgreSQL 18.6 cluster: psql -U temporal -f <dump>; then point POSTGRESQL_DATA_VOLUME at it. Owner-only file; contains dev-only role password hash."
+  },
+  "rollback": {
+    "env_before_upgrade_copy": {
+      "path": ".factory/component-upgrade-20261103/backups/temporal.env.before-upgrade-20261103T1102",
+      "bytes": 1371,
+      "mode": "0o600",
+      "sha256": "32609f29ce99d4684340bf7a05b2953a7180ea13ea7590ed80eb370a04b96641"
+    },
+    "resolved_compose_config_before": {
+      "path": ".factory/component-upgrade-20261103/backups/compose-config.resolved.before-upgrade-20261103T1102.yaml",
+      "bytes": 3749,
+      "mode": "0o600",
+      "sha256": "58bb018cef0d78a9b832ca6d1f4e01965c4018a949660dbfdfd09130cfa3a36d"
+    },
+    "rollback_state_file": ".factory/component-upgrade-20261103/backups/rollback-baseline-20261103T1102.txt",
+    "compose_ps_before": ".factory/component-upgrade-20261103/backups/compose-ps.before-upgrade-20261103T1102.json",
+    "images_before": {
+      "temporalio/server:1.32.1": "sha256:acecbab5b0b8ae9cf4012b508866ca97feda3709577bf157b537239f40029049",
+      "temporalio/admin-tools:1.32.1": "sha256:9ef0dc5b063bf4ffd5c1512de72e0e73e225bd2c7006a18ce69bd592a8862a83",
+      "temporalio/ui:2.57.0": "sha256:d944f959d0923c35cd991a17a0edbe087770eff843724b181933e0cfdd563ab2",
+      "postgres:18.6-alpine": "sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5"
+    },
+    "volume": "factory-temporal-postgresql-data-v18 (mountpoint /var/lib/docker/volumes/factory-temporal-postgresql-data-v18/_data, created 2026-10-15T00:59:01+03:00; never removed/rewritten)",
+    "procedure": [
+      "Option A (version-only rollback, no data loss for existing histories): run bash .factory/component-upgrade-20261103/backups/rollback-temporal.sh  OR edit deployments/dev/temporal/.env back to TEMPORAL_VERSION=1.32.1 / TEMPORAL_UI_VERSION=2.57.0 (keep TEMPORAL_ADMINTOOLS_VERSION=1.32.1, POSTGRESQL_VERSION=18.6-alpine, volume) and run docker compose --project-directory deployments/dev/temporal up -d, then deployments/dev/temporal/scripts/wait-ready.sh.",
+      "Option B (full data rollback): stop the stack, restore the retained volume/cluster from the pg_dumpall SQL into a fresh PostgreSQL 18.6 cluster, restore the pre-upgrade .env copy, then bring the stack up and run wait-ready.sh. WARNING: any workflow data written after the backup (post-11:18:32+02:00 runs) is lost; reconcile before restoring.",
+      "Never run docker compose down -v for this stack; the data volume must be preserved."
+    ],
+    "scripts": {
+      "upgrade": ".factory/component-upgrade-20261103/backups/upgrade-temporal.sh",
+      "rollback": ".factory/component-upgrade-20261103/backups/rollback-temporal.sh",
+      "evidence_collector": ".factory/component-upgrade-20261103/backups/collect-local-stack.py"
+    }
+  },
+  "cube_sandbox": {
+    "version_txt": "release_version=v0.7.3-amd64\ngit_commit=4411c96ba8658a959de34693f54f4918db2a432f\nbuilt_at=2026-10-12T08:20:32Z\nmanifest=release-manifest.json\n",
+    "release_manifest": {
+      "release_version": "v0.7.3-amd64",
+      "built_at": "2026-10-12T08:20:32Z",
+      "built_by": "github-actions",
+      "git_commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+      "components": {
+        "cubemaster": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z",
+          "digest_sha256": "sha256:99656072671668529fbcb8bfec8ac34b17e75cd248675c2523bb03b535601a47"
+        },
+        "cubemastercli": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z",
+          "digest_sha256": "sha256:618cef19f963eb1d4ada5345bedc3ba794081493bb514c13ea41b940f45160bb"
+        },
+        "templatecenter": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z",
+          "digest_sha256": "sha256:b135709d0164d22f4a223a15df0fe3341f7e20e29f0ebb948c2d2812d33f1133"
+        },
+        "cubelet": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z",
+          "digest_sha256": "sha256:e9700acc6abf9d6f1f2d01f249121d420d26f09c8b07390189add646b47d7491"
+        },
+        "cubecli": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z",
+          "digest_sha256": "sha256:2b76015af9e14aadde5be64947c3b485f44daa3032e0bc3fff9cd6de88e78bad"
+        },
+        "cube-api": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z",
+          "digest_sha256": "sha256:04062d27a4e25377018cd343e4c97cc515367d4340e99ca1880c3b2ef5e87b1f"
+        },
+        "cubeops": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z",
+          "digest_sha256": "sha256:2f5997c95ebd240e35188378c2e2c0dde415e0ac745b42ac1f25c233ec7cbeb4"
+        },
+        "cubeopscli": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z",
+          "digest_sha256": "sha256:369e3f178d90d3a8439af290ffffe8ecc1a694ffd8eb19b2cf38ced57be36049"
+        },
+        "cube-agent": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z",
+          "digest_sha256": "sha256:4aad80af6f06abb49f306fe0269fe636484699b762570e57221c8f3e085b033b"
+        },
+        "containerd-shim-cube-rs": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z",
+          "digest_sha256": "sha256:fbb95e6324b092c57c132ac55b73b3450fe2a5f634456bce117a0f737f55a6ff"
+        },
+        "cube-runtime": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z",
+          "digest_sha256": "sha256:6bca54798b6130dce383167a733108a16f6892b15ca6bccb6b8ee8daf691ed17"
+        },
+        "cube-egress": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z"
+        },
+        "cube-lifecycle-manager": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z"
+        },
+        "s3lvol": {
+          "version": "v0.7.3",
+          "commit": "4411c96ba8658a959de34693f54f4918db2a432f",
+          "build_time": "2026-10-12T08:20:32Z",
+          "digest_sha256": "sha256:d0b1bdc4825bece97df29caab1aef5f1fd1f390be65f4e23d10193dcdc11bb7b"
+        }
+      },
+      "guest_image": {
+        "version": "guest-image-260820-1",
+        "digest_sha256": "sha256:8262a7eb9cacf423ea9c03f6bf3ae8921b00684f4a18022fe11792b37ea69228",
+        "base_image": "cube-sandbox-guest-image:one-click",
+        "agent_version": "v0.7.3"
+      },
+      "kernel": {
+        "version": "sha256-665d550c5eed",
+        "vmlinux_digest_sha256": "sha256:665d550c5eedb5652259156501032a82f8a7b2d52cfbbfc506cce5dda9f64bdf",
+        "pvm_version": "sha256-10c21b61578a",
+        "vmlinux_pvm_digest_sha256": "sha256:10c21b61578a0b1c814da7d8b27526c9d81f34f542e55cb93c8274676e16e4a0"
+      }
+    },
+    "release_manifest_sha256": "92acd3934144fde75db66410069d11e6925c4ecf768142d3cef33e85ede2ee0a  /usr/local/services/cubetoolbox/release-manifest.json",
+    "systemd_units": [
+      "cube-sandbox-coredns.service|active|running",
+      "cube-sandbox-cube-api.service|active|running",
+      "cube-sandbox-cube-egress-net.service|active|exited",
+      "cube-sandbox-cube-egress.service|active|running",
+      "cube-sandbox-cube-lifecycle-manager.service|active|running",
+      "cube-sandbox-cube-proxy.service|active|running",
+      "cube-sandbox-cube-templatecenter.service|active|running",
+      "cube-sandbox-cubelet.service|active|running",
+      "cube-sandbox-cubemaster.service|active|running",
+      "cube-sandbox-cubeops.service|active|running",
+      "cube-sandbox-dns.service|active|exited",
+      "cube-sandbox-minio.service|active|running",
+      "cube-sandbox-mysql.service|active|running",
+      "cube-sandbox-redis.service|active|running",
+      "cube-sandbox-webui.service|active|running"
+    ],
+    "cubemastercli_version": "cubemastercli v0.7.3 (4411c96ba8658a959de34693f54f4918db2a432f) built at 2026-10-12T08:20:32Z",
+    "docker_images": [
+      "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-proxy:v0.7.3|fc6b30158793|564MB",
+      "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-lifecycle-manager:v0.7.3|5fe19381b770|18.3MB",
+      "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-egress:v0.7.3|fd195fde8b7d|405MB",
+      "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-proxy:v0.7.2|6927d351fe3f|564MB",
+      "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-lifecycle-manager:v0.7.2|a4ddb1e49724|18.3MB",
+      "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/cube-egress:v0.7.2|d3722e31d66c|404MB",
+      "cube-sandbox-image.tencentcloudcr.com/opensource/redis:7-alpine|6ab0b6e73817|57.8MB",
+      "cube-sandbox-image.tencentcloudcr.com/opensource/mysql:8.0|7dcddc01f13b|1.1GB",
+      "cube-sandbox-image.tencentcloudcr.com/opensource/coredns/coredns:1.14.2|e7e6440cfd1e|103MB",
+      "cube-sandbox-int.tencentcloudcr.com/cube-sandbox/minio:RELEASE.2025-09-07T16-13-09Z|37a173a1c304|241MB",
+      "cube-sandbox-image.tencentcloudcr.com/opensource/openresty:1.21.4.1-6-alpine-fat|a0e1c2d5ea07|555MB"
+    ],
+    "api_health": "{\"status\":\"ok\",\"sandboxes\":0}",
+    "template_registry": {
+      "32000": {
+        "http_code": null,
+        "exit_code": 7
+      },
+      "32001": {
+        "http_code": "200",
+        "exit_code": 0
+      }
+    },
+    "note": "CubeSandbox v0.7.3 is the latest published stable release; already current, no server upgrade available or attempted (no sudo in this session).",
+    "verification": {
+      "version_txt": "release_version=v0.7.3-amd64 (git_commit 4411c96ba8658a959de34693f54f4918db2a432f, built_at 2026-10-12T08:20:32Z)",
+      "release_manifest": "v0.7.3-amd64; components cubemaster/cubemastercli/templatecenter/cubelet/cubecli/cube-api/cubeops/cubeopscli/cube-agent/containerd-shim-cube-rs/cube-runtime/cube-egress/cube-lifecycle-manager/s3lvol all v0.7.3; guest_image guest-image-260820-1 (agent v0.7.3); kernel sha256-665d550c5eed / pvm sha256-10c21b61578a",
+      "systemd_units_active": [
+        "cube-sandbox-coredns.service",
+        "cube-sandbox-cube-api.service",
+        "cube-sandbox-cube-egress-net.service",
+        "cube-sandbox-cube-egress.service",
+        "cube-sandbox-cube-lifecycle-manager.service",
+        "cube-sandbox-cube-proxy.service",
+        "cube-sandbox-cube-templatecenter.service",
+        "cube-sandbox-cubelet.service",
+        "cube-sandbox-cubemaster.service",
+        "cube-sandbox-cubeops.service",
+        "cube-sandbox-dns.service",
+        "cube-sandbox-minio.service",
+        "cube-sandbox-mysql.service",
+        "cube-sandbox-redis.service",
+        "cube-sandbox-webui.service"
+      ],
+      "systemd_units_inactive_note": [
+        "cube-sandbox-s3lvol.service inactive (pre-existing, not changed by this task)",
+        "cube-sandbox-compute.target inactive, cube-sandbox-control.target active (pre-existing)"
+      ],
+      "docker_images_running": {
+        "cube-proxy": "v0.7.3",
+        "cube-lifecycle-manager": "v0.7.3",
+        "cube-egress": "v0.7.3",
+        "cube-sandbox-mysql": "8.0 (opensource mirror)",
+        "cube-sandbox-redis": "7-alpine",
+        "cube-webui": "openresty 1.21.4.1-6-alpine-fat",
+        "cube-sandbox-minio": "RELEASE.2025-09-07T16-13-09Z",
+        "cube-proxy-coredns": "1.14.2"
+      },
+      "cubemastercli": "v0.7.3 (4411c96ba8658a959de34693f54f4918db2a432f)",
+      "cube_api_health": {
+        "url": "http://127.0.0.1:4000/health",
+        "http_status": 200,
+        "body": {
+          "status": "ok",
+          "sandboxes": 0
+        }
+      },
+      "template_registry": {
+        "127.0.0.1:32000": "BROKEN: connection refused (curl exit 7) on /v2/ - known broken publish registry, not fixed (out of scope); Lead uses 127.0.0.1:32001",
+        "127.0.0.1:32001": "HTTP 200 on /v2/ (working registry used by Lead)"
+      }
+    }
+  },
+  "blockers_limits": [
+    {
+      "id": "no-sudo",
+      "detail": "No sudo/root in this session: Cube systemd units and system-level config were only read (systemctl is-active/list-units), never restarted or modified. CubeSandbox 0.7.3 is the latest published stable release, so no server upgrade was available or attempted."
+    },
+    {
+      "id": "admin-tools-1.32.2-not-published",
+      "detail": "Task text asked for TEMPORAL_ADMINTOOLS_VERSION=1.32.2, but temporalio/admin-tools has no 1.32.2 tag (docker manifest inspect => missing; latest 1.32.1). Lead confirmed the correction: pin kept at 1.32.1, which still runs the schema setup against server 1.32.2 and exited 0 with zero schema updates."
+    },
+    {
+      "id": "preexisting-running-workflow",
+      "detail": "factory-run-hop-gate-task10-ecfd8cc (3 weeks old, CancelRequested=true, activity parked with no pollers) remains RUNNING by design; it is pre-existing/orphaned like the pre-existing orphan sandbox and was excluded from the quiet-window criterion and left untouched. Upgrade did not change its state or history (73 events)."
+    },
+    {
+      "id": "external-session-activity",
+      "detail": "Other sessions were using the Temporal stack during baseline (short factory runs and long-lived idle worker pollers on superagent-esf/factory). Upgrade was deferred and executed only after a sustained ~3 min quiet window; no factory run was in flight at restart. Idle pollers reconnected; new runs were observed starting after the upgrade."
+    },
+    {
+      "id": "ui-version-display",
+      "detail": "Temporal UI 2.58.0 exposes no visible version string in the served app shell (2478 bytes) and /api/v1/system-info returns serverVersion 1.32.2 only; UI version is evidenced by image tag/label 2.58.0."
+    },
+    {
+      "id": "row-count-append-growth",
+      "detail": "Persistence row counts grew during/after restart (history_node 1942->1990 etc.) from internal system workflows (temporal-sys-history-scanner, temporal-sys-tq-scanner) and new post-upgrade runs; no factory workflow was removed or altered (identity/status set identical)."
+    },
+    {
+      "id": "orphan-sandbox-untouched",
+      "detail": "Pre-existing orphan Cube sandbox 8e8b89feca3f4e9fbd154eeacf5291a0 (owned by another session) was not touched; Cube API /health reported {status: ok, sandboxes: 0} at baseline."
+    }
+  ],
+  "lead_local_tool_verification": {
+    "measured_at": "2026-11-03T11:29:00+02:00",
+    "note": "Host convenience CLIs are outside the ESF release inventory; the ESF-managed agent payloads are the verified template binaries and npm locks. Commands run under the agent sandbox's read-only HOME, so a CLI that needs to open a log under $HOME cannot always self-report.",
+    "versions": {
+      "claude": "2.1.317 (Claude Code)",
+      "codex": "codex-cli 0.166.0",
+      "node": "v26.13.0",
+      "uv": "uv 0.13.7 (x86_64-unknown-linux-gnu)",
+      "go": "go version go1.27.3 linux/amd64",
+      "python3": "Python 3.15.2",
+      "kubectl": "v1.37.2 (client)",
+      "helm": "v4.3.1",
+      "mise_npm_opencode_cli_global": "2.2.5 (~/.config/mise/config.toml)",
+      "esf_agents_opencode_baseline": "opencode v2.2.5"
+    },
+    "mise_current": {
+      "go": "1.27.3",
+      "node": "26.13.0",
+      "python": "3.15.2",
+      "uv": "0.13.7"
+    },
+    "intake_runtime": {
+      "path": ".factory/runtimes/intake-20261103-3.14.10",
+      "python": "3.14.10",
+      "uv": "0.13.7",
+      "pip_check": "checked 72 packages: all installed packages are compatible"
+    }
+  }
+}
