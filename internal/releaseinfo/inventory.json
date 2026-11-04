@@ -1,8 +1,8 @@
 {
-  "release": "v0.7.2",
+  "release": "v0.7.3",
   "release_profile": "binary-preview",
   "qualification_mode": "companion-manifest",
-  "baseline": "4639f046267417bbe5f74ace18af3fbafdf2163d",
+  "baseline": "482d963afa5f6ac7addcb4bb8c2c9dbe68684a8f",
   "dependencies": {
     "cubesandbox": {
       "release": "0.7.3",
@@ -11,7 +11,7 @@
     },
     "temporal": {
       "server": "1.32.2",
-      "admin_tools": "1.32.1",
+      "admin_tools": "1.32.2",
       "ui": "2.58.0",
       "go_sdk": "1.50.0",
       "api": "1.64.1",
@@ -79,7 +79,7 @@
     "postgresql": null
   },
   "templates": {
-    "recipe_sha256": "3b5ef7d63b3f3238d69260d4bd2b0ba0b8d231ad1fafbe67d141cb677a297bbe",
+    "recipe_sha256": "db2ad990fea76abab48bde5cac37d2ae5a988ea1a5c753914c5e533ae921f4ad",
     "architecture": "linux/amd64",
     "git_package": null,
     "ca_certificates_package": null,
@@ -105,13 +105,13 @@
     "claude": {
       "type": "claude",
       "credential_mode": "cube_egress",
-      "tested_cli_version": "2.1.317",
+      "tested_cli_version": "2.1.318",
       "installation": "operator-provisioned standalone binary or complete runtime in a pinned Cube template",
       "qualification": "candidate; official archive digest verified; CLI startup verified in Cube; provider qualification pending",
-      "linux_amd64_binary_sha256": "eb224419e344575faa4a1f39b290b649425a10cd5ee2ef1d003480cd9ae57eb0",
-      "archive_url": "https://github.com/anthropics/claude-code/releases/download/v2.1.317/claude-linux-x64.tar.gz",
-      "archive_sha256": "153511cf79cd27c55c9f9c919cc532eb90647f7893cb3f4e78dac776991714e0",
-      "sha256sums_sha256": "64b547d73b0e2983926b2f000e3e5ff0e5e72d35677bca78bf74b52d5bf3d260"
+      "linux_amd64_binary_sha256": "708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd",
+      "archive_url": "https://github.com/anthropics/claude-code/releases/download/v2.1.318/claude-linux-x64.tar.gz",
+      "archive_sha256": "e6d426ca0c123f61fad58a361da0329f2a93cd206bc87040ed8d9576dd9eb583",
+      "sha256sums_sha256": "fdf91f973d12ef87258e9d4c0fa0189e33f2172dab66861349947452dc299b8e"
     },
     "codex": {
       "type": "codex",
@@ -126,7 +126,7 @@
   },
   "service_images": {
     "temporal": "docker.io/temporalio/server@sha256:7bf69188a6232fea14869b9cef3d94aa82a1601d99517f7e86c71f22da4e0670",
-    "temporal-admin": "docker.io/temporalio/admin-tools@sha256:9ef0dc5b063bf4ffd5c1512de72e0e73e225bd2c7006a18ce69bd592a8862a83",
+    "temporal-admin": "docker.io/temporalio/admin-tools@sha256:4a95866efba29d7e17ab012df5232795e8b0ad0f7d5f9d1ec4df321f7792a754",
     "temporal-ui": "docker.io/temporalio/ui@sha256:d36185e811d0ce1720b8d3ca4d9ac4dac504b67181e9b5e3d3ca72b2294f3590",
     "postgresql": "docker.io/library/postgres@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5"
   },

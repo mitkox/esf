@@ -1,0 +1,31 @@
+{
+  "schema": "esf-acceptance/v1",
+  "candidate": "v0.7.3",
+  "baseline": "482d963afa5f6ac7addcb4bb8c2c9dbe68684a8f",
+  "template": "tpl-4ae712b3f614434a90959a81",
+  "build": "ESF 0.7.3 (482d963a, go1.27.3, config schema 1)",
+  "runs": [
+    {
+      "agent": "conformance",
+      "run_id": "run-38608072c1ffedaa837294bd",
+      "outcome": "PASSED",
+      "gates": {
+        "InventoryWritten": "Published",
+        "EgressVerified": "Unknown/ProbeInconclusive (local profile acknowledges open egress; not a denial-path failure)",
+        "AgentCompleted": "ExitZero",
+        "ArtifactsCollected": "PostVerification, drift=false",
+        "GateIntegrity": "Unmodified (tree-hash, 3 gates)",
+        "BehaviorScanned": "Clean",
+        "Verified": "AllGatesPassed",
+        "CleanupVerified": "NoSandboxesRemain, remaining=0"
+      }
+    },
+    {
+      "agent": "opencode2 (model-backed)",
+      "run_id": "run-94a44931a9311bfcb9f47ae7",
+      "outcome": "NOT COMPLETED",
+      "note": "External model provider did not return within the validation window; the run was cancelled and its sandbox (571bcc84d33a4566b10854a17e2ca2b2) destroyed. Not cited as evidence."
+    }
+  ],
+  "leak_check": "factory sandboxes: No live sandboxes after cleanup"
+}

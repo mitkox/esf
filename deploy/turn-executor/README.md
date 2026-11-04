@@ -2,7 +2,7 @@
 
 Create system user/group `esf-turn`; install the reviewed static binary at
 `/opt/esf/bin/turn-executor` and pinned Claude executable under
-`/opt/esf/claude/2.1.272/claude`. Files must be readable by the service user and
+`/opt/esf/claude/2.1.318/claude`. Files must be readable by the service user and
 not writable by it. Install the unit, a validated profile JSON and an environment
 file owned root:esf-turn mode0640 under `/etc/esf`.
 

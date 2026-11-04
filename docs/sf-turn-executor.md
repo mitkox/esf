@@ -20,8 +20,9 @@ service directly as a browser API. sf uses `SF_ESF_URL` and `SF_ESF_TOKEN`.
 The template needs Python 3 and the provider's existing output-limiter tools.
 Claude can be preinstalled or staged from an operator-owned file with a pinned
 SHA-256; client requests cannot select a file, command, template or credential.
-The pinned native Claude 2.1.272 Linux x64 binary used in local qualification has
-SHA-256 `d81396a668eb76fbddb49a2a5841f1b5d7af96b4c1f6500ced92f2c988f5bcd4`.
+The pinned native Claude 2.1.318 Linux x64 binary has SHA-256
+`708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd`; the earlier
+2.1.272 local qualification used `d81396a668eb76fbddb49a2a5841f1b5d7af96b4c1f6500ced92f2c988f5bcd4`.
 
 Example operator profile (replace the template and secret *reference*, not with
 secret values in this file):
@@ -32,7 +33,7 @@ secret values in this file):
     "template": "READY_TEMPLATE_ID",
     "command": ["/tmp/esf-harness", "-p", "--verbose", "--output-format", "stream-json", "--permission-mode", "default", "--setting-sources", "", "--model", "minimax-m3"],
     "harness": "claude-code",
-    "harness_artifact": {"file": "/opt/esf/claude/2.1.272/claude", "sha256": "d81396a668eb76fbddb49a2a5841f1b5d7af96b4c1f6500ced92f2c988f5bcd4"},
+    "harness_artifact": {"file": "/opt/esf/claude/2.1.318/claude", "sha256": "708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd"},
     "model_base_url": "https://opencode.ai/inference/go",
     "env_refs": {"ANTHROPIC_API_KEY": "OPENCODE_GO_API_KEY"},
     "network": {"allow_internet": true},
@@ -148,7 +149,8 @@ A workflow requiring covered spend must stop until pricing evidence is available
   exact approval, resumed the child and verified cleanup. A real Claude turn also
   paused through the same MCP permission bridge, received one bound approval,
   wrote the requested checkpoint file and completed with verified cleanup.
-- Pinned Claude 2.1.272 ran through OpenCode Go MiniMax M3 and returned a sentinel;
+- Pinned Claude 2.1.272 (the then-current pin) ran through OpenCode Go MiniMax M3 and
+  returned a sentinel;
   a second fresh VM resumed its saved conversation and recalled that sentinel.
   The credential was absent from checkpoint content. This is a model-connectivity
   and conversation-restoration proof, not an exact provider-cost proof.
