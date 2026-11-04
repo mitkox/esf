@@ -3,7 +3,7 @@
     "template": "REPLACE_WITH_READY_TEMPLATE_ID",
     "command": ["/tmp/esf-harness", "-p", "--verbose", "--output-format", "stream-json", "--permission-mode", "default", "--setting-sources", "", "--model", "minimax-m3"],
     "harness": "claude-code",
-    "harness_artifact": {"file": "/opt/esf/claude/2.1.272/claude", "sha256": "d81396a668eb76fbddb49a2a5841f1b5d7af96b4c1f6500ced92f2c988f5bcd4"},
+    "harness_artifact": {"file": "/opt/esf/claude/2.1.318/claude", "sha256": "708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd"},
     "model_base_url": "https://opencode.ai/inference/go",
     "env_refs": {"ANTHROPIC_API_KEY": "OPENCODE_GO_API_KEY"},
     "network": {"allow_internet": true},

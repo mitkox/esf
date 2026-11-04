@@ -1,0 +1,22 @@
+{
+  "schema": "esf-template-build/v1",
+  "built_at": "2026-11-04T23:21:01+02:00",
+  "baseline": "482d963afa5f6ac7addcb4bb8c2c9dbe68684a8f",
+  "candidate": "v0.7.3",
+  "recipe_sha256": "db2ad990fea76abab48bde5cac37d2ae5a988ea1a5c753914c5e533ae921f4ad",
+  "image": "localhost:32001/esf-native@sha256:1fdb1c001fe4b6d7d3af9d25e84fe77e81e363957728fe66d9649386bb211fb7",
+  "platform_manifest": "localhost:32001/esf-native@sha256:aeb7e0b26e7bc00ca444351ea9e0394e7d4d6109ee7f046464f08fa0a0982b9b",
+  "template_id": "tpl-4ae712b3f614434a90959a81",
+  "alias": "esf-v073-native-20261104",
+  "status": "READY",
+  "payload_sha256": {
+    "opencode2": "8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050",
+    "claude": "708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd",
+    "codex": "b8a11fedf24b2dfb59a70c9e52b030f9a508dcd49cd2dd0d41956f4c785156b8",
+    "unreal_agent_runner": "d289aa2046bb79d2b063679c6e0e6b714c759f8a5ed6f969d3b3ea1eeeec03ee",
+    "pi_runner": "2f2b5191139a564050c98f0784e9be63893d47685abc6ac8a4049a942b201993",
+    "node": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b"
+  },
+  "verification": "factory agents verify matched every configured preinstalled payload including Claude 2.1.318; factory doctor passed; make cube-smoke passed (Ubuntu 22.04.5, node v26.13.0)",
+  "rollback_template": "tpl-0914c5dd04cd48a0a5aa6be6"
+}

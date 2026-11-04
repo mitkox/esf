@@ -1,0 +1,84 @@
+{
+  "schema": "esf-security-rescan/v1",
+  "candidate": "v0.7.3",
+  "baseline": "482d963afa5f6ac7addcb4bb8c2c9dbe68684a8f",
+  "scanned_at": "2026-11-04T23:32:00+02:00",
+  "scanners": {
+    "govulncheck": {
+      "version": "1.9.0",
+      "scope": "source ./... and binary bin/factory",
+      "findings": 0
+    },
+    "osv": {
+      "queries": 332,
+      "findings": [
+        "diskcache 5.6.3 Medium (unfixed, disk cache disabled in both entry points)"
+      ]
+    },
+    "npm_audit": {
+      "graphs": [
+        "internal/console/web",
+        "agents/opencode",
+        "agents/pi"
+      ],
+      "critical_high": 0
+    },
+    "pip_audit": {
+      "scope": "exact uv.lock pins (both interpreter closures)",
+      "critical_high": 0,
+      "medium": [
+        "diskcache 5.6.3"
+      ]
+    },
+    "grype": {
+      "db_built": "2026-11-04T06:20:59Z",
+      "images_scanned": [
+        "temporalio/admin-tools:1.32.2",
+        "localhost:32001/esf-cube-base:0.7.3-local",
+        "postgres:18.6-alpine",
+        "temporalio/ui:2.58.0",
+        "temporalio/server:1.32.2"
+      ]
+    }
+  },
+  "fixed_by_this_refresh": [
+    {
+      "artifact": "temporalio/admin-tools 1.32.2",
+      "before": "17 fixed Critical/High (2 Critical + 15 High) in 1.32.1",
+      "after": "0 Critical/High"
+    },
+    {
+      "artifact": "cube template base (pinned Ubuntu security updates)",
+      "before": "26 fixed (2 Critical + 24 High)",
+      "after": "24 fixed (2 Critical + 22 High); CVE-2026-84782 and CVE-2026-111497 removed"
+    }
+  ],
+  "remaining_critical_high": [
+    {
+      "artifact": "Cube base envd (Go 1.25.4)",
+      "count": "2 Critical + 22 High",
+      "owner": "upstream CubeSandbox base rebuild; no newer base tag"
+    },
+    {
+      "artifact": "Unreal agent runner v0.3.1 (Go 1.27.0)",
+      "count": "8 High",
+      "owner": "upstream binary rebuild; v0.3.1 is latest"
+    },
+    {
+      "artifact": "temporalio/ui 2.58.0 (x/net)",
+      "count": "1 High",
+      "owner": "upstream rebuild; 2.58.0 is latest"
+    },
+    {
+      "artifact": "postgres 18.6-alpine (dev-only local Temporal stack)",
+      "count": "8 Critical + 17 High",
+      "owner": "derived image apk upgrade not applied; upstream digest unchanged"
+    },
+    {
+      "artifact": "untracked .github/site tooling (not shipped)",
+      "count": "2 High",
+      "owner": "local developer tooling"
+    }
+  ],
+  "verdict": "No Critical or High advisory affects ESF source dependency graphs or shipped artifacts; remaining image findings are upstream-rebuild or dev-only gaps, recorded not waived."
+}

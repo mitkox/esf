@@ -1,0 +1,158 @@
+{
+  "schema": "esf-component-upgrade/v1",
+  "baseline": "482d963afa5f6ac7addcb4bb8c2c9dbe68684a8f",
+  "candidate": "v0.7.3",
+  "queried_at": "2026-11-04T23:10:00+02:00/2026-11-04T23:35:00+02:00",
+  "sources": {
+    "npm": "https://registry.npmjs.org/",
+    "github": "https://api.github.com/",
+    "go_proxy": "https://proxy.golang.org/",
+    "pypi": "https://pypi.org/pypi/",
+    "docker_hub": "https://hub.docker.com/v2/repositories/",
+    "ghcr": "https://ghcr.io/v2/",
+    "grype_db": "2026-11-04T06:20:59Z",
+    "go_vuln": "https://vuln.go.dev"
+  },
+  "upgrades": {
+    "claude": {
+      "previous": "2.1.317",
+      "candidate": "2.1.318",
+      "archive_url": "https://github.com/anthropics/claude-code/releases/download/v2.1.318/claude-linux-x64.tar.gz",
+      "archive_sha256": "e6d426ca0c123f61fad58a361da0329f2a93cd206bc87040ed8d9576dd9eb583",
+      "sha256sums_sha256": "fdf91f973d12ef87258e9d4c0fa0189e33f2172dab66861349947452dc299b8e",
+      "binary_sha256": "708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd",
+      "notes": "archive digest equals the upstream SHASUMS256.txt line and GitHub asset digest; extracted binary reports 2.1.318 (Claude Code)"
+    },
+    "temporal_admin_tools": {
+      "previous": "1.32.1",
+      "candidate": "1.32.2",
+      "index_digest": "sha256:4a95866efba29d7e17ab012df5232795e8b0ad0f7d5f9d1ec4df321f7792a754",
+      "pushed_at": "2026-11-03T17:57:13Z",
+      "notes": "Docker Hub 1.32.2/1.32/latest all resolve to this digest; grype re-scan 0 Critical/High (1.32.1 had 2 Critical + 15 High fixed)"
+    },
+    "go": {
+      "github.com/grpc-ecosystem/grpc-gateway/v2": {
+        "previous": "v2.32.0",
+        "candidate": "v2.33.0"
+      },
+      "go.yaml.in/yaml/v3": {
+        "previous": "v3.0.5",
+        "candidate": "v3.0.6"
+      },
+      "notes": "indirect modules; no advisories at either version"
+    },
+    "python_lock": {
+      "filelock": {
+        "previous": "4.2.7",
+        "candidate": "4.2.9"
+      },
+      "typing-inspection": {
+        "previous": "0.4.4",
+        "candidate": "0.4.5"
+      },
+      "notes": "routine same-day patches; uv lock --check passes; constraint-blocked packages unchanged"
+    },
+    "console": {
+      "lucide-react": {
+        "previous": "1.67.0",
+        "candidate": "1.68.0"
+      },
+      "notes": "embedded tracked dist rebuilt deterministically; npm audit 0"
+    },
+    "ci": {
+      "astral-sh/setup-uv": {
+        "previous": "v10.3.2",
+        "candidate": "v10.3.3",
+        "commit": "68559e99cc807c1eb7e9238fd43a15bba460eec2"
+      }
+    },
+    "cube_recipe": {
+      "added_apt_pins": {
+        "openssl": "3.0.2-0ubuntu1.30",
+        "libssl3": "3.0.2-0ubuntu1.30",
+        "libbrotli1": "1.0.9-2ubuntu0.1"
+      },
+      "recipe_sha256": "db2ad990fea76abab48bde5cac37d2ae5a988ea1a5c753914c5e533ae921f4ad",
+      "notes": "removes CVE-2026-84782 and CVE-2026-111497 from the template base image"
+    }
+  },
+  "unchanged_current": {
+    "opencode": "2.2.5",
+    "codex": "0.166.0",
+    "unreal": "0.3.1",
+    "pi": "1.5.0",
+    "temporal_server": "1.32.2",
+    "temporal_ui": "2.58.0",
+    "temporal_go_sdk": "1.50.0",
+    "temporal_go_api": "1.64.1",
+    "cubesandbox": "0.7.3",
+    "cubesandbox_go_sdk": "v0.7.3",
+    "grpc": "1.85.0",
+    "otel": "1.47.0",
+    "protobuf": "1.36.12",
+    "x_net": "0.62.0",
+    "postgresql": "18.6",
+    "dspy": "3.4.1",
+    "go": "1.27.3",
+    "node": "26.13.0",
+    "python_optional": "3.15.2",
+    "python_dot_version": "3.14.10",
+    "uv": "0.13.7",
+    "kubectl": "1.37.2",
+    "helm": "4.3.1",
+    "govulncheck": "1.9.0",
+    "gitleaks": "8.30.1",
+    "harness2_commit": "1cfe254e8d25b15f37048c3730134686abe60335"
+  },
+  "constraint_blocked": [
+    {
+      "package": "litellm",
+      "locked": "1.103.10",
+      "latest": "1.108.0",
+      "reason": "stable releases >=1.104 require filelock<4.0, conflicting with the root filelock>=4.2.1 security minimum"
+    },
+    {
+      "package": "openai",
+      "locked": "2.54.0",
+      "latest": "3.45.0",
+      "reason": "installable litellm 1.103.10 caps openai<3.0.0"
+    },
+    {
+      "package": "importlib-metadata",
+      "locked": "8.9.0",
+      "latest": "10.1.0",
+      "reason": "litellm requires importlib-metadata<9.0"
+    },
+    {
+      "package": "python-dateutil",
+      "locked": "2.9.0.post0",
+      "latest": "4.0.0",
+      "reason": "botocore 1.43.123 requires python-dateutil<3.0.0"
+    }
+  ],
+  "known_unfixed": [
+    {
+      "package": "diskcache",
+      "version": "5.6.3",
+      "advisory": "GHSA-w8v5-vhqr-4h9v / CVE-2025-69872 / PYSEC-2026-2447",
+      "impact": "pickle deserialization via attacker-writable cache directory; no fixed release exists",
+      "mitigation": "disk cache disabled in both DSPy entry points; trusted/private cache directories"
+    }
+  ],
+  "local_template": {
+    "recipe_sha256": "db2ad990fea76abab48bde5cac37d2ae5a988ea1a5c753914c5e533ae921f4ad",
+    "image": "localhost:32001/esf-native@sha256:1fdb1c001fe4b6d7d3af9d25e84fe77e81e363957728fe66d9649386bb211fb7",
+    "platform_manifest": "localhost:32001/esf-native@sha256:aeb7e0b26e7bc00ca444351ea9e0394e7d4d6109ee7f046464f08fa0a0982b9b",
+    "template_id": "tpl-4ae712b3f614434a90959a81",
+    "alias": "esf-v073-native-20261104",
+    "status": "READY",
+    "payload_sha256": {
+      "opencode2": "8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050",
+      "claude": "708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd",
+      "codex": "b8a11fedf24b2dfb59a70c9e52b030f9a508dcd49cd2dd0d41956f4c785156b8",
+      "unreal_agent_runner": "d289aa2046bb79d2b063679c6e0e6b714c759f8a5ed6f969d3b3ea1eeeec03ee",
+      "pi_runner": "2f2b5191139a564050c98f0784e9be63893d47685abc6ac8a4049a942b201993",
+      "node": "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b"
+    }
+  }
+}
