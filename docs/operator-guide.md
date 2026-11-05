@@ -5,6 +5,10 @@ Everything an operator needs to run, inspect, and extend the factory.
 Before deployment, review [production readiness](production-readiness.md) for
 validated behavior, deployment boundaries, and live acceptance checks.
 
+The current candidate is ESF 1.0.0-beta.1, a beta with outstanding GA gates; see
+the [1.0.0-beta.1 release notes](release-v1.0.0-beta.1.md) for release status,
+the Harness2 improvement PoC removal and the operator migration steps.
+
 ---
 
 ## 1. What the factory discovers and configures

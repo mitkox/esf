@@ -75,15 +75,12 @@ internal/sandbox/             execution-provider interface and Cube adapter
 internal/verification/        deterministic build and test gates
 internal/repository/          exact-revision repository preparation
 internal/threatmon/           execution-time behavior monitor
-internal/harnessprofile/      Harness2 instructional profiles
-internal/inferencebudget/     inference budget accounting
 internal/notify/              run alerts
 internal/releaseinfo/         embedded release inventory
 internal/turnexec/            sf turn execution state and leases
 agents/                       optional packaged agent runners
 deploy/                       images, Helm chart, systemd worker unit
 scripts/                      release, qualification and operator tooling
-third_party/                  vendored method/notices (Harness2)
 tools/                        Cube discovery and optional Python utilities
 docs/                         user and design documentation
 ```

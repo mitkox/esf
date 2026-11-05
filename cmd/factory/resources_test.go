@@ -83,6 +83,34 @@ agentharness = "opencode2"
 	}
 }
 
+// TestReadRunSpecRejectsRemovedHarness2Fields pins the removed Harness2
+// manifest fields in both supported formats: a retained manifest must fail
+// loudly instead of silently dropping the setting it still names.
+func TestReadRunSpecRejectsRemovedHarness2Fields(t *testing.T) {
+	for _, field := range []string{"harness_profile", "improvement_policy"} {
+		tomlPath := writeSpec(t, "run.toml", `
+run_id = "run-1"
+repository = "https://github.com/acme/x"
+revision = "abc"
+task = "fix it"
+`+field+` = "removed"
+`)
+		if _, err := readRunSpec(tomlPath); err == nil {
+			t.Fatalf("readRunSpec accepted removed TOML field %q", field)
+		}
+		jsonPath := writeSpec(t, "run.json", `{
+  "run_id": "run-1",
+  "repository": "https://github.com/acme/x",
+  "revision": "abc",
+  "task": "fix it",
+  "`+field+`": "removed"
+}`)
+		if _, err := readRunSpec(jsonPath); err == nil {
+			t.Fatalf("readRunSpec accepted removed JSON field %q", field)
+		}
+	}
+}
+
 // TestRunRequestFromSpecEnforcesRequiredFields proves validation happens before
 // any workflow is started.
 func TestRunRequestFromSpecEnforcesRequiredFields(t *testing.T) {

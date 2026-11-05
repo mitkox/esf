@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: Candidate or RC tag matching inventory, such as v0.6.1-rc.1
+        description: Candidate, RC or beta tag matching inventory, such as v1.0.0-beta.1
         required: true
         type: string
       publish:
@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$IMAGE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(candidate|rc)\.[1-9][0-9]*$ ]]
+          [[ "$IMAGE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(candidate|rc|beta)\.[1-9][0-9]*$ ]]
           inventory_version=$(python3 -c 'import json; print(json.load(open("release/inventory.json"))["release"])')
           test "${IMAGE_TAG%%-*}" = "$inventory_version"
           printf 'binary_version=%s\n' "${inventory_version#v}" >> "$GITHUB_OUTPUT"

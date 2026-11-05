@@ -152,10 +152,7 @@ type PreviewLink struct {
 // snapshot lineage, model accounting and human review outcome, and adding those
 // fields later must not require rewriting the manifest.
 type RunManifest struct {
-	HarnessProfile       string              `json:"harness_profile,omitempty"`
-	HarnessProfileDigest string              `json:"harness_profile_digest,omitempty"`
-	Improvement          *ImprovementReceipt `json:"improvement,omitempty"`
-	Hardening            *HardeningEvidence  `json:"hardening,omitempty"`
+	Hardening *HardeningEvidence `json:"hardening,omitempty"`
 	// ── Identity ────────────────────────────────────────────────────────────
 	RunID          string `json:"run_id"`
 	FactoryVersion string `json:"factory_version"`
@@ -325,10 +322,8 @@ const (
 // set of user-controlled values: task text, an approved repository, and an
 // approved revision.
 type RunRequest struct {
-	HarnessProfile    string `json:"harness_profile,omitempty"`
-	ImprovementPolicy string `json:"improvement_policy,omitempty"`
-	RunID             string `json:"run_id"`
-	Repository        string `json:"repository"`
+	RunID      string `json:"run_id"`
+	Repository string `json:"repository"`
 	// RepositoryKind is "remote" or "local".
 	RepositoryKind string `json:"repository_kind,omitempty"`
 	// LocalPath is a host path, used by tests and by the acceptance fixture.
