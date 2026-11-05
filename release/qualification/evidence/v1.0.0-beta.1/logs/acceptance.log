@@ -1,18 +1,18 @@
 == preparing fixture repository ==
    path: /home/mitko/dev/esf/testdata/e2e-repo-work
-   sha:  a1c00c1bcbc04f6c081e408117512ee868510807
+   sha:  d69acb1391b21e336ef2f9002c2ff49ef6a62bca
    prerequisite: register this exact path in factory.toml [repositories].local_paths
 
 == building factory ==
    ok
 
 == starting factory worker ==
-   ready (pid 996261)
+   ready (pid 1262356)
 
 == submitting task ==
-Run ID:      run-0b3447c0f2a7e8220eed42e3
-Workflow ID: factory-run-run-0b3447c0f2a7e8220eed42e3
-Repository:  local:/home/mitko/dev/esf/testdata/e2e-repo-work @ a1c00c1bcbc04f6c081e408117512ee868510807
+Run ID:      run-8426d021f427ff4240804201
+Workflow ID: factory-run-run-8426d021f427ff4240804201
+Repository:  local:/home/mitko/dev/esf/testdata/e2e-repo-work @ d69acb1391b21e336ef2f9002c2ff49ef6a62bca
 Agent:       conformance
 Verification:default
 Template:    tpl-4fedc58c5f9543a39d721e37
@@ -23,7 +23,7 @@ FACTORY RESULT: SUCCEEDED
 AGENT RESULT:   SUCCESS
 SCOPE:          default
 EGRESS:         local-model (internet=allowed)
-INTAKE:          ready=true (p=0.64, uncalibrated), type=feature, ambiguity=clear
+INTAKE:          ready=true (p=0.63, uncalibrated), type=feature, ambiguity=clear
 EGRESS:         measured (policy=local-model expect_deny=false internet=REACHABLE metadata=UNKNOWN uid=0)
 BEHAVIOR:       clean (16 lines scanned, ruleset 1)
 GATE INTEGRITY: unchanged (tree-hash, 3 gate program(s) checked)
@@ -32,13 +32,13 @@ CLEANUP:        PASSED
 
 Conditions:
   Validated              True    PolicyAccepted — scope=default
-  SandboxReady           True    Created — sandbox=099a611396804549b0039c371dd5c452 template=tpl-4fedc58c5f9543a39d721e37
+  SandboxReady           True    Created — sandbox=2252435494524ad6ac353dc2d9f475e2 template=tpl-4fedc58c5f9543a39d721e37
   WorkspacePrepared      True    Provisioned — workspace= digest=
-  RepositoryPrepared     True    CheckedOut — sha=a1c00c1bcbc04f6c081e408117512ee868510807
-  InventoryWritten       True    Published — path=/workspace/.factory/inventory.json digest=sha256:7abb66c9b3b047bda5e752518dd62deb1c8f899dd4dc097461f0d82d89bc9e7a
+  RepositoryPrepared     True    CheckedOut — sha=d69acb1391b21e336ef2f9002c2ff49ef6a62bca
+  InventoryWritten       True    Published — path=/workspace/.factory/inventory.json digest=sha256:b1257422334f7e22ee69f8f4735f24df97b1d1085e958988b93fb50288ccb118
   EgressVerified         Unknown ProbeInconclusive — expect_deny=false internet=reachable metadata=unknown uid=0
   AgentBlocked           False   NotBlocked
-  AgentCompleted         True    ExitZero — attempt=1 duration=49.513275ms
+  AgentCompleted         True    ExitZero — attempt=1 duration=43.235299ms
   ArtifactsCollected     True    PostVerification — drift=false
   GateIntegrity          True    Unmodified — method=tree-hash gates=3
   BehaviorScanned        True    Clean — no findings
@@ -47,9 +47,9 @@ Conditions:
   CleanupVerified        True    NoSandboxesRemain — remaining=0
 
 Patch:
-/home/mitko/dev/esf/.factory/runs/run-0b3447c0f2a7e8220eed42e3/changes.patch
+/home/mitko/dev/esf/.factory/runs/run-8426d021f427ff4240804201/changes.patch
 Artifacts:
-/home/mitko/dev/esf/.factory/runs/run-0b3447c0f2a7e8220eed42e3
+/home/mitko/dev/esf/.factory/runs/run-8426d021f427ff4240804201
 
 == leakage check ==
 No live sandboxes.

@@ -1,30 +1,59 @@
 {
   "schema": "esf-acceptance/v1",
   "candidate": "v1.0.0-beta.1",
-  "baseline": "051062b47060c684b3bd52a8aeb4e9d958b83333",
-  "source_commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+  "candidate_commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+  "executed_build": {
+    "head_commit": "8f692108efffc338d6a262898d626f77b2682858",
+    "relationship": "ce962500 plus post-candidate tooling/docs/evidence commits only; Go source identical",
+    "factory_version_json": {
+      "release": "1.0.0",
+      "commit": "8f692108efffc338d6a262898d626f77b2682858",
+      "go_version": "go1.27.3",
+      "config_schema": 1
+    },
+    "go_source_identical_evidence": "git diff ce962500..8f692108 -- \"*.go\" is empty; the only changes are Makefile, docs/release-v1.0.0-beta.1.md and added release qualification evidence/record files."
+  },
   "template": "tpl-4fedc58c5f9543a39d721e37",
-  "build": "ESF 1.0.0 (ce9625006e180e632e646dc6d11ea8c2c497b15f, go1.27.3, config schema 1, template tpl-4fedc58c5f9543a39d721e37)",
+  "temporal_isolation": {
+    "host_port": "127.0.0.1:7233",
+    "namespace": "default",
+    "task_queue": "esf-beta1-validation-20261105",
+    "reason": "The earlier acceptance run run-0b3447c0f2a7e8220eed42e3 was executed by a stale pre-candidate worker (factory 0.7.3) still polling the shared default task queue 'factory'. Stale workers were deliberately left running; this run used a unique queue that only the script's worker polled (worker log records TaskQueue=esf-beta1-validation-20261105).",
+    "stale_workers_observed_untouched": [
+      "systemd user unit esf-worker.service (ESF 0.7.2, --config /home/mitko/dev/esf/factory.toml, queue factory)",
+      "PID 12642 (bin/factory --config /home/mitko/dev/esf/factory.toml worker, queue factory)",
+      "PID 12641 (superagent lane, queue superagent-esf)"
+    ],
+    "evidence_log": "logs/temporal-queue-isolation.log"
+  },
   "fixture": {
     "repository": "local:/home/mitko/dev/esf/testdata/e2e-repo-work",
-    "baseline_sha": "a1c00c1bcbc04f6c081e408117512ee868510807",
+    "baseline_sha": "d69acb1391b21e336ef2f9002c2ff49ef6a62bca",
     "task_hash": "85400ceedea8a049a4431cc5cea6b18c1d01dd4656d1501ef3f0afe25d2ea06a"
   },
   "runs": [
     {
       "agent": "conformance",
-      "run_id": "run-0b3447c0f2a7e8220eed42e3",
-      "workflow_id": "factory-run-run-0b3447c0f2a7e8220eed42e3",
+      "run_id": "run-8426d021f427ff4240804201",
+      "workflow_id": "factory-run-run-8426d021f427ff4240804201",
       "outcome": "PASSED",
+      "factory_version_durable_manifest": "1.0.0",
       "factory_result": "SUCCEEDED",
       "agent_result": "SUCCESS",
       "agent_exit_code": 0,
-      "sandbox_id": "099a611396804549b0039c371dd5c452",
+      "sandbox_id": "2252435494524ad6ac353dc2d9f475e2",
       "sandbox_template": "tpl-4fedc58c5f9543a39d721e37",
       "verification_result": "SUCCESS",
+      "verified_at": {
+        "started_at": "2026-11-05T10:09:14.204697729Z",
+        "completed_at": "2026-11-05T10:09:16.184735135Z",
+        "duration_ns": 1980037406
+      },
       "gates": {
         "Validated": "PolicyAccepted",
-        "SandboxReady": "Created (sandbox=099a611396804549b0039c371dd5c452, template=tpl-4fedc58c5f9543a39d721e37)",
+        "SandboxReady": "Created (sandbox=2252435494524ad6ac353dc2d9f475e2, template=tpl-4fedc58c5f9543a39d721e37)",
+        "WorkspacePrepared": "Provisioned",
+        "RepositoryPrepared": "CheckedOut (sha=d69acb1391b21e336ef2f9002c2ff49ef6a62bca)",
         "InventoryWritten": "Published",
         "EgressVerified": "Unknown/ProbeInconclusive (policy=local-model expect_deny=false internet=REACHABLE metadata=UNKNOWN uid=0; local profile acknowledges open egress; not a denial-path failure)",
         "AgentBlocked": "NotBlocked",
@@ -38,26 +67,32 @@
       },
       "cleanup": {
         "attempted": true,
-        "duration": 88937929,
-        "finished_at": "2026-11-05T09:47:38.024600906Z",
         "outcome": "SUCCESS",
+        "verified": true,
         "remaining_sandboxes": 0,
-        "sandbox_id": "099a611396804549b0039c371dd5c452",
-        "verified": true
+        "sandbox_id": "2252435494524ad6ac353dc2d9f475e2",
+        "finished_at": "2026-11-05T10:09:16.159632736Z"
       },
       "patch": {
         "path": "release/qualification/evidence/v1.0.0-beta.1/acceptance-patch.patch",
         "sha256": "365194a7478c8a4a35e3f59104b27496b1a3eb1f52166cc27c78bfdae8af2769",
-        "summary": "greeting.py: return hello -> return hello factory (fixture baseline a1c00c1b)"
+        "summary": "greeting.py: return hello -> return hello factory (fixture baseline d69acb13)"
       }
     }
   ],
+  "superseded_invalid_run": {
+    "run_id": "run-0b3447c0f2a7e8220eed42e3",
+    "reason": "Invalid: submitted to the shared default queue 'factory' and executed by a stale pre-candidate worker; its durable manifest factory_version is 0.7.3.",
+    "history": "superseded/acceptance-run-0b3447c0-invalid.json; superseded/acceptance-0b3447c0-invalid.log; superseded/acceptance-worker-0b3447c0-invalid.log"
+  },
   "leak_check": "factory sandboxes: No live sandboxes after cleanup (remaining_owned=0)",
   "not_cited": "No model-backed hosted-provider run was executed in this validation window; model-backed acceptance remains an outstanding GA gate.",
   "evidence": {
     "log": "release/qualification/evidence/v1.0.0-beta.1/logs/acceptance.log",
     "worker_log": "release/qualification/evidence/v1.0.0-beta.1/logs/acceptance-worker.log",
     "run_json": "release/qualification/evidence/v1.0.0-beta.1/acceptance-run.json",
-    "sandboxes_log": "release/qualification/evidence/v1.0.0-beta.1/logs/factory-sandboxes.log"
+    "sandboxes_log": "release/qualification/evidence/v1.0.0-beta.1/logs/factory-sandboxes.log",
+    "superseded_note": "release/qualification/evidence/v1.0.0-beta.1/superseded/invalid-run-note.json",
+    "temporal_isolation_log": "release/qualification/evidence/v1.0.0-beta.1/logs/temporal-queue-isolation.log"
   }
 }

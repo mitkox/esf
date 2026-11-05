@@ -1,0 +1,27 @@
+{
+  "schema": "esf-superseded-acceptance/v1",
+  "superseded_run": {
+    "run_id": "run-0b3447c0f2a7e8220eed42e3",
+    "workflow_id": "factory-run-run-0b3447c0f2a7e8220eed42e3",
+    "sandbox_id": "099a611396804549b0039c371dd5c452",
+    "factory_version_durable_manifest": "0.7.3",
+    "task_queue": "factory (shared default queue)"
+  },
+  "status": "INVALID - retained as history only, not cited as evidence",
+  "reason": "A stale pre-candidate worker (factory 0.7.3) still polling the shared default Temporal task queue 'factory' executed this run. Its durable manifest .factory/runs/run-0b3447c0f2a7e8220eed42e3/run.json records factory_version 0.7.3, so the run does not validate the 1.0.0 candidate.",
+  "root_cause_context": "Stale workers remained on the host and were deliberately not killed: systemd user unit esf-worker.service (ESF 0.7.2) plus PIDs 12642 (factory.toml worker, queue 'factory') and 12641 (superagent lane, queue 'superagent-esf').",
+  "replacement_run": {
+    "run_id": "run-8426d021f427ff4240804201",
+    "factory_version_durable_manifest": "1.0.0",
+    "task_queue": "esf-beta1-validation-20261105 (isolated)",
+    "evidence": "release/qualification/evidence/v1.0.0-beta.1/acceptance.json"
+  },
+  "retained_files": [
+    "superseded/acceptance-run-0b3447c0-invalid.json",
+    "superseded/acceptance-patch-0b3447c0-invalid.patch",
+    "superseded/acceptance-0b3447c0-invalid.log",
+    "superseded/acceptance-worker-0b3447c0-invalid.log",
+    "superseded/factory-sandboxes-0b3447c0-invalid.log"
+  ],
+  "note": "The patch content of both runs is identical (same deterministic fixture task); the defect was the executing factory binary version, recorded in the durable manifest."
+}

@@ -60,11 +60,15 @@
     {
       "id": "acceptance",
       "gate": "Conformance acceptance run + zero leaked sandboxes",
-      "result": "PASS",
+      "result": "PASS (valid isolated re-run run-8426d021f427ff4240804201, durable manifest factory_version 1.0.0; earlier run run-0b3447c0f2a7e8220eed42e3 is invalid and superseded)",
       "evidence": [
         "acceptance.json",
         "acceptance-run.json",
-        "acceptance-patch.patch"
+        "acceptance-patch.patch",
+        "logs/acceptance.log",
+        "logs/acceptance-worker.log",
+        "logs/factory-sandboxes.log",
+        "superseded/"
       ]
     },
     {
@@ -85,9 +89,26 @@
         "security/source-review-1.0.0-beta.1.json",
         "security/template-build-1.0.0-beta.1.json"
       ]
+    },
+    {
+      "id": "independent-review",
+      "gate": "Independent review (docs/review-v1.0.0-beta.1.md)",
+      "result": "PASS with caveats (no open Critical/High; R-01 evidence-integrity finding resolved by isolated re-run)",
+      "evidence": [
+        "docs/review-v1.0.0-beta.1.md"
+      ]
     }
   ],
   "known_issues": [
+    {
+      "severity": "High (evidence integrity)",
+      "status": "resolved-after-candidate (acceptance evidence re-executed on isolated queue)",
+      "summary": "The first conformance acceptance run (run-0b3447c0f2a7e8220eed42e3) was executed by a stale pre-candidate worker (factory 0.7.3) still polling the shared default Temporal task queue 'factory'; the run succeeded but its durable manifest factory_version is 0.7.3, so it did not validate the 1.0.0 candidate. Stale workers (systemd user unit esf-worker.service from 0.7.2, plus local workers) were deliberately left running. Fixed by re-running the acceptance gate on a unique queue esf-beta1-validation-20261105 using a build from HEAD 8f692108 (identical Go source); the valid run run-8426d021f427ff4240804201 records factory_version 1.0.0. Invalid artifacts are retained under superseded/ and are not cited as evidence.",
+      "found_by": "independent reviewer",
+      "invalid_evidence": "superseded/acceptance-run-0b3447c0-invalid.json",
+      "valid_evidence": "acceptance.json",
+      "valid_run_log": "logs/acceptance.log"
+    },
     {
       "severity": "Low",
       "status": "resolved-after-candidate (test tooling only)",
@@ -104,8 +125,47 @@
     "Model-backed hosted-provider acceptance (only deterministic conformance was executed)",
     "Image and Cube template publication through release workflows (local stack only here)",
     "Load / performance matrix",
-    "Independent reviewer sign-off",
-    "Per-image SBOM/vulnerability qualification, arm64 template, transitive license review"
+    "Per-image SBOM/vulnerability qualification, arm64 template, transitive license review",
+    "Final-release independent review (beta review complete: sign off with caveats)"
   ],
-  "post_candidate_note": "Tracked changes after candidate ce962500 are test-tooling and release-notes/documentation updates only, outside the release assets. The candidate commit and the RC assets remain ce962500; the record and evidence for the candidate itself are unchanged."
+  "post_candidate_note": "Tracked changes after candidate ce962500 are test-tooling and release-notes/documentation updates only, outside the release assets. The conformance acceptance gate was additionally re-executed from HEAD 8f692108 (candidate plus those commits; identical Go source) on an isolated Temporal queue after the first attempt was invalidated by a stale pre-candidate worker. The candidate commit and the RC assets remain ce962500.",
+  "acceptance_execution": {
+    "candidate_commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+    "executed_build_commit": "8f692108efffc338d6a262898d626f77b2682858",
+    "executed_build_relationship": "candidate plus post-candidate tooling/docs/evidence commits only; Go source identical",
+    "valid_run_id": "run-8426d021f427ff4240804201",
+    "valid_run_factory_version": "1.0.0",
+    "valid_run_sandbox_id": "2252435494524ad6ac353dc2d9f475e2",
+    "task_queue": "esf-beta1-validation-20261105 (isolated unique queue; namespace default)",
+    "invalid_superseded_run_id": "run-0b3447c0f2a7e8220eed42e3",
+    "invalid_reason": "stale pre-candidate worker (factory 0.7.3) on the shared default task queue 'factory' executed it; durable manifest factory_version 0.7.3",
+    "superseded_evidence": "superseded/invalid-run-note.json"
+  },
+  "security_evidence": {
+    "file": "security/security-scan-1.0.0-beta.1.json",
+    "sha256": "52c25931bcde8a4be1ef05c2388cb2040cec9fbca83d2803c4da42f500ab784b",
+    "evidence_updated_at": "2026-11-05T12:22:00+02:00",
+    "scanner_results_unchanged": "0 Critical/High on ESF product artifacts; scanner versions and database dates unchanged",
+    "provenance": {
+      "candidate_commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+      "candidate_git_tree_sha": "40bbe05e169cfa19d29a054ac9e2eeb3c3243e72",
+      "base_commit": "051062b47060c684b3bd52a8aeb4e9d958b83333",
+      "gitleaks_exact_tree_report_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "scanned_tree_manifest_sha256": "bca89f2e08ba958a13783141789f1464cd80132dd48a7f1c62f4143799ee5648",
+      "raw_evidence_manifest_sha256": "27939a14daa89b663f046454cf2c1d0842ebabf8064ad28d874219740bb976bc",
+      "note": "Tree-identity/provenance block added by the security workstream to bind the recorded scan results to committed candidate tree 40bbe05e (closes reviewer finding L-02); scanner results unchanged."
+    }
+  },
+  "independent_review": {
+    "document": "docs/review-v1.0.0-beta.1.md",
+    "verdict": "sign off with caveats",
+    "open_critical_high": 0,
+    "r01_evidence_integrity": "resolved by the isolated acceptance re-run run-8426d021f427ff4240804201 (factory_version 1.0.0); invalid run retained under superseded/ and not cited",
+    "caveats": "Recorded in the review document plus the release record's outstanding GA gates; a final-release independent review remains a GA gate."
+  },
+  "isolation_log_note": {
+    "finding": "L-03",
+    "note_file": "logs/temporal-queue-isolation-note.json",
+    "summary": "logs/temporal-queue-isolation.log is a post-run reconstruction from process/task-queue inspection; the primary isolation proofs are logs/acceptance-worker.log (TaskQueue=esf-beta1-validation-20261105) and acceptance-run.json (durable manifest factory_version 1.0.0)."
+  }
 }

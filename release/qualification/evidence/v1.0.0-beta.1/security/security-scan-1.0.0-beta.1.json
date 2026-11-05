@@ -2,10 +2,100 @@
   "schema": "esf-security-scan/v1",
   "release": "v1.0.0-beta.1",
   "candidate": "1.0.0-beta.1",
-  "source_commit": "051062b47060c684b3bd52a8aeb4e9d958b83333",
-  "source_state": "release/v1.0.0-beta.1 candidate working tree, 74 modified/deleted files (Harness2 removal, docs, release engineering, security remediation); HEAD base commit shown",
+  "candidate_commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+  "base_commit": "051062b47060c684b3bd52a8aeb4e9d958b83333",
+  "source_state": "release/v1.0.0-beta.1 candidate: commit ce9625006e180e632e646dc6d11ea8c2c497b15f (base 051062b47060c684b3bd52a8aeb4e9d958b83333). All scans ran on the uncommitted candidate working tree at 2026-11-05T09:37Z; that content became this commit. Compared with the committed tree, 530 of 533 packed entries are bit-identical; the 3 differing files are post-scan release-metadata/verifier updates and 5 files were added after the scan (docs ADR/release notes and these security evidence JSONs) - exact accounting in provenance.tree_identity. Diff vs base: 77 files changed (5 added, 45 modified, 27 deleted; +1,201/-7,530 lines).",
   "scanned_at": "2026-11-05T11:37:00+02:00",
   "scanned_at_utc": "2026-11-05T09:37:00Z",
+  "evidence_updated_at": "2026-11-05T12:22:00+02:00",
+  "provenance": {
+    "tree_identity": {
+      "candidate_commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+      "commit_subject": "release: v1.0.0-beta.1 candidate",
+      "git_tree_sha": "40bbe05e169cfa19d29a054ac9e2eeb3c3243e72",
+      "base_commit": "051062b47060c684b3bd52a8aeb4e9d958b83333",
+      "tree_entries": 538,
+      "regular_files": 537,
+      "executable_files": 17,
+      "symlinks": 1,
+      "symlink": "factory.example.toml -> internal/factory/example.toml",
+      "tree_diff_vs_base": {"files_changed": 77, "added": 5, "modified": 45, "deleted": 27, "insertions": 1201, "deletions": 7530},
+      "scan_time_vs_commit": {
+        "scan_time_packed_entries": 533,
+        "scan_time_regular_files": 532,
+        "scan_time_symlinks": 1,
+        "bit_identical_common_entries": 530,
+        "added_after_scan": [
+          "docs/adr/0009-remove-harness2-poc.md",
+          "docs/release-v1.0.0-beta.1.md",
+          "release/qualification/evidence/v1.0.0-beta.1/security/security-scan-1.0.0-beta.1.json",
+          "release/qualification/evidence/v1.0.0-beta.1/security/source-review-1.0.0-beta.1.json",
+          "release/qualification/evidence/v1.0.0-beta.1/security/template-build-1.0.0-beta.1.json"
+        ],
+        "updated_after_scan": [
+          "release/inventory.json",
+          "internal/releaseinfo/inventory.json",
+          "scripts/verify-release-inventory.py"
+        ],
+        "removed_after_scan": [],
+        "note": "The three updated files are release metadata/verifier content applied by the release lead after the security scans; none is a CVE-scanned input (not in the Go module graph, npm/python closures, image bases or recipes). The five added files are documentation and security evidence."
+      }
+    },
+    "commands": [
+      "git cat-file -t ce9625006e180e632e646dc6d11ea8c2c497b15f",
+      "git rev-parse ce9625006e180e632e646dc6d11ea8c2c497b15f^{tree}",
+      "git archive ce9625006e180e632e646dc6d11ea8c2c497b15f | tar -x -C <tmp>/candidate-tree",
+      "gitleaks dir <tmp>/candidate-tree --report-format json --report-path <run{1,2}.json> --exit-code 0 --no-color",
+      "git ls-tree -r ce9625006e180e632e646dc6d11ea8c2c497b15f",
+      "git diff --name-status 051062b47060c684b3bd52a8aeb4e9d958b83333 ce9625006e180e632e646dc6d11ea8c2c497b15f"
+    ],
+    "gitleaks_exact_tree": {
+      "tool": "gitleaks 8.30.1",
+      "target": "commit ce9625006e180e632e646dc6d11ea8c2c497b15f extracted via git archive (tree 40bbe05e169cfa19d29a054ac9e2eeb3c3243e72)",
+      "files_in_tree": 537,
+      "symlinks_in_tree": 1,
+      "symlinks_followed": false,
+      "bytes_scanned": 7593156,
+      "leaks": 0,
+      "deterministic": "two consecutive runs produced byte-identical JSON reports",
+      "report_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "scan_time_scope_note": "the earlier scan-time run covered the 532 tracked regular files plus 1 symlink then in the index; this exact-tree run additionally covers the 5 files added afterwards"
+    },
+    "scanned_tree_manifest": {
+      "scheme": "canonical text manifest: entries sorted by path bytes; regular files '<sha256-of-content>  <path>'; symlinks '<sha256-of-link-target-bytes>  <path>  symlink-><target>'; trailing newline",
+      "entries": 538,
+      "bytes": 58368,
+      "sha256": "bca89f2e08ba958a13783141789f1464cd80132dd48a7f1c62f4143799ee5648"
+    },
+    "raw_evidence_manifest": {
+      "directory": "docs/reports/security-1.0.0-beta.1/evidence/raw/ (gitignored local evidence)",
+      "scheme": "same canonical '<sha256>  <relative-path>' manifest, sorted by path bytes",
+      "files": 42,
+      "bytes": 4230,
+      "sha256": "27939a14daa89b663f046454cf2c1d0842ebabf8064ad28d874219740bb976bc"
+    },
+    "non_regression_checks": {
+      "purpose": "confirm the committed candidate tree produces the scanner results recorded in this file",
+      "gitleaks_exact_tree": "0 leaks",
+      "govulncheck_1.9.0_committed_tree": {"source": "0 findings", "binary": "0 findings", "db_last_modified": "2026-11-02T22:01:43Z"},
+      "npm_audit_11.20.0_committed_lockfiles": {
+        "internal/console/web": {"critical": 0, "high": 0},
+        "agents/opencode": {"critical": 0, "high": 0},
+        "agents/pi": {"critical": 0, "high": 0}
+      },
+      "python_closures": "uv export from the committed uv.lock with the same flags is byte-identical to the scanned 3.14 and 3.15 closures",
+      "deploy_input_hashes": {
+        "deploy/cube/Dockerfile": "128757ac757f1e42909dfb475abbe289f1648b2e75026221eec860d57b565fec",
+        "deploy/images/Dockerfile.runtime": "e93cda5ab9d6d0f0647b41132f234826d803fc267741cbdf1ee0ca092a67c36d",
+        "deploy/images/Dockerfile.intake": "8402689ce662e9780906a7fce31c6c6ef72c1f7a37e54b2aa700abb20ebf0f8d"
+      },
+      "rebuilt_images_scanned": {
+        "factory": {"image_id": "sha256:b0294cae3a8b04163dd4574f3b5e674a8d1298166b6c4af5184f7edca804b6f7", "critical": 0, "high": 0, "total_matches": 0},
+        "intake": {"image_id": "sha256:cc463178884251a30cf182950709d2288a65d8ab120ae6b8e2864c8275d6c99a", "critical": 0, "high": 0, "total_matches": 6}
+      },
+      "scanner_data_unchanged": "grype DB 2026-11-05T06:21:06Z, govulncheck/vuln.go.dev DB 2026-11-02T22:01:43Z, gitleaks 8.30.1 - same as recorded above"
+    }
+  },
   "scanners": {
     "govulncheck": {
       "version": "1.9.0",
@@ -48,9 +138,12 @@
     "syft": {"version": "1.56.0"},
     "gitleaks": {
       "version": "8.30.1",
-      "scope": "532 tracked files packed from the candidate working tree (git archive equivalent via git ls-files)",
-      "command": "gitleaks detect --no-git --source <packed tracked tree>",
-      "leaks": 0
+      "scope": "committed candidate tree ce9625006e180e632e646dc6d11ea8c2c497b15f (git tree 40bbe05e169cfa19d29a054ac9e2eeb3c3243e72), extracted with git archive: 538 entries = 537 regular files + 1 symlink; symlinks not followed",
+      "command": "gitleaks dir <tmp>/candidate-tree --report-format json --report-path <report>.json --exit-code 0 --no-color",
+      "leaks": 0,
+      "bytes_scanned": 7593156,
+      "report_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "deterministic": true
     }
   },
   "artifacts": [
@@ -196,12 +289,12 @@
       "docs/reports/security-1.0.0-beta.1/evidence/doctor-agents-template-full.log"
     ]
   },
-  "raw_evidence": "docs/reports/security-1.0.0-beta.1/evidence/raw/ (gitignored; raw scanner JSON and logs)",
+  "raw_evidence": "docs/reports/security-1.0.0-beta.1/evidence/raw/ (gitignored; 42 raw scanner JSON files, canonical manifest sha256 27939a14daa89b663f046454cf2c1d0842ebabf8064ad28d874219740bb976bc) and docs/reports/security-1.0.0-beta.1/evidence/logs/",
   "coverage_limits": [
     "Only linux/amd64 images were built and scanned; arm64 templates remain a GA gate (pre-existing).",
     "grype matches package versions, not reachability; Medium/Low/Negligible vendor-layer matches remain in the Cube template (no Critical/High).",
     "No project test suite was executed on the host; the Cube lifecycle smoke, factory doctor and agent digest verification ran against disposable Cube sandboxes/loopback services.",
     "Temporal UI and PostgreSQL patched derived images were built and scanned locally but are not applied (dev/reference stack, outside security-auditor write scope).",
-    "The candidate working tree was still receiving documentation/release-metadata edits during the final scans; the Go dependency graph, images and template recipe pins were stable across the final scan."
+    "Scans ran on the candidate working tree whose content became commit ce9625006e180e632e646dc6d11ea8c2c497b15f; post-scan edits are limited to release metadata/verifier files and the added documentation/security-evidence files listed in provenance.tree_identity (no CVE-scanned input changed)."
   ]
 }

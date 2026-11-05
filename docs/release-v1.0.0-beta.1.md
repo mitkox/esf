@@ -3,8 +3,8 @@
 1.0.0-beta.1 is the first beta of ESF 1.0.0: a production-oriented candidate of
 the factory surface that has been exercised through the 0.7.x release line. It
 removes the unqualified Harness2 improvement proof of concept, freezes the 1.0.0
-release metadata, and is published under a semver prerelease tag so it cannot be
-mistaken for the final 1.0.0 release.
+release metadata, and carries a semver prerelease tag so it cannot be mistaken
+for the final 1.0.0 release.
 
 The binary, archive, chart and Python distribution version is **1.0.0**; the
 distribution tag is **v1.0.0-beta.1**. Runs produced by this build record
@@ -176,6 +176,17 @@ The rebuilt `envd`/Unreal payloads were validated on the local Cube stack
 (template `tpl-4fedc58c5f9543a39d721e37`, `cube-smoke`, `factory doctor`,
 `agents verify`, zero sandbox leaks) before acceptance.
 
+### Residual inherited-platform risks (not ESF product artifacts)
+
+| Item | Finding | Reachability | Owner | GA gate |
+| --- | --- | --- | --- | --- |
+| Temporal UI 2.58.0 (upstream image) | 1 High (`GO-2026-5026`) | Dev/reference-stack UI only; not built or published by ESF | Operator deployment (Temporal) | Pin an upstream release that fixes it; a locally derived patched image already scans 0/0 but upstream has not republished |
+| PostgreSQL 18.6-alpine (dev-only local Temporal database) | 8 Critical / 17 High in the upstream Alpine layer | Dev/reference-stack database only; never shipped | Operator / development environment | Pin a fixed upstream image or apply the proven derived image outside the release tree |
+| `diskcache` 5.6.3 (optional Python closure via dspy) | 1 Medium, unfixed upstream | Both DSPy entry points disable the on-disk cache, so the pickle path is not reachable | ESF dependency tracking | Adopt the upstream fix when released; the CI locked-closure audit keeps a narrow documented exception |
+| Cube template arm64 | Not built or scanned; the recipe gates `TARGETARCH=amd64` | Only the amd64 template is shipped/validated | ESF release engineering | Build, scan and qualify an arm64 template before claiming multi-arch template support |
+| Optional upstream Unreal release binary (Go 1.27.0) | 8 High in the upstream GitHub release | Only if an operator installs the upstream binary outside the ESF template; the in-template payload is rebuilt and scans 0/0 | Operator | Prefer the template payload; rebuild or publish a fixed install-path binary before offering the upstream release as a supported option |
+| Per-image SBOM and vulnerability qualification, transitive-license review | Not automated as release gates | Detection and evidence exist for this beta, but no publish-time gate consumes the SBOMs | ESF release engineering | Add SBOM/vulnerability and license gates to the image release workflows for GA |
+
 ## Toolchain and component status
 
 Go **1.27.3** and Node.js **26.13.0** remain the required build toolchains;
@@ -236,8 +247,13 @@ evidence is separated from build, Cube and acceptance evidence).
   checks, and SBOM validation passed. The optional Docker Python-test fallback
   was repaired with a follow-up test-tooling-only change after the candidate
   commit; it does not affect shipped artifacts.
-- Conformance acceptance run `run-0b3447c0f2a7e8220eed42e3` passed every
-  deterministic gate with a verified patch and zero leaked sandboxes;
+- Conformance acceptance re-run `run-8426d021f427ff4240804201` on an isolated
+  Temporal task queue recorded `factory_version = 1.0.0` and passed every
+  deterministic gate with a verified patch and zero leaked sandboxes. The re-run
+  used the post-candidate evidence commit `8f692108`, whose Go source is
+  identical to candidate `ce962500`. A first
+  attempt was invalidated because a stale 0.7.x worker on the shared default
+  queue executed it; it is retained as superseded evidence and is not cited.
   `factory config validate`, `factory doctor`, `factory agents verify` and
   `make cube-smoke` passed on the new template.
 - Release-candidate assets were built from a pristine worktree at the candidate
@@ -266,12 +282,14 @@ The following are explicitly deferred from this beta and must close before
   CubeEgress profiles with the hosted providers and models documented for each
   harness; the beta validation uses deterministic/conformance execution only.
 - **Image/template publication:** building, attesting and publishing immutable
-  factory/intake images and the Cube template with recorded digests, and
-  qualifying the published template.
+  factory/intake images and the Cube template with recorded digests, qualifying
+  the published template, and consuming per-image SBOM/vulnerability and
+  transitive-license evidence in the release workflow.
 - **Performance/load check** at the intended deployment size, and sign-off of
   the residual inherited-platform risk record.
-- **Independent review sign-off** of the integrated candidate and the final
-  release diff.
+- **Final release review:** an independent review of the final 1.0.0 release
+  diff. The beta candidate review is complete and recorded in
+  [the review record](review-v1.0.0-beta.1.md).
 
 These gates belong to the 1.0.0 GA milestone, not to this beta. A passing beta
 build does not imply any of them has passed.
