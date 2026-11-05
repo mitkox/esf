@@ -1,0 +1,29 @@
+
+> esf-factory-console@0.1.0 test
+> node --test --test-concurrency=1 src/lib/*.test.js
+
+✔ bearer survives unavailable storage for reads and raw downloads (16.361242ms)
+✔ formatNumber uses separators and compact notation (10.934432ms)
+✔ formatPercent and formatDelta are stable for dashboards (0.107213ms)
+✔ formatDuration covers milliseconds to days (0.085221ms)
+✔ formatBytes and formatUsd report absence honestly (0.085903ms)
+✔ time formatting helpers are deterministic (2.177417ms)
+✔ run state helpers classify outcomes (0.097244ms)
+✔ cleanup and repository presentation (0.221067ms)
+✔ percentile interpolates and handles empty input (0.088367ms)
+✔ parseUnifiedDiff produces per-file rows and stats (0.499394ms)
+✔ parseUnifiedDiff detects binary patches (0.141598ms)
+✔ parseUnifiedDiff keeps changed lines that look like file headers (0.092576ms)
+✔ routeFromHash resolves every top-level view (0.795053ms)
+✔ routeFromHash resolves detail routes and decodes ids (0.110088ms)
+✔ hrefFor builds shareable deep links (0.145916ms)
+✔ activeNavItem maps detail views to their parent navigation item (0.069401ms)
+✔ navigation exposes every screen exactly once (0.107613ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 122.341431

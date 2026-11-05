@@ -220,27 +220,34 @@ this document does not duplicate the full digest list.
 
 ## Validation record
 
-**PENDING (LEAD / VALIDATOR FILL) — must be updated before the tag is cut.**
-The executed evidence for this candidate is recorded in
-`release/qualification/v1.0.0-beta.1.md` with artifacts under
-`release/qualification/evidence/v1.0.0-beta.1/` (security evidence separated from
-build, Cube and acceptance evidence). The record is not published in this
-document revision yet, so this release notes page makes no validation claim
-beyond the retained 0.7.3 records. When the record lands it should state, per
-gate:
+Executed on 2026-11-05 against candidate
+`ce9625006e180e632e646dc6d11ea8c2c497b15f` on the security-refreshed Cube
+template `tpl-4fedc58c5f9543a39d721e37`. The evidence-bound record is
+[the 1.0.0-beta.1 qualification record](../release/qualification/v1.0.0-beta.1.md)
+with artifacts under `release/qualification/evidence/v1.0.0-beta.1/` (security
+evidence is separated from build, Cube and acceptance evidence).
 
-- host compile plus the complete Go suite executed inside disposable Cube
-  microVMs (no project test execution on the host);
-- console tests/build, Python tooling tests, Temporal schema check, `make lint`,
-  release-inventory and Pi-inventory checks, and the secret scan;
-- conformance acceptance run, `factory doctor`, Cube smoke check and zero
-  sandbox leaks;
-- release-candidate build with `v1.0.0-beta.1`, `scripts/verify-release.sh`,
-  SBOM validation and a reproducibility re-build;
-- the security validation above, with the final scanner counts.
+- Host compile plus the complete Go suite executed inside disposable Cube
+  microVMs: 15 compiled test binaries, 692 passing test records, 0 failures and
+  0 skips, both release checks, a clean gitleaks 8.30.1 secret scan, verified
+  cleanup and zero owned sandboxes remaining.
+- Console tests/build (17/17, tracked `dist` unchanged), Python tooling tests,
+  Temporal schema check, `make lint`, release-inventory and Pi-inventory
+  checks, and SBOM validation passed. The optional Docker Python-test fallback
+  was repaired with a follow-up test-tooling-only change after the candidate
+  commit; it does not affect shipped artifacts.
+- Conformance acceptance run `run-0b3447c0f2a7e8220eed42e3` passed every
+  deterministic gate with a verified patch and zero leaked sandboxes;
+  `factory config validate`, `factory doctor`, `factory agents verify` and
+  `make cube-smoke` passed on the new template.
+- Release-candidate assets were built from a pristine worktree at the candidate
+  commit as `v1.0.0-beta.1`, passed `scripts/verify-release.sh`, contained no
+  Harness2 paths, produced a valid CycloneDX 1.6 SBOM, and reproduced
+  byte-for-byte on a second build.
+- Security validation is summarized above: zero Critical/High on ESF product
+  artifacts, with inherited platform residuals recorded with owner and GA gate.
 
-Until that record exists, the beta is built from a code-complete candidate whose
-release gates are still being executed.
+This record covers a beta candidate. It does not satisfy the GA gates below.
 
 ## Outstanding GA gates
 

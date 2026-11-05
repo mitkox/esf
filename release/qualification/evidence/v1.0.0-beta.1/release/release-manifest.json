@@ -1,0 +1,7 @@
+{
+  "release": "v1.0.0-beta.1",
+  "binary_release": "v1.0.0",
+  "commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+  "go_toolchain": "go1.27.3",
+  "targets": ["linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64"]
+}

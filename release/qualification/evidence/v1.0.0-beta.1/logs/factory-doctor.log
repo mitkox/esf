@@ -1,0 +1,38 @@
+Configuration:
+  data dir:        /home/mitko/dev/esf/.factory
+  cube api:        http://127.0.0.1:4000
+  cube template:   tpl-4fedc58c5f9543a39d721e37
+  cube api key:    unset
+  temporal:        127.0.0.1:7233 (namespace default)
+  task queue:      factory
+  remote repos:    [https://github.com/mitkox/]
+
+Hardening:
+  egress probe:    true
+  behavior monitor:true (trip at HIGH)
+  gate self-mod:   false
+  require non-root:false
+  alerts:          false
+  open egress ack: true
+  [WARN] hardening.acknowledge_open_egress is true: at least one egress policy permits the public internet
+  [WARN] no hardening.alert_webhook_url is configured: security alerts are recorded in evidence but never delivered
+  [WARN] hardening.require_non_root is false: a template that runs the agent as uid 0 is accepted
+
+CubeSandbox:
+  [ok]   provider cubesandbox reachable, template tpl-4fedc58c5f9543a39d721e37 exists
+  [ok]   0 live sandbox(es)
+
+Temporal:
+  [ok]   127.0.0.1:7233 reachable
+
+Harnesses:
+  [ok]   claude (model deepseek-v4.1-flash)
+  [ok]   codex (model deepseek-v4.1-flash)
+  [ok]   conformance (model )
+  [ok]   harness-opt-fix (model )
+  [ok]   noop (model )
+  [ok]   opencode2 (model opencode-go/deepseek-v4.1-flash)
+  [ok]   pi (model deepseek-v4.1-flash)
+  [ok]   unreal (model deepseek-v4.1-flash)
+
+Factory doctor: all checks passed.

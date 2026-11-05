@@ -1,0 +1,7 @@
+[ok] claude: template sha256 708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd
+[ok] codex: template sha256 b8a11fedf24b2dfb59a70c9e52b030f9a508dcd49cd2dd0d41956f4c785156b8
+[ok] harness-opt-fix: sha256 f343b3e119a68a7980428c89a9bba5014821eb24d521e83d9f384221b8852889
+[ok] opencode2: template sha256 8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050
+[ok] pi: template sha256 2f2b5191139a564050c98f0784e9be63893d47685abc6ac8a4049a942b201993
+[ok] pi: runtime digest and runner self-check
+[ok] unreal: template sha256 056c3492d2eeec1ad21cb75728a85acbf01657447710da4176fc524c70ce8dd9

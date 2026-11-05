@@ -1,0 +1,63 @@
+{
+  "schema": "esf-acceptance/v1",
+  "candidate": "v1.0.0-beta.1",
+  "baseline": "051062b47060c684b3bd52a8aeb4e9d958b83333",
+  "source_commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+  "template": "tpl-4fedc58c5f9543a39d721e37",
+  "build": "ESF 1.0.0 (ce9625006e180e632e646dc6d11ea8c2c497b15f, go1.27.3, config schema 1, template tpl-4fedc58c5f9543a39d721e37)",
+  "fixture": {
+    "repository": "local:/home/mitko/dev/esf/testdata/e2e-repo-work",
+    "baseline_sha": "a1c00c1bcbc04f6c081e408117512ee868510807",
+    "task_hash": "85400ceedea8a049a4431cc5cea6b18c1d01dd4656d1501ef3f0afe25d2ea06a"
+  },
+  "runs": [
+    {
+      "agent": "conformance",
+      "run_id": "run-0b3447c0f2a7e8220eed42e3",
+      "workflow_id": "factory-run-run-0b3447c0f2a7e8220eed42e3",
+      "outcome": "PASSED",
+      "factory_result": "SUCCEEDED",
+      "agent_result": "SUCCESS",
+      "agent_exit_code": 0,
+      "sandbox_id": "099a611396804549b0039c371dd5c452",
+      "sandbox_template": "tpl-4fedc58c5f9543a39d721e37",
+      "verification_result": "SUCCESS",
+      "gates": {
+        "Validated": "PolicyAccepted",
+        "SandboxReady": "Created (sandbox=099a611396804549b0039c371dd5c452, template=tpl-4fedc58c5f9543a39d721e37)",
+        "InventoryWritten": "Published",
+        "EgressVerified": "Unknown/ProbeInconclusive (policy=local-model expect_deny=false internet=REACHABLE metadata=UNKNOWN uid=0; local profile acknowledges open egress; not a denial-path failure)",
+        "AgentBlocked": "NotBlocked",
+        "AgentCompleted": "ExitZero (attempt=1)",
+        "ArtifactsCollected": "PostVerification, drift=false",
+        "GateIntegrity": "Unmodified (tree-hash, 3 gate programs)",
+        "BehaviorScanned": "Clean (16 lines scanned, ruleset 1)",
+        "Verified": "AllGatesPassed",
+        "BudgetExceeded": "WithinBudget",
+        "CleanupVerified": "NoSandboxesRemain, remaining=0"
+      },
+      "cleanup": {
+        "attempted": true,
+        "duration": 88937929,
+        "finished_at": "2026-11-05T09:47:38.024600906Z",
+        "outcome": "SUCCESS",
+        "remaining_sandboxes": 0,
+        "sandbox_id": "099a611396804549b0039c371dd5c452",
+        "verified": true
+      },
+      "patch": {
+        "path": "release/qualification/evidence/v1.0.0-beta.1/acceptance-patch.patch",
+        "sha256": "365194a7478c8a4a35e3f59104b27496b1a3eb1f52166cc27c78bfdae8af2769",
+        "summary": "greeting.py: return hello -> return hello factory (fixture baseline a1c00c1b)"
+      }
+    }
+  ],
+  "leak_check": "factory sandboxes: No live sandboxes after cleanup (remaining_owned=0)",
+  "not_cited": "No model-backed hosted-provider run was executed in this validation window; model-backed acceptance remains an outstanding GA gate.",
+  "evidence": {
+    "log": "release/qualification/evidence/v1.0.0-beta.1/logs/acceptance.log",
+    "worker_log": "release/qualification/evidence/v1.0.0-beta.1/logs/acceptance-worker.log",
+    "run_json": "release/qualification/evidence/v1.0.0-beta.1/acceptance-run.json",
+    "sandboxes_log": "release/qualification/evidence/v1.0.0-beta.1/logs/factory-sandboxes.log"
+  }
+}

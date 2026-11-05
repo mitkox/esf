@@ -1,0 +1,111 @@
+{
+  "schema": "esf-validation-summary/v1",
+  "candidate": "v1.0.0-beta.1",
+  "record": "release/qualification/v1.0.0-beta.1.md",
+  "source_commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+  "branch": "release/v1.0.0-beta.1",
+  "branch_base": "051062b47060c684b3bd52a8aeb4e9d958b83333",
+  "source_archive_sha256": "dc936ad966aab1b16c68da96d73b23a25094d8f5b538944291511105549bb1f0",
+  "template": {
+    "id": "tpl-4fedc58c5f9543a39d721e37",
+    "alias": "esf-v100-beta1-full-20261105",
+    "image": "127.0.0.1:32001/esf-native-pi@sha256:bd11873f03e34b0c9b051f220fd627a6b175e1c56f37ef25d130b2e1168804c4",
+    "validated_by": "make cube-smoke, factory doctor, factory agents verify, conformance acceptance run",
+    "security_evidence": "security/template-build-1.0.0-beta.1.json"
+  },
+  "build": {
+    "go": "go1.27.3",
+    "go_toolchain_release_build": "go1.27.3",
+    "node": "v26.13.0",
+    "npm": "11.20.0",
+    "python3": "3.15.2",
+    "uv": "0.13.7",
+    "factory_version_json": {
+      "release": "1.0.0",
+      "commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+      "go_version": "go1.27.3",
+      "config_schema": 1
+    }
+  },
+  "gates": [
+    {
+      "id": "cube-go-suite",
+      "gate": "Cube-executed Go suite + release checks + gitleaks",
+      "result": "PASS",
+      "evidence": [
+        "cube-test.json",
+        "cube-test-summary.json"
+      ]
+    },
+    {
+      "id": "static",
+      "gate": "Static checks (lint, console, Python, Temporal schema, inventory verifiers, SBOM)",
+      "result": "PASS (including repaired Docker Python fallback re-run after candidate)",
+      "evidence": [
+        "static-checks.json",
+        "logs/make-test-python-docker.log"
+      ]
+    },
+    {
+      "id": "runtime",
+      "gate": "Runtime: cube-smoke, config validate, doctor, agents verify",
+      "result": "PASS",
+      "evidence": [
+        "logs/cube-smoke.log",
+        "logs/factory-config-validate.log",
+        "logs/factory-doctor.log",
+        "logs/factory-agents-verify.log"
+      ]
+    },
+    {
+      "id": "acceptance",
+      "gate": "Conformance acceptance run + zero leaked sandboxes",
+      "result": "PASS",
+      "evidence": [
+        "acceptance.json",
+        "acceptance-run.json",
+        "acceptance-patch.patch"
+      ]
+    },
+    {
+      "id": "release-assets",
+      "gate": "RC build, verify, reproducibility, archives/manifest/checksums/SBOM/inventory",
+      "result": "PASS",
+      "evidence": [
+        "release-assets.json",
+        "release/"
+      ]
+    },
+    {
+      "id": "security",
+      "gate": "Security review: zero Critical/High on ESF product artifacts (security-auditor evidence)",
+      "result": "PASS (referenced, not re-executed)",
+      "evidence": [
+        "security/security-scan-1.0.0-beta.1.json",
+        "security/source-review-1.0.0-beta.1.json",
+        "security/template-build-1.0.0-beta.1.json"
+      ]
+    }
+  ],
+  "known_issues": [
+    {
+      "severity": "Low",
+      "status": "resolved-after-candidate (test tooling only)",
+      "summary": "make test-python-docker failed during candidate validation (intake final stage lacks test sources; discovery ran from /). Repaired by a follow-up test-tooling-only change after candidate ce962500 (mount checkout at /src, -w /src). Re-run PASS: 8 intake + 7 brief_lab tests. No image/product/shipped artifact changed; candidate commit and release assets remain ce962500.",
+      "pre_fix_evidence": "logs/make-test-python-docker-failure.log",
+      "post_fix_evidence": "logs/make-test-python-docker.log",
+      "post_fix_log_sha256": "52fb90909e2d7ec35f9ae1ca38e59ec7dc3acbaef9153aa629818eb008ba4144"
+    }
+  ],
+  "outstanding_ga_gates": [
+    "24-hour VM/Temporal soak",
+    "Kubernetes/Helm deployment qualification",
+    "Restore / Temporal history replay / migration drill",
+    "Model-backed hosted-provider acceptance (only deterministic conformance was executed)",
+    "Image and Cube template publication through release workflows (local stack only here)",
+    "Load / performance matrix",
+    "Independent reviewer sign-off",
+    "Per-image SBOM/vulnerability qualification, arm64 template, transitive license review"
+  ],
+  "post_candidate_note": "Tracked changes after candidate ce962500 are test-tooling and release-notes/documentation updates only, outside the release assets. The candidate commit and the RC assets remain ce962500; the record and evidence for the candidate itself are unchanged."
+}
