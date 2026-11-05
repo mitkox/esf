@@ -1,9 +1,9 @@
 # Deploying the factory worker
 
-The 1.0.0-beta.1 candidate requires an attested companion qualification manifest
-for the exact source and built assets before production use. It is a beta: the
+The 1.0.0-rc.1 candidate requires an attested companion qualification manifest
+for the exact source and built assets before production use. It is a release candidate: the
 outstanding GA gates in the
-[1.0.0-beta.1 release notes](release-v1.0.0-beta.1.md) remain open. This guide
+[1.0.0-rc.1 release notes](release-v1.0.0-rc.1.md) remain open. This guide
 describes the deployment configuration; it does not qualify a deployment.
 Complete the live, security, backup, restore, migration, load and soak checks in
 those release notes. Input versions remain recorded in the
@@ -326,7 +326,7 @@ evidence (and optional bounded live Temporal/Cube reads). Keep it on loopback
 behind TLS, or let a reverse proxy terminate TLS; see the
 [console guide](console.md). CLI-first operators can continue to use
 `factory describe`, `status --watch`, `logs` and `get changes`. See
-[the 1.0.0-beta.1 release notes](release-v1.0.0-beta.1.md) and
+[the 1.0.0-rc.1 release notes](release-v1.0.0-rc.1.md) and
 [ADR 0008](adr/0008-remove-machinist.md).
 
 ### Local repository registration

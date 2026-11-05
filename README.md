@@ -38,14 +38,14 @@ factory is now the only product surface. See [upstream history](docs/upstream.md
 This is actively developed software. Review the [validated behavior and
 operational requirements](docs/production-readiness.md) before deployment.
 ESF produces changes for review; it does not decide what ships.
-ESF 1.0.0-beta.1 is the first beta of 1.0.0: a production-oriented candidate, not
+ESF 1.0.0-rc.1 is the first release candidate of 1.0.0: a production-oriented candidate, not
 a production qualification. It removes the experimental Harness2 improvement
 proof of concept, so an existing installation must drop that configuration
 before upgrading. The enterprise console and production-TLS work build on the
 [latest component refresh record](release/qualification/component-upgrade-2026-11-04.md).
 Production qualification requires a matching, attested companion manifest for
 its exact source and asset digests. The
-[1.0.0-beta.1 release notes](docs/release-v1.0.0-beta.1.md) record the changes,
+[1.0.0-rc.1 release notes](docs/release-v1.0.0-rc.1.md) record the changes,
 migration steps, security validation and outstanding GA gates.
 
 > **Upgrading:** the factory now refuses to start when an egress policy leaves
@@ -55,7 +55,7 @@ migration steps, security validation and outstanding GA gates.
 
 ## Quick start
 
-Requirements for v1.0.0-beta.1 development: Go 1.27.3, Node.js 26.13.0 (console,
+Requirements for v1.0.0-rc.1 development: Go 1.27.3, Node.js 26.13.0 (console,
 agent and Pi packaging), Git, an existing CubeSandbox 0.7.3 deployment with a
 READY template, and Temporal. Python tools use the frozen `uv.lock`; they are
 optional. Docker Compose can run the included local Temporal stack.
@@ -160,7 +160,7 @@ reverse-proxy examples, throttling and operator workflows.
 | [DSPy brief lab](tools/brief_lab/README.md) | Offline, evidence-scored implementation brief experiments |
 | [Production deployment](docs/production-deployment.md) | Service setup, TLS, encryption and recovery |
 | [Readiness review](docs/production-readiness.md) | Validation and operational requirements |
-| [1.0.0-beta.1 release notes](docs/release-v1.0.0-beta.1.md) | Beta status, Harness2 removal and migration, security validation, GA gates |
+| [1.0.0-rc.1 release notes](docs/release-v1.0.0-rc.1.md) | Release-candidate status, Harness2 removal and migration, security validation, GA gates |
 | [Documentation index](docs/README.md) | All guides, harnesses and design records |
 | [Architecture decisions](docs/adr/) | Design rationale |
 

@@ -95,7 +95,7 @@ model-backed acceptance and production qualification.
 The 0.7.0 local Linux/amd64 profile qualified Claude Code 2.1.300 and Codex
 0.162.1 with `deepseek-v4.1-flash` through OpenCode Go. The 0.7.3 component
 refresh pinned Claude Code 2.1.318 and Codex 0.166.0 and verified both binary
-digests and CLI startup inside the rebuilt Cube template. The 1.0.0-beta.1
+digests and CLI startup inside the rebuilt Cube template. The 1.0.0-rc.1
 release inventory records the current pins and any security-driven update; it
 does not claim model-backed acceptance for them, which remains a separate gate.
 The names `claude` and `codex` select the CLI harness; inference uses the

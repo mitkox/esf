@@ -84,7 +84,7 @@
     "postgresql": null
   },
   "templates": {
-    "recipe_sha256": "128757ac757f1e42909dfb475abbe289f1648b2e75026221eec860d57b565fec",
+    "recipe_sha256": "c4c9126761bb6c1c04f3d7f306c75fb341bafc24340d4b1578221397925799eb",
     "architecture": "linux/amd64",
     "git_package": null,
     "ca_certificates_package": null,

@@ -1,0 +1,36 @@
+go run ./tools/cube-smoke
+Cube endpoint:  http://127.0.0.1:4000
+Template:       tpl-4fedc58c5f9543a39d721e37
+
+  [ok]   endpoint reachable           health ok, 0 sandbox(es) present
+  [ok]   sandbox created              id=35c116570d8847e083c3f0ab907971b3 in 78ms
+  [ok]   command execution            exit=0 stdout="factory-cube-ok"
+  [ok]   command execution (2)        Linux tpl-4fed 6.6.1199-0009-03_2.0.1 #1 SMP PREEMPT_DYNAMIC Mon Oct 12 03:26:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+  [ok]   stdout/stderr split          exit code and both streams preserved
+
+  -- sandbox image probe (informational) --
+     bash=GNU bash, version 5.1.16(1)-release (x86_64-pc-linux-gnu)
+     cpucount=2
+     curl=curl 7.81.0 (x86_64-pc-linux-gnu) libcurl/7.81.0 OpenSSL/3.0.2 zlib/1.2.11 brotli/1.0.9 zstd/1.4.8 libidn2/2.3.2 libpsl/0.21.0 (+libidn2/2.3.2) libssh/0.9.6/openssl/zlib nghttp2/1.43.0 librtmp/2.3 OpenLDAP/2.5.20
+     cwd=/root
+     disk=1006M total, 939M avail
+     dns=140.82.121.3    github.com
+     egress_host_gateway=000unreachable
+     egress_proxy=000unreachable
+     git=git version 2.34.1
+     internet=200
+     ip=169.254.68.6
+     jq=MISSING
+     mem=1.9GiB
+     node=v26.13.0
+     npm=MISSING
+     os=Ubuntu 22.04.5 LTS
+     python3=Python 3.10.12
+     uname=uname (GNU coreutils) 8.32
+     user=root
+     workspace=exists
+
+  [ok]   sandbox destroyed            35c116570d8847e083c3f0ab907971b3
+  [ok]   cleanup verified             0 sandbox(es), none leaked
+
+CUBESANDBOX INTEGRATION OK

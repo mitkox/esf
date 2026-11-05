@@ -1,0 +1,66 @@
+{
+  "schema": "esf-release-assets/v1",
+  "candidate": "v1.0.0-rc.1",
+  "source_commit": "1c98bc34dc1a81a1a64e563ffe12bc13549e5442",
+  "build_context": {
+    "worktree": "detached git worktree at 1c98bc34dc1a81a1a64e563ffe12bc13549e5442 (clean checkout; removed after validation)",
+    "clean_checkout": true,
+    "commands": [
+      "bash scripts/release.sh v1.0.0-rc.1 /tmp/esf-rc1-dist",
+      "bash scripts/verify-release.sh /tmp/esf-rc1-dist v1.0.0-rc.1",
+      "bash scripts/release.sh v1.0.0-rc.1 /tmp/esf-rc1-dist-repeat",
+      "diff -qr /tmp/esf-rc1-dist /tmp/esf-rc1-dist-repeat"
+    ],
+    "inventory_prerelease_check": "scripts/release.sh prerelease path ran scripts/verify-release-inventory.py: PASS"
+  },
+  "manifest": {
+    "release": "v1.0.0-rc.1",
+    "binary_release": "v1.0.0",
+    "commit": "1c98bc34dc1a81a1a64e563ffe12bc13549e5442",
+    "go_toolchain": "go1.27.3",
+    "sha256": "fd015ff3283d40282ffaad72b6c3b850c01e50cdbcf51ff938bc3baff85232b1"
+  },
+  "archives": {
+    "esf_factory_1.0.0-rc.1_linux_amd64.tar.gz": {"sha256": "ee3f57388145202964d795e7c9d6b7c27145f9ac5c26663167eef933ef778277", "contents": ["LICENSE", "README.md", "factory.example.toml", "factory"]},
+    "esf_factory_1.0.0-rc.1_linux_arm64.tar.gz": {"sha256": "0c4a4fddcc04cad4b23eae1db3344dbab30579eb8a0966028811f291f27055e8", "contents": ["LICENSE", "README.md", "factory.example.toml", "factory"]},
+    "esf_factory_1.0.0-rc.1_darwin_amd64.tar.gz": {"sha256": "ff0da53f53d76a430066b55b86259fdedbc7f77dbaddb3e156fe10efe4267e64", "contents": ["LICENSE", "README.md", "factory.example.toml", "factory"]},
+    "esf_factory_1.0.0-rc.1_darwin_arm64.tar.gz": {"sha256": "2eb1fb5e907ac416d0df0c4065fdcb07e66104d1e593aeca6c460ced5011429f", "contents": ["LICENSE", "README.md", "factory.example.toml", "factory"]}
+  },
+  "checksums": {"verified_by": "bash scripts/verify-release.sh (shasum -a 256 -c checksums.txt)", "result": "PASS (6/6 entries OK)", "log": "logs/release-verify.log"},
+  "reproducibility": {"first_build": "/tmp/esf-rc1-dist", "repeat_build": "/tmp/esf-rc1-dist-repeat", "diff": "diff -qr: no differences (all 4 archives + manifest + dependency inventory + SBOM byte-identical)", "result": "PASS"},
+  "packaged_binary": {
+    "target": "linux/amd64",
+    "factory_version_json": {"release": "1.0.0", "commit": "1c98bc34dc1a81a1a64e563ffe12bc13549e5442", "go_version": "go1.27.3", "config_schema": 1},
+    "version_string_in_binary": "1.0.0 present in .rodata"
+  },
+  "sbom": {
+    "file": "release/sbom.cdx.json",
+    "sha256": "5f42acc09658441546a0686668fe184727cab10366e3217dcb4a31187057ca65",
+    "bomFormat": "CycloneDX",
+    "specVersion": "1.6",
+    "bom_version": 1,
+    "metadata_component": {"type": "application", "name": "esf", "version": "1.0.0"},
+    "components": 328,
+    "harness2_components": 0,
+    "deterministic": "byte-identical to an independent scripts/generate-sbom.py run from the same tree"
+  },
+  "dependency_inventory": {
+    "file": "release/dependency-inventory.json",
+    "sha256": "47a545358414dafa5df933c4f455f9e6906b5658622e9ebae8145e8a08c754c9",
+    "equal_to": "release/inventory.json",
+    "result": "PASS (byte-identical, cmp)"
+  },
+  "harness2_scan": "no harness2/improvement paths in any archive listing or SBOM component",
+  "evidence": {
+    "manifest": "release/release-manifest.json",
+    "checksums": "release/checksums.txt",
+    "sbom": "release/sbom.cdx.json",
+    "dependency_inventory": "release/dependency-inventory.json",
+    "archive_listing": "release/archive-listing.txt",
+    "build_log": "logs/release-build-1.log",
+    "verify_log": "logs/release-verify.log",
+    "repeat_build_log": "logs/release-build-2.log",
+    "worktree_log": "logs/release-worktree.log"
+  },
+  "cleanup": "temporary worktree /tmp/esf-rc1-worktree removed with git worktree remove --force"
+}

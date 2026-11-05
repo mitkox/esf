@@ -1,0 +1,13 @@
+{
+  "schema": "esf-evidence-note/v1",
+  "about": "logs/temporal-queue-isolation.log",
+  "reviewer_finding": "L-03 (isolation log provenance)",
+  "provenance": "RECONSTRUCTED AFTER THE RUN: the isolation log was generated post-run from process and task-queue inspection (ps output, worker/validation configs, systemd unit, and the retained acceptance worker log). It was not captured live during the acceptance run and must not be read as an in-run probe. The log file is retained unedited as supporting context.",
+  "primary_proof": [
+    "logs/acceptance-worker.log records task_queue=esf-rc1-validation-20261105 at worker startup and TaskQueue=esf-rc1-validation-20261105 at worker start and stop",
+    "acceptance-run.json (durable manifest .factory/runs/run-44042c2526941b3e1bfc70f5/run.json) records factory_version = \"1.0.0\"",
+    "The unique queue name appears only in the local /tmp/esf-rc1-validation.toml; the stale workers observed on the host poll other queues (factory, superagent-esf) and were deliberately not stopped"
+  ],
+  "confidence": "The primary proofs above are the authoritative isolation evidence; the reconstructed log only adds the host process/config context.",
+  "recorded_at": "2026-11-05T16:14:30+02:00"
+}

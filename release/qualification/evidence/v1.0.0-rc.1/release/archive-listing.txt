@@ -1,0 +1,32 @@
+# RC asset listing, generated 2026-11-05T16:15:09+02:00 from a pristine detached worktree at 1c98bc34dc1a81a1a64e563ffe12bc13549e5442
+
+## sha256
+ff0da53f53d76a430066b55b86259fdedbc7f77dbaddb3e156fe10efe4267e64  /tmp/esf-rc1-dist/esf_factory_1.0.0-rc.1_darwin_amd64.tar.gz
+2eb1fb5e907ac416d0df0c4065fdcb07e66104d1e593aeca6c460ced5011429f  /tmp/esf-rc1-dist/esf_factory_1.0.0-rc.1_darwin_arm64.tar.gz
+ee3f57388145202964d795e7c9d6b7c27145f9ac5c26663167eef933ef778277  /tmp/esf-rc1-dist/esf_factory_1.0.0-rc.1_linux_amd64.tar.gz
+0c4a4fddcc04cad4b23eae1db3344dbab30579eb8a0966028811f291f27055e8  /tmp/esf-rc1-dist/esf_factory_1.0.0-rc.1_linux_arm64.tar.gz
+fd015ff3283d40282ffaad72b6c3b850c01e50cdbcf51ff938bc3baff85232b1  /tmp/esf-rc1-dist/release-manifest.json
+47a545358414dafa5df933c4f455f9e6906b5658622e9ebae8145e8a08c754c9  /tmp/esf-rc1-dist/dependency-inventory.json
+5f42acc09658441546a0686668fe184727cab10366e3217dcb4a31187057ca65  /tmp/esf-rc1-dist/sbom.cdx.json
+
+## archive contents
+--- esf_factory_1.0.0-rc.1_darwin_amd64.tar.gz
+    LICENSE
+    README.md
+    factory.example.toml
+    factory
+--- esf_factory_1.0.0-rc.1_darwin_arm64.tar.gz
+    LICENSE
+    README.md
+    factory.example.toml
+    factory
+--- esf_factory_1.0.0-rc.1_linux_amd64.tar.gz
+    LICENSE
+    README.md
+    factory.example.toml
+    factory
+--- esf_factory_1.0.0-rc.1_linux_arm64.tar.gz
+    LICENSE
+    README.md
+    factory.example.toml
+    factory

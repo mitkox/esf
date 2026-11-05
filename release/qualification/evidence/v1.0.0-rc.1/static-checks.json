@@ -1,0 +1,128 @@
+{
+  "schema": "esf-static-checks/v1",
+  "candidate": "v1.0.0-rc.1",
+  "source_commit": "1c98bc34dc1a81a1a64e563ffe12bc13549e5442",
+  "template": {
+    "id": "tpl-4fedc58c5f9543a39d721e37",
+    "image": "127.0.0.1:32001/esf-native-pi@sha256:bd11873f03e34b0c9b051f220fd627a6b175e1c56f37ef25d130b2e1168804c4"
+  },
+  "host": {
+    "go": "go version go1.27.3 linux/amd64",
+    "node": "v26.13.0",
+    "npm": "11.20.0",
+    "python3": "Python 3.15.2",
+    "uv": "uv 0.13.7 (x86_64-unknown-linux-gnu)"
+  },
+  "gates": [
+    {
+      "gate": "make lint (gofmt, go vet, shellcheck)",
+      "command": "make lint",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "logs/make-lint.log"
+    },
+    {
+      "gate": "console npm ci",
+      "command": "cd internal/console/web && npm ci",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "logs/npm-ci.log"
+    },
+    {
+      "gate": "console unit tests",
+      "command": "cd internal/console/web && npm test",
+      "exit_code": 0,
+      "result": "PASS (17/17)",
+      "log": "logs/console-tests.log"
+    },
+    {
+      "gate": "console production build",
+      "command": "cd internal/console/web && npm run build",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "logs/console-build.log"
+    },
+    {
+      "gate": "tracked console dist unchanged",
+      "command": "git status --porcelain --untracked-files=all -- internal/console/web/dist",
+      "exit_code": 0,
+      "result": "PASS (empty output)",
+      "log": "logs/console-dist-status.log"
+    },
+    {
+      "gate": "Python optional tool tests",
+      "command": "make test-python (uv 3.15.2, --locked)",
+      "exit_code": 0,
+      "result": "PASS (8 intake + 7 brief_lab tests)",
+      "log": "logs/make-test-python.log"
+    },
+    {
+      "gate": "Python optional tool tests (Docker fallback)",
+      "command": "make test-python-docker",
+      "exit_code": 0,
+      "result": "PASS (8 intake + 7 brief_lab tests)",
+      "log": "logs/make-test-python-docker.log",
+      "note": "The fallback's test-tooling defect found during the earlier prerelease validation was repaired by a Makefile-only change before rc.1; the fix is part of commit 1c98bc34 and affects no shipped artifact."
+    },
+    {
+      "gate": "Temporal restored-database schema safety",
+      "command": "sh deployments/dev/temporal/tests/setup-postgres-test.sh",
+      "exit_code": 0,
+      "result": "PASS (6 scenarios)",
+      "log": "logs/temporal-schema.log"
+    },
+    {
+      "gate": "release inventory verifier",
+      "command": "python3 scripts/verify-release-inventory.py",
+      "exit_code": 0,
+      "result": "PASS (pins match lockfiles)",
+      "log": "logs/verify-release-inventory.log"
+    },
+    {
+      "gate": "Pi inventory verifier",
+      "command": "python3 scripts/verify-pi-inventory.py",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "logs/verify-pi-inventory.log"
+    },
+    {
+      "gate": "SBOM generation validation",
+      "command": "python3 scripts/generate-sbom.py /tmp/esf-rc1-sbom.json",
+      "exit_code": 0,
+      "result": "PASS: CycloneDX 1.6; product version 1.0.0 at metadata.component.version (CycloneDX BOM version field = 1); 328 components; 0 harness2 components",
+      "log": "logs/generate-sbom.log"
+    },
+    {
+      "gate": "Cube smoke on validated template",
+      "command": "make cube-smoke (CUBE_TEMPLATE_ID=tpl-4fedc58c5f9543a39d721e37)",
+      "exit_code": 0,
+      "result": "PASS (command exec exit 0; sandbox destroyed; 0 leaked)",
+      "log": "logs/cube-smoke.log"
+    },
+    {
+      "gate": "factory config validate",
+      "command": "./bin/factory --config /tmp/esf-rc1-validation.toml config validate",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "logs/factory-config-validate.log"
+    },
+    {
+      "gate": "factory doctor",
+      "command": "./bin/factory doctor",
+      "exit_code": 0,
+      "result": "PASS (template exists, Temporal reachable, 8 harnesses; 3 known hardening warnings)",
+      "log": "logs/factory-doctor.log"
+    },
+    {
+      "gate": "factory agents verify",
+      "command": "./bin/factory agents verify",
+      "exit_code": 0,
+      "result": "PASS (all six configured agents incl. rebuilt unreal 056c3492\u20268dd9 and pi runtime self-check)",
+      "log": "logs/factory-agents-verify.log"
+    }
+  ],
+  "known_issues": [],
+  "environment_notes": [
+    "Stale host factory workers poll the shared default Temporal queue 'factory' and a superagent lane queue; they were left running and the acceptance gate used the isolated queue esf-rc1-validation-20261105."
+  ]
+}

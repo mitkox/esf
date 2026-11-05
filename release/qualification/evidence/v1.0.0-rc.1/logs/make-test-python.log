@@ -1,0 +1,20 @@
+Resolved 75 packages in 1ms
+   Building esf-brief-lab @ file:///home/mitko/dev/esf/tools/brief_lab
+   Building esf-intake @ file:///home/mitko/dev/esf/tools/intake
+      Built esf-brief-lab @ file:///home/mitko/dev/esf/tools/brief_lab
+      Built esf-intake @ file:///home/mitko/dev/esf/tools/intake
+Prepared 2 packages in 375ms
+Uninstalled 2 packages in 0.66ms
+Installed 2 packages in 0.34ms
+ ~ esf-brief-lab==0.1.0 (from file:///home/mitko/dev/esf/tools/brief_lab)
+ ~ esf-intake==0.1.0 (from file:///home/mitko/dev/esf/tools/intake)
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.005s
+
+OK
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.032s
+
+OK

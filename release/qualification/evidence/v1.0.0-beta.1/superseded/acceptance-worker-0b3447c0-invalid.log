@@ -1,3 +1,0 @@
-time=2026-11-05T11:47:35.095+02:00 level=INFO msg="factory worker starting" temporal.address=127.0.0.1:7233 temporal.namespace=default task_queue=factory sandbox.provider=cubesandbox sandbox.template=tpl-4fedc58c5f9543a39d721e37 harnesses="[claude codex conformance harness-opt-fix noop opencode2 pi unreal]" artifacts=/home/mitko/dev/esf/.factory
-time=2026-11-05T11:47:35.097+02:00 level=INFO msg="Started Worker" Namespace=default TaskQueue=factory WorkerID=factory-worker@hp-z2-2:996261
-time=2026-11-05T11:47:38.202+02:00 level=INFO msg="Stopped Worker" Namespace=default TaskQueue=factory WorkerID=factory-worker@hp-z2-2:996261

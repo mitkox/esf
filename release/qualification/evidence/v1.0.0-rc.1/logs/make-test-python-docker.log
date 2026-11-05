@@ -1,0 +1,104 @@
+docker build -f deploy/images/Dockerfile.intake --build-arg ESF_COMMIT=$(git rev-parse HEAD) -t esf/intake:python-tests .
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile.intake
+#1 transferring dockerfile: 2.20kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python@sha256:4b777652b7ca0a1fae98a847e83e538605d0fb8de3812f3403076aca74368e74
+#2 DONE 0.1s
+
+#3 [internal] load metadata for docker.io/library/alpine@sha256:ff7f0c727dd796aa36787bfcd9a64bf35a6ce72a73451b3359fde849b6703d63
+#3 DONE 0.1s
+
+#4 [internal] load metadata for docker.io/library/golang@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b
+#4 DONE 0.1s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 319B done
+#5 DONE 0.0s
+
+#6 [intake 1/5] FROM docker.io/library/alpine@sha256:ff7f0c727dd796aa36787bfcd9a64bf35a6ce72a73451b3359fde849b6703d63
+#6 resolve docker.io/library/alpine@sha256:ff7f0c727dd796aa36787bfcd9a64bf35a6ce72a73451b3359fde849b6703d63 0.1s done
+#6 DONE 0.1s
+
+#7 [build 1/6] FROM docker.io/library/golang@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b
+#7 resolve docker.io/library/golang@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b 0.1s done
+#7 DONE 0.1s
+
+#8 [python-tools 1/6] FROM docker.io/library/python@sha256:4b777652b7ca0a1fae98a847e83e538605d0fb8de3812f3403076aca74368e74
+#8 resolve docker.io/library/python@sha256:4b777652b7ca0a1fae98a847e83e538605d0fb8de3812f3403076aca74368e74 0.1s done
+#8 DONE 0.1s
+
+#9 [internal] load build context
+#9 transferring context: 1.49MB 0.0s done
+#9 DONE 0.0s
+
+#10 [build 2/6] WORKDIR /src
+#10 CACHED
+
+#11 [build 3/6] COPY go.mod go.sum ./
+#11 CACHED
+
+#12 [build 4/6] RUN go mod download
+#12 CACHED
+
+#13 [build 5/6] COPY . .
+#13 DONE 0.1s
+
+#14 [build 6/6] RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64     go build -buildvcs=false -trimpath       -ldflags="-s -w -X github.com/mitkox/esf/internal/factory.Version=1.0.0 -X main.buildCommit=1c98bc34dc1a81a1a64e563ffe12bc13549e5442"       -o /out/factory ./cmd/factory
+#14 DONE 10.2s
+
+#15 [python-tools 2/6] WORKDIR /opt/esf
+#15 CACHED
+
+#16 [python-tools 3/6] COPY pyproject.toml uv.lock ./
+#16 CACHED
+
+#17 [python-tools 4/6] COPY tools/intake tools/intake
+#17 CACHED
+
+#18 [python-tools 5/6] COPY tools/brief_lab tools/brief_lab
+#18 CACHED
+
+#19 [python-tools 6/6] RUN python -m pip install --no-cache-dir uv==0.13.7 &&     uv python install 3.15.2 &&     uv sync --locked --python 3.15.2 --no-install-project &&     .venv/bin/python -c 'import sys; assert sys.version_info[:3] == (3,15,2), sys.version'
+#19 CACHED
+
+#20 [intake 2/5] RUN apk add --no-cache ca-certificates &&     adduser -u 10001 -D -H -s /sbin/nologin esf
+#20 CACHED
+
+#21 [intake 3/5] COPY --from=build /out/factory /usr/local/bin/factory
+#21 CACHED
+
+#22 [intake 4/5] COPY --from=python-tools /opt/python /opt/python
+#22 DONE 0.3s
+
+#23 [intake 5/5] COPY --from=python-tools /opt/esf/.venv /opt/esf/.venv
+#23 DONE 0.2s
+
+#24 exporting to image
+#24 exporting layers
+#24 exporting layers 2.0s done
+#24 exporting manifest sha256:2ee5b7433ae3bb664fd7cd9a2473797c1fe454ce4b627a4c2f5712559cc5e59b 0.0s done
+#24 exporting config sha256:1f9e6b6b3c744aa8bbdaa0e2bd2f2552fe230577b27b373bccdd7d4b2aa6adc3 0.0s done
+#24 exporting attestation manifest sha256:363e550f64c130ddeed389e658e989d30c7ecc35472fd75587537151f7903775
+#24 exporting attestation manifest sha256:363e550f64c130ddeed389e658e989d30c7ecc35472fd75587537151f7903775 0.1s done
+#24 exporting manifest list sha256:09b7428cb15f2f0dbbbfae94a91129e7158f4925c622284946d03627eb73ec2d 0.0s done
+#24 naming to docker.io/esf/intake:python-tests
+#24 naming to docker.io/esf/intake:python-tests done
+#24 unpacking to docker.io/esf/intake:python-tests
+#24 unpacking to docker.io/esf/intake:python-tests 0.5s done
+#24 DONE 2.7s
+docker run --rm --entrypoint /opt/esf/.venv/bin/python esf/intake:python-tests -c 'import sys; assert sys.version_info[:3] == (3, 15, 2)'
+docker run --rm -v "/home/mitko/dev/esf":/src -w /src --entrypoint /opt/esf/.venv/bin/python esf/intake:python-tests -m unittest discover -s tools/intake/tests -p 'test_*.py'
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.017s
+
+OK
+docker run --rm -v "/home/mitko/dev/esf":/src -w /src --entrypoint /opt/esf/.venv/bin/python esf/intake:python-tests -m unittest discover -s tools/brief_lab/tests -p 'test_*.py'
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.043s
+
+OK

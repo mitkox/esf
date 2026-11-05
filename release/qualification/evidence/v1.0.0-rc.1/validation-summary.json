@@ -1,0 +1,145 @@
+{
+  "schema": "esf-validation-summary/v1",
+  "candidate": "v1.0.0-rc.1",
+  "record": "release/qualification/v1.0.0-rc.1.md",
+  "source_commit": "1c98bc34dc1a81a1a64e563ffe12bc13549e5442",
+  "branch": "release/v1.0.0-rc.1",
+  "parent_commit": "156101568d6512af7f36921ee92ee551da7ab00f",
+  "release_content_base_commit": "051062b47060c684b3bd52a8aeb4e9d958b83333",
+  "working_tree_note": "Only the three final security-evidence JSON files differed from the commit (unstaged at validation time); no product, deploy, script or inventory content differs.",
+  "source_archive": {
+    "description": "tracked tree packed with git ls-files -z | tar --null -T - (585 entries)",
+    "sha256": "86e834ac09f4f03b13c680912b725af9f04e62829d2865bc071b859302d958b9",
+    "note": "Includes the three final security-evidence JSON working-tree edits; Go source is identical to commit 1c98bc34."
+  },
+  "template": {
+    "id": "tpl-4fedc58c5f9543a39d721e37",
+    "image": "127.0.0.1:32001/esf-native-pi@sha256:bd11873f03e34b0c9b051f220fd627a6b175e1c56f37ef25d130b2e1168804c4",
+    "validated_by": "make cube-smoke, factory doctor, factory agents verify, conformance acceptance run",
+    "security_evidence": "security/template-build-1.0.0-rc.1.json"
+  },
+  "build": {
+    "go": "go1.27.3",
+    "node": "v26.13.0",
+    "npm": "11.20.0",
+    "python3": "3.15.2",
+    "uv": "0.13.7",
+    "factory_version_json": {
+      "release": "1.0.0",
+      "commit": "1c98bc34dc1a81a1a64e563ffe12bc13549e5442",
+      "go_version": "go1.27.3",
+      "config_schema": 1
+    }
+  },
+  "gates": [
+    {
+      "id": "cube-go-suite",
+      "gate": "Cube-executed Go suite + release checks + gitleaks",
+      "result": "PASS",
+      "evidence": [
+        "cube-test.json",
+        "cube-test-summary.json"
+      ]
+    },
+    {
+      "id": "static",
+      "gate": "Static checks (lint, console, Python incl. Docker fallback, Temporal schema, inventory verifiers, SBOM, Cube smoke, config validate, doctor, agents verify)",
+      "result": "PASS",
+      "evidence": [
+        "static-checks.json",
+        "logs/"
+      ]
+    },
+    {
+      "id": "acceptance",
+      "gate": "Conformance acceptance run on isolated queue + zero leaked sandboxes",
+      "result": "PASS (run-44042c2526941b3e1bfc70f5, durable manifest factory_version 1.0.0)",
+      "evidence": [
+        "acceptance.json",
+        "acceptance-run.json",
+        "acceptance-patch.patch",
+        "logs/acceptance.log",
+        "logs/acceptance-worker.log"
+      ]
+    },
+    {
+      "id": "release-assets",
+      "gate": "RC build, verify, reproducibility, archives/manifest/checksums/SBOM/inventory",
+      "result": "PASS",
+      "evidence": [
+        "release-assets.json",
+        "release/"
+      ]
+    },
+    {
+      "id": "security",
+      "gate": "Security review: zero Critical/High on ESF product artifacts (security-auditor evidence)",
+      "result": "PASS (referenced, not re-executed)",
+      "evidence": [
+        "security/security-scan-1.0.0-rc.1.json",
+        "security/source-review-1.0.0-rc.1.json",
+        "security/template-build-1.0.0-rc.1.json"
+      ]
+    },
+    {
+      "id": "independent-review",
+      "gate": "Independent review (docs/review-v1.0.0-rc.1.md)",
+      "result": "PASS with caveats (sign off with caveats; no open Critical/High)",
+      "evidence": [
+        "docs/review-v1.0.0-rc.1.md"
+      ]
+    }
+  ],
+  "security_evidence": {
+    "scanner_results": "0 Critical/High on every ESF-built product artifact; scanner versions and database dates unchanged",
+    "files": {
+      "security/security-scan-1.0.0-rc.1.json": "ef57a3dfeec6ed99d9a47a1771e9dd0e2caacd07cf543503aa84a55edfd33dbc",
+      "security/source-review-1.0.0-rc.1.json": "ff7912cc731dadee45bc0bee89cf8085ece313a853e5748d429b4a3b0589f266",
+      "security/template-build-1.0.0-rc.1.json": "16ea03d0db66b52f23799f141ed8f180cfb5b40944c59ec6f2a3db9240791146"
+    },
+    "provenance": {
+      "candidate_commit": "1c98bc34dc1a81a1a64e563ffe12bc13549e5442",
+      "candidate_git_tree_sha": "470b58c8e696d16b5f2966aec319096f6a4cb786",
+      "parent_commit": "156101568d6512af7f36921ee92ee551da7ab00f",
+      "gitleaks_exact_tree_report_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "scanned_tree_manifest_sha256": "6eccf959c2bf8f83857ab770e9bd55f6b21ab11816ead9e56d87b3ed8a8d6976",
+      "raw_evidence_manifest_sha256": "c44a5b44c854a4342441664f91facf98ea20547925b7c0b626c5dfdc4ab12969",
+      "recipe_sha256": "c4c9126761bb6c1c04f3d7f306c75fb341bafc24340d4b1578221397925799eb",
+      "note": "The rc.1 relabel changed documentation, labels, evidence paths and one Cube recipe comment only; no build instruction, dependency pin, lockfile or base image changed."
+    }
+  },
+  "acceptance_execution": {
+    "valid_run_id": "run-44042c2526941b3e1bfc70f5",
+    "valid_run_factory_version": "1.0.0",
+    "valid_run_sandbox_id": "06e64cfe2dc04e9596be7411d1313efb",
+    "task_queue": "esf-rc1-validation-20261105 (isolated unique queue; namespace default)",
+    "stale_workers_note": "Stale host factory workers on the shared default queue and a superagent lane were deliberately left running and untouched; the unique queue isolated this gate.",
+    "temporal_isolation_log": "logs/temporal-queue-isolation.log",
+    "temporal_isolation_note": "logs/temporal-queue-isolation-note.json"
+  },
+  "known_issues": [],
+  "environment_notes": [
+    "Stale host factory workers poll the shared default Temporal queue 'factory' and a superagent lane queue; they were neither contacted nor stopped for this validation."
+  ],
+  "outstanding_ga_gates": [
+    "24-hour VM/Temporal soak",
+    "Kubernetes/Helm deployment qualification",
+    "Restore / Temporal history replay / migration drill",
+    "Model-backed hosted-provider acceptance (only deterministic conformance was executed)",
+    "Image and Cube template publication through release workflows (local stack only here)",
+    "Load / performance matrix",
+    "Per-image SBOM/vulnerability qualification, arm64 template, transitive license review",
+    "Final-release independent review (rc.1 review complete: sign off with caveats)"
+  ],
+  "evidence_tree_secret_scan": {
+    "tool": "gitleaks 8.30.1",
+    "target": "finalized v1.0.0-rc.1 evidence tree",
+    "findings": 0,
+    "log": "logs/gitleaks-evidence.log",
+    "note": "The scan covered the complete evidence tree including the checksum manifest; the scan log itself was written immediately after the scan and is included in checksums.json (hash listings and scan output contain no secret material)."
+  },
+  "evidence_integrity": {
+    "checksums_manifest": "checksums.json",
+    "verification": "0 mismatches / 0 missing / 0 unlisted over the complete evidence tree (recomputed after finalization)"
+  }
+}

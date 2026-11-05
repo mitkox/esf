@@ -1,4 +1,4 @@
-# ESF v1.0.0-beta.1 Cube template recipe. Qualification is recorded separately.
+# ESF v1.0.0-rc.1 Cube template recipe. Qualification is recorded separately.
 #
 # The pinned vendor base (cubesandbox-base 2026.16) ships `envd` built with Go
 # 1.25.4 and the upstream Unreal runner is built with Go 1.27.0. Both carry

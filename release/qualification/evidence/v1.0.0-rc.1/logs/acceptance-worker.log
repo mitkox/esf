@@ -1,0 +1,16 @@
+time=2026-11-05T16:14:06.340+02:00 level=INFO msg="factory worker starting" temporal.address=127.0.0.1:7233 temporal.namespace=default task_queue=esf-rc1-validation-20261105 sandbox.provider=cubesandbox sandbox.template=tpl-4fedc58c5f9543a39d721e37 harnesses="[claude codex conformance harness-opt-fix noop opencode2 pi unreal]" artifacts=/home/mitko/dev/esf/.factory
+time=2026-11-05T16:14:06.342+02:00 level=INFO msg="Started Worker" Namespace=default TaskQueue=esf-rc1-validation-20261105 WorkerID=factory-worker@hp-z2-2:3952849
+time=2026-11-05T16:14:08.046+02:00 level=INFO msg="cube sandbox created" sandbox.id=06e64cfe2dc04e9596be7411d1313efb sandbox.template=tpl-4fedc58c5f9543a39d721e37 duration=66.341484ms
+time=2026-11-05T16:14:08.046+02:00 level=INFO msg="sandbox created" run.id=run-44042c2526941b3e1bfc70f5 sandbox.id=06e64cfe2dc04e9596be7411d1313efb sandbox.template=tpl-4fedc58c5f9543a39d721e37
+time=2026-11-05T16:14:08.067+02:00 level=INFO msg="harness provisioned" run.id=run-44042c2526941b3e1bfc70f5 harness=conformance harness.version="" duration=5.3µs
+time=2026-11-05T16:14:08.341+02:00 level=INFO msg="repository prepared" run.id=run-44042c2526941b3e1bfc70f5 repository.sha=6d1f51d4b35a1bfe051888afce140a77eb33e64a
+time=2026-11-05T16:14:08.387+02:00 level=INFO msg="sandbox inventory written" run.id=run-44042c2526941b3e1bfc70f5 inventory.path=/workspace/.factory/inventory.json inventory.digest=sha256:5e8f859e3060e223e7d6b6642bb2fa6223401858faae6f7491c4196c732438f2
+time=2026-11-05T16:14:08.538+02:00 level=INFO msg="sandbox egress probed" run.id=run-44042c2526941b3e1bfc70f5 harness=conformance expect_deny=false canary_reachable=true metadata_reachable=false agent_uid=0 violations=0
+time=2026-11-05T16:14:08.702+02:00 level=INFO msg="agent finished" run.id=run-44042c2526941b3e1bfc70f5 harness=conformance exit_code=0 timed_out=false blocked=false behavior_findings=0 behavior_tripped=false attempt=1 duration=50.407567ms
+time=2026-11-05T16:14:08.796+02:00 level=INFO msg="artifacts collected" run.id=run-44042c2526941b3e1bfc70f5 phase="" patch_bytes=283 resulting_sha=6d1f51d4b35a1bfe051888afce140a77eb33e64a
+time=2026-11-05T16:14:09.003+02:00 level=INFO msg="verification finished" run.id=run-44042c2526941b3e1bfc70f5 profile=default passed=true duration=92.138336ms
+time=2026-11-05T16:14:09.096+02:00 level=INFO msg="artifacts collected" run.id=run-44042c2526941b3e1bfc70f5 phase=post-verification patch_bytes=283 resulting_sha=6d1f51d4b35a1bfe051888afce140a77eb33e64a
+time=2026-11-05T16:14:09.217+02:00 level=INFO msg="sandbox destroyed and verified" run.id=run-44042c2526941b3e1bfc70f5 sandbox.id=06e64cfe2dc04e9596be7411d1313efb remaining=0
+time=2026-11-05T16:14:09.255+02:00 level=INFO msg="run finalized" run.id=run-44042c2526941b3e1bfc70f5 factory.result=SUCCEEDED agent.result=SUCCESS verification.result=SUCCESS cleanup.result=SUCCESS
+time=2026-11-05T16:14:09.287+02:00 level=INFO msg="change recorded" change.id=run-44042c2526941b3e1bfc70f5 run.id=run-44042c2526941b3e1bfc70f5 attempts=1 change.status=IN_REVIEW
+time=2026-11-05T16:14:09.323+02:00 level=INFO msg="Stopped Worker" Namespace=default TaskQueue=esf-rc1-validation-20261105 WorkerID=factory-worker@hp-z2-2:3952849
