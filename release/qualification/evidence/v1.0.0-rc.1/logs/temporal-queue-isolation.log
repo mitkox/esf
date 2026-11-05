@@ -1,5 +1,7 @@
-# Temporal task-queue isolation check for the acceptance re-run, 2026-11-05T12:11:28+02:00
-# candidate ce9625006e180e632e646dc6d11ea8c2c497b15f; validation config /tmp/esf-validation.toml
+# Temporal task-queue isolation check for the v1.0.0-rc.1 acceptance run
+# POST-RUN RECONSTRUCTION from process/task-queue inspection (not a live in-run probe); see temporal-queue-isolation-note.json
+# candidate commit 1c98bc34dc1a81a1a64e563ffe12bc13549e5442; validation config /tmp/esf-rc1-validation.toml
+# reconstructed at 2026-11-05T16:14:25+02:00
 
 ## unique queue in validation config
 27:[temporal]
@@ -29,13 +31,14 @@
 Description=ESF 0.7.2 factory worker
 ExecStart=/home/mitko/dev/esf/bin/factory --config /home/mitko/dev/esf/factory.toml worker
 
-## processes referencing the validation config (expect none before the script worker)
-before run: none (checked at 2026-11-05T12:11:28+02:00)
+## processes referencing the validation config (expect none after the run)
+none
 
-## proof the executed worker used the unique queue
+## proof the executed worker used the unique queue (retained worker log)
 task_queue=esf-rc1-validation-20261105
 TaskQueue=esf-rc1-validation-20261105
 TaskQueue=esf-rc1-validation-20261105
+- run manifest run.json factory_version: 1.0.0
 
 ## worker process gone after the run
 no validation-config worker alive

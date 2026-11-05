@@ -2,109 +2,109 @@
   "agent_exit_code": 0,
   "agent_harness": "conformance",
   "agent_result": "SUCCESS",
-  "artifacts": "runs/run-8426d021f427ff4240804201",
-  "baseline_sha": "d69acb1391b21e336ef2f9002c2ff49ef6a62bca",
+  "artifacts": "runs/run-44042c2526941b3e1bfc70f5",
+  "baseline_sha": "6d1f51d4b35a1bfe051888afce140a77eb33e64a",
   "cleanup_result": {
     "attempted": true,
-    "duration": 80499609,
-    "finished_at": "2026-11-05T10:09:16.159632736Z",
+    "duration": 84220910,
+    "finished_at": "2026-11-05T14:14:09.199574089Z",
     "outcome": "SUCCESS",
     "remaining_sandboxes": 0,
-    "sandbox_id": "2252435494524ad6ac353dc2d9f475e2",
+    "sandbox_id": "06e64cfe2dc04e9596be7411d1313efb",
     "verified": true
   },
-  "completed_at": "2026-11-05T10:09:16.184735135Z",
+  "completed_at": "2026-11-05T14:14:09.224003763Z",
   "conditions": [
     {
-      "last_transition_time": "2026-11-05T10:09:14.246772692Z",
+      "last_transition_time": "2026-11-05T14:14:07.318183225Z",
       "message": "scope=default",
       "reason": "PolicyAccepted",
       "status": "True",
       "type": "Validated"
     },
     {
-      "last_transition_time": "2026-11-05T10:09:14.970588127Z",
-      "message": "sandbox=2252435494524ad6ac353dc2d9f475e2 template=tpl-4fedc58c5f9543a39d721e37",
+      "last_transition_time": "2026-11-05T14:14:08.053915198Z",
+      "message": "sandbox=06e64cfe2dc04e9596be7411d1313efb template=tpl-4fedc58c5f9543a39d721e37",
       "reason": "Created",
       "status": "True",
       "type": "SandboxReady"
     },
     {
-      "last_transition_time": "2026-11-05T10:09:14.990952871Z",
+      "last_transition_time": "2026-11-05T14:14:08.072839413Z",
       "message": "workspace= digest=",
       "reason": "Provisioned",
       "status": "True",
       "type": "WorkspacePrepared"
     },
     {
-      "last_transition_time": "2026-11-05T10:09:15.286938997Z",
-      "message": "sha=d69acb1391b21e336ef2f9002c2ff49ef6a62bca",
+      "last_transition_time": "2026-11-05T14:14:08.348693903Z",
+      "message": "sha=6d1f51d4b35a1bfe051888afce140a77eb33e64a",
       "reason": "CheckedOut",
       "status": "True",
       "type": "RepositoryPrepared"
     },
     {
-      "last_transition_time": "2026-11-05T10:09:15.339506156Z",
-      "message": "path=/workspace/.factory/inventory.json digest=sha256:b1257422334f7e22ee69f8f4735f24df97b1d1085e958988b93fb50288ccb118",
+      "last_transition_time": "2026-11-05T14:14:08.394572512Z",
+      "message": "path=/workspace/.factory/inventory.json digest=sha256:5e8f859e3060e223e7d6b6642bb2fa6223401858faae6f7491c4196c732438f2",
       "reason": "Published",
       "status": "True",
       "type": "InventoryWritten"
     },
     {
-      "last_transition_time": "2026-11-05T10:09:15.496239589Z",
+      "last_transition_time": "2026-11-05T14:14:08.547991932Z",
       "message": "expect_deny=false internet=reachable metadata=unknown uid=0",
       "reason": "ProbeInconclusive",
       "status": "Unknown",
       "type": "EgressVerified"
     },
     {
-      "last_transition_time": "2026-11-05T10:09:15.646114211Z",
+      "last_transition_time": "2026-11-05T14:14:08.709740905Z",
       "reason": "NotBlocked",
       "status": "False",
       "type": "AgentBlocked"
     },
     {
-      "last_transition_time": "2026-11-05T10:09:15.646114211Z",
-      "message": "attempt=1 duration=43.235299ms",
+      "last_transition_time": "2026-11-05T14:14:08.709740905Z",
+      "message": "attempt=1 duration=50.407567ms",
       "reason": "ExitZero",
       "status": "True",
       "type": "AgentCompleted"
     },
     {
-      "last_transition_time": "2026-11-05T10:09:16.068557032Z",
+      "last_transition_time": "2026-11-05T14:14:09.102883211Z",
       "message": "drift=false",
       "reason": "PostVerification",
       "status": "True",
       "type": "ArtifactsCollected"
     },
     {
-      "last_transition_time": "2026-11-05T10:09:15.805066524Z",
+      "last_transition_time": "2026-11-05T14:14:08.856889764Z",
       "message": "method=tree-hash gates=3",
       "reason": "Unmodified",
       "status": "True",
       "type": "GateIntegrity"
     },
     {
-      "last_transition_time": "2026-11-05T10:09:15.834779168Z",
+      "last_transition_time": "2026-11-05T14:14:08.885936792Z",
       "message": "no findings",
       "reason": "Clean",
       "status": "True",
       "type": "BehaviorScanned"
     },
     {
-      "last_transition_time": "2026-11-05T10:09:16.068557032Z",
+      "last_transition_time": "2026-11-05T14:14:09.102883211Z",
       "reason": "AllGatesPassed",
       "status": "True",
       "type": "Verified"
     },
     {
-      "last_transition_time": "2026-11-05T10:09:16.068557032Z",
+      "last_transition_time": "2026-11-05T14:14:09.102883211Z",
       "reason": "WithinBudget",
       "status": "False",
       "type": "BudgetExceeded"
     },
     {
-      "last_transition_time": "2026-11-05T10:09:16.184735135Z",
+      "last_transition_time": "2026-11-05T14:14:09.224003763Z",
       "message": "remaining=0",
       "reason": "NoSandboxesRemain",
       "status": "True",
@@ -112,7 +112,7 @@
     }
   ],
   "cube_version_if_available": "0.7.3",
-  "duration": 1980037406,
+  "duration": 1947983882,
   "egress_digest": "sha256:8f53d55f986a3c9d896ca474e758e338294ab3db5b089a4b69b657eb9270b62d",
   "egress_policy": "local-model",
   "egress_summary": "internet=allowed",
@@ -134,7 +134,7 @@
         "reachable": true,
         "url": "https://example.com/"
       },
-      "duration": 121097781,
+      "duration": 118748680,
       "expect_deny": false,
       "metadata": {
         "decided": false,
@@ -146,7 +146,7 @@
         "the metadata probe was undecided (inconclusive): curl_rc=7"
       ],
       "policy": "local-model",
-      "probed_at": "2026-11-05T10:09:15.352640459Z",
+      "probed_at": "2026-11-05T14:14:08.407852857Z",
       "raw": "ESF_PROBE identity 0 root\nESF_PROBE canary reachable http_200\nESF_PROBE metadata unknown curl_rc=7"
     },
     "gate_integrity": {
@@ -162,16 +162,16 @@
   },
   "intake": {
     "ambiguity": {
-      "confidence": 0.28,
+      "confidence": 0.26,
       "level": "clear",
       "probabilities": {
         "ambiguous": 0.09,
-        "clear": 0.61,
-        "partial": 0.3
+        "clear": 0.6,
+        "partial": 0.31
       },
-      "value": 0.48
+      "value": 0.49
     },
-    "duration_ms": 615,
+    "duration_ms": 620,
     "model": "jev-latest",
     "program": "intake-v1",
     "ready": {
@@ -181,12 +181,12 @@
     },
     "status": "ok",
     "task_type": {
-      "confidence": 0.6,
+      "confidence": 0.66,
       "probabilities": {
-        "bugfix": 0.15,
+        "bugfix": 0.13,
         "docs": 0,
-        "feature": 0.68,
-        "other": 0.17,
+        "feature": 0.73,
+        "other": 0.14,
         "refactor": 0
       },
       "value": "feature"
@@ -196,19 +196,19 @@
   "post_verification_patch": "verification/post-verification.patch",
   "repository": "local:/home/mitko/dev/esf/testdata/e2e-repo-work",
   "repository_kind": "local",
-  "requested_revision": "d69acb1391b21e336ef2f9002c2ff49ef6a62bca",
+  "requested_revision": "6d1f51d4b35a1bfe051888afce140a77eb33e64a",
   "resource_digest": "sha256:17d3825ce4e01dd176cde0f62d8e73a22617c6f3e92558876b49af2ba4bbce47",
-  "resulting_sha_if_any": "d69acb1391b21e336ef2f9002c2ff49ef6a62bca",
-  "run_id": "run-8426d021f427ff4240804201",
-  "sandbox_id": "2252435494524ad6ac353dc2d9f475e2",
+  "resulting_sha_if_any": "6d1f51d4b35a1bfe051888afce140a77eb33e64a",
+  "run_id": "run-44042c2526941b3e1bfc70f5",
+  "sandbox_id": "06e64cfe2dc04e9596be7411d1313efb",
   "sandbox_provider": "cubesandbox",
   "sandbox_template": "tpl-4fedc58c5f9543a39d721e37",
   "scope": "default",
-  "started_at": "2026-11-05T10:09:14.204697729Z",
+  "started_at": "2026-11-05T14:14:07.276019881Z",
   "task_hash": "85400ceedea8a049a4431cc5cea6b18c1d01dd4656d1501ef3f0afe25d2ea06a",
   "verification_mutated_tree": false,
   "verification_profile": "default",
   "verification_result": "SUCCESS",
-  "workflow_id": "factory-run-run-8426d021f427ff4240804201",
-  "workflow_run_id": "01a1ab2f-1dd2-74e6-9508-08a3c19bab09"
+  "workflow_id": "factory-run-run-44042c2526941b3e1bfc70f5",
+  "workflow_run_id": "01a1ac0f-50a1-7b97-8640-2e13c851b7f0"
 }

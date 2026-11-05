@@ -1,0 +1,8 @@
+# gitleaks 8.30.1 scan over the finalized v1.0.0-rc.1 evidence tree
+# command: gitleaks dir --redact --no-banner --report-format json --report-path /tmp/esf-rc1-evidence-final2.json --exit-code 0 release/qualification/evidence/v1.0.0-rc.1
+# 2026-11-05T16:17:14+02:00
+# tree at scan time: 42 files, 382970 bytes (includes checksums.json; this log was written after the scan and is included in checksums.json)
+
+4:17PM INF scanned ~382970 bytes (382.97 KB) in 52.1ms
+4:17PM INF no leaks found
+report findings: 0

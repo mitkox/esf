@@ -2,8 +2,11 @@
   "schema": "esf-source-security-review/v1",
   "release": "v1.0.0-rc.1",
   "reviewed_at": "2026-11-05",
+  "candidate_commit": "1c98bc34dc1a81a1a64e563ffe12bc13549e5442",
+  "git_tree_sha": "470b58c8e696d16b5f2966aec319096f6a4cb786",
   "baseline_commit": "051062b47060c684b3bd52a8aeb4e9d958b83333",
-  "reviewed_tree": "release/v1.0.0-rc.1 candidate working tree (Harness2 removal and security remediation applied)",
+  "evidence_updated_at": "2026-11-05T16:10:00+02:00",
+  "reviewed_tree": "release/v1.0.0-rc.1 candidate at commit 1c98bc34dc1a81a1a64e563ffe12bc13549e5442 (git tree 470b58c8e696d16b5f2966aec319096f6a4cb786; Harness2 removal and security remediation applied). The source content is bit-identical to the audited pre-rename candidate: the rc.1 relabel commit changes documentation, labels, evidence paths and one Cube recipe comment only.",
   "method": {
     "profile": "scoped re-review proportional to a first release candidate; source-first, read-only",
     "scope": [

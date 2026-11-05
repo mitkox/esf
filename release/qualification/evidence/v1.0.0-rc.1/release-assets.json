@@ -1,83 +1,36 @@
 {
   "schema": "esf-release-assets/v1",
   "candidate": "v1.0.0-rc.1",
-  "source_commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+  "source_commit": "1c98bc34dc1a81a1a64e563ffe12bc13549e5442",
   "build_context": {
-    "worktree": "detached git worktree at ce9625006e180e632e646dc6d11ea8c2c497b15f (removed after validation)",
+    "worktree": "detached git worktree at 1c98bc34dc1a81a1a64e563ffe12bc13549e5442 (clean checkout; removed after validation)",
     "clean_checkout": true,
     "commands": [
-      "bash scripts/release.sh v1.0.0-rc.1 /tmp/esf-rc-dist",
-      "bash scripts/verify-release.sh /tmp/esf-rc-dist v1.0.0-rc.1",
-      "bash scripts/release.sh v1.0.0-rc.1 /tmp/esf-rc-dist-repeat",
-      "diff -qr /tmp/esf-rc-dist /tmp/esf-rc-dist-repeat"
+      "bash scripts/release.sh v1.0.0-rc.1 /tmp/esf-rc1-dist",
+      "bash scripts/verify-release.sh /tmp/esf-rc1-dist v1.0.0-rc.1",
+      "bash scripts/release.sh v1.0.0-rc.1 /tmp/esf-rc1-dist-repeat",
+      "diff -qr /tmp/esf-rc1-dist /tmp/esf-rc1-dist-repeat"
     ],
     "inventory_prerelease_check": "scripts/release.sh prerelease path ran scripts/verify-release-inventory.py: PASS"
   },
   "manifest": {
     "release": "v1.0.0-rc.1",
     "binary_release": "v1.0.0",
-    "commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+    "commit": "1c98bc34dc1a81a1a64e563ffe12bc13549e5442",
     "go_toolchain": "go1.27.3",
-    "sha256": "3a785c66ee4639e53cd3ddb9ecd8946e85c931ef462fe6539366a1e9cc8c7bdb"
+    "sha256": "fd015ff3283d40282ffaad72b6c3b850c01e50cdbcf51ff938bc3baff85232b1"
   },
   "archives": {
-    "esf_factory_1.0.0-rc.1_linux_amd64.tar.gz": {
-      "sha256": "335a54ea0ca100ab8a7e69f5eec786267a8531255a74dff1216885b5ff26fc51",
-      "contents": [
-        "LICENSE",
-        "README.md",
-        "factory.example.toml",
-        "factory"
-      ]
-    },
-    "esf_factory_1.0.0-rc.1_linux_arm64.tar.gz": {
-      "sha256": "3461954c9f977484c690e56e85377cc2db1058b2bf26bf8db57b242e4cfda7b3",
-      "contents": [
-        "LICENSE",
-        "README.md",
-        "factory.example.toml",
-        "factory"
-      ]
-    },
-    "esf_factory_1.0.0-rc.1_darwin_amd64.tar.gz": {
-      "sha256": "9a73680c093d3aa89ade839535367f7b7a0ab9e6ff522cccfbf7b4ba369a31d5",
-      "contents": [
-        "LICENSE",
-        "README.md",
-        "factory.example.toml",
-        "factory"
-      ]
-    },
-    "esf_factory_1.0.0-rc.1_darwin_arm64.tar.gz": {
-      "sha256": "320afec56e19696a6dc14c83b5294de3ae46a121940d78e83eea0d804e17a1c3",
-      "contents": [
-        "LICENSE",
-        "README.md",
-        "factory.example.toml",
-        "factory"
-      ]
-    }
+    "esf_factory_1.0.0-rc.1_linux_amd64.tar.gz": {"sha256": "ee3f57388145202964d795e7c9d6b7c27145f9ac5c26663167eef933ef778277", "contents": ["LICENSE", "README.md", "factory.example.toml", "factory"]},
+    "esf_factory_1.0.0-rc.1_linux_arm64.tar.gz": {"sha256": "0c4a4fddcc04cad4b23eae1db3344dbab30579eb8a0966028811f291f27055e8", "contents": ["LICENSE", "README.md", "factory.example.toml", "factory"]},
+    "esf_factory_1.0.0-rc.1_darwin_amd64.tar.gz": {"sha256": "ff0da53f53d76a430066b55b86259fdedbc7f77dbaddb3e156fe10efe4267e64", "contents": ["LICENSE", "README.md", "factory.example.toml", "factory"]},
+    "esf_factory_1.0.0-rc.1_darwin_arm64.tar.gz": {"sha256": "2eb1fb5e907ac416d0df0c4065fdcb07e66104d1e593aeca6c460ced5011429f", "contents": ["LICENSE", "README.md", "factory.example.toml", "factory"]}
   },
-  "checksums": {
-    "verified_by": "bash scripts/verify-release.sh (shasum -a 256 -c checksums.txt)",
-    "result": "PASS (6/6 entries OK)",
-    "log": "logs/release-verify.log"
-  },
-  "reproducibility": {
-    "first_build": "/tmp/esf-rc-dist",
-    "repeat_build": "/tmp/esf-rc-dist-repeat",
-    "diff": "diff -qr: no differences (all 4 archives + manifest + dependency inventory + SBOM byte-identical)",
-    "result": "PASS"
-  },
+  "checksums": {"verified_by": "bash scripts/verify-release.sh (shasum -a 256 -c checksums.txt)", "result": "PASS (6/6 entries OK)", "log": "logs/release-verify.log"},
+  "reproducibility": {"first_build": "/tmp/esf-rc1-dist", "repeat_build": "/tmp/esf-rc1-dist-repeat", "diff": "diff -qr: no differences (all 4 archives + manifest + dependency inventory + SBOM byte-identical)", "result": "PASS"},
   "packaged_binary": {
     "target": "linux/amd64",
-    "go_version_m": "GOOS=linux GOARCH=amd64; module github.com/mitkox/esf (devel)",
-    "factory_version_json": {
-      "release": "1.0.0",
-      "commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
-      "go_version": "go1.27.3",
-      "config_schema": 1
-    },
+    "factory_version_json": {"release": "1.0.0", "commit": "1c98bc34dc1a81a1a64e563ffe12bc13549e5442", "go_version": "go1.27.3", "config_schema": 1},
     "version_string_in_binary": "1.0.0 present in .rodata"
   },
   "sbom": {
@@ -86,18 +39,14 @@
     "bomFormat": "CycloneDX",
     "specVersion": "1.6",
     "bom_version": 1,
-    "metadata_component": {
-      "type": "application",
-      "name": "esf",
-      "version": "1.0.0"
-    },
+    "metadata_component": {"type": "application", "name": "esf", "version": "1.0.0"},
     "components": 328,
     "harness2_components": 0,
-    "deterministic": "byte-identical to an independent generate-sbom.py run"
+    "deterministic": "byte-identical to an independent scripts/generate-sbom.py run from the same tree"
   },
   "dependency_inventory": {
     "file": "release/dependency-inventory.json",
-    "sha256": "1a6d09b23d8d7b3c758ba681c1f6e5ccfaff8ea44bffb8ae35fa55120a00436e",
+    "sha256": "47a545358414dafa5df933c4f455f9e6906b5658622e9ebae8145e8a08c754c9",
     "equal_to": "release/inventory.json",
     "result": "PASS (byte-identical, cmp)"
   },
@@ -113,5 +62,5 @@
     "repeat_build_log": "logs/release-build-2.log",
     "worktree_log": "logs/release-worktree.log"
   },
-  "cleanup": "temporary worktree /tmp/esf-rc-worktree removed with git worktree remove --force; git worktree list no longer contains it"
+  "cleanup": "temporary worktree /tmp/esf-rc1-worktree removed with git worktree remove --force"
 }

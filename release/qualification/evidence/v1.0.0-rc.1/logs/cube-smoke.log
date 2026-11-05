@@ -3,7 +3,7 @@ Cube endpoint:  http://127.0.0.1:4000
 Template:       tpl-4fedc58c5f9543a39d721e37
 
   [ok]   endpoint reachable           health ok, 0 sandbox(es) present
-  [ok]   sandbox created              id=2aa0664588cc446da77b9ef3c085ee69 in 74ms
+  [ok]   sandbox created              id=35c116570d8847e083c3f0ab907971b3 in 78ms
   [ok]   command execution            exit=0 stdout="factory-cube-ok"
   [ok]   command execution (2)        Linux tpl-4fed 6.6.1199-0009-03_2.0.1 #1 SMP PREEMPT_DYNAMIC Mon Oct 12 03:26:56 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
   [ok]   stdout/stderr split          exit code and both streams preserved
@@ -30,7 +30,7 @@ Template:       tpl-4fedc58c5f9543a39d721e37
      user=root
      workspace=exists
 
-  [ok]   sandbox destroyed            2aa0664588cc446da77b9ef3c085ee69
+  [ok]   sandbox destroyed            35c116570d8847e083c3f0ab907971b3
   [ok]   cleanup verified             0 sandbox(es), none leaked
 
 CUBESANDBOX INTEGRATION OK

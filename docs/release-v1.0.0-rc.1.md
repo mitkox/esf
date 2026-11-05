@@ -159,7 +159,7 @@ database dates are listed below.
 | Python optional tooling `uv.lock` (pip-audit + OSV, 3.14 and 3.15 closures) | 0 / 0; only `diskcache` 5.6.3 Medium unfixed, vulnerable path disabled |
 | Cube template recipe output (grype; `envd` rebuilt from `e2b-dev/infra` tag 2026.16 and Unreal runner rebuilt from `unreallabsai/unreal-agent` v0.3.1 with Go 1.27.3) | 0 / 0 (was 2 Critical / 30 High) |
 | Full native+Pi template image (grype) | 0 / 0 |
-| Helm chart, scripts, deploy manifests (source review + gitleaks 8.30.1 over 532 tracked files) | 0 / 0, secret scan clean |
+| Helm chart, scripts, deploy manifests (source review + gitleaks 8.30.1 over the committed tree (585 entries)) | 0 / 0, secret scan clean |
 | Temporal server + admin-tools 1.32.2 (grype) | 0 / 0 |
 | Temporal UI 2.58.0 | 1 High residual, upstream; a locally derived patched image was proven 0/0 but upstream has not republished — operator/GA gate |
 | Unreal template payload | 0 / 0 (rebuilt in template); the optional upstream release binary (Go 1.27.0) remains inherited risk only if an operator installs it outside the template |
@@ -232,8 +232,9 @@ this document does not duplicate the full digest list.
 ## Validation record
 
 Executed on 2026-11-05 against candidate
-`ce9625006e180e632e646dc6d11ea8c2c497b15f` on the security-refreshed Cube
-template `tpl-4fedc58c5f9543a39d721e37`. The evidence-bound record is
+`1c98bc34dc1a81a1a64e563ffe12bc13549e5442` on the security-refreshed Cube
+template `tpl-4fedc58c5f9543a39d721e37` (template identity by ID and image
+digest). The evidence-bound record is
 [the 1.0.0-rc.1 qualification record](../release/qualification/v1.0.0-rc.1.md)
 with artifacts under `release/qualification/evidence/v1.0.0-rc.1/` (security
 evidence is separated from build, Cube and acceptance evidence).
@@ -241,25 +242,23 @@ evidence is separated from build, Cube and acceptance evidence).
 - Host compile plus the complete Go suite executed inside disposable Cube
   microVMs: 15 compiled test binaries, 692 passing test records, 0 failures and
   0 skips, both release checks, a clean gitleaks 8.30.1 secret scan, verified
-  cleanup and zero owned sandboxes remaining.
-- Console tests/build (17/17, tracked `dist` unchanged), Python tooling tests,
-  Temporal schema check, `make lint`, release-inventory and Pi-inventory
-  checks, and SBOM validation passed. The optional Docker Python-test fallback
-  was repaired with a follow-up test-tooling-only change after the candidate
-  commit; it does not affect shipped artifacts.
-- Conformance acceptance re-run `run-8426d021f427ff4240804201` on an isolated
-  Temporal task queue recorded `factory_version = 1.0.0` and passed every
-  deterministic gate with a verified patch and zero leaked sandboxes. The re-run
-  used the post-candidate evidence commit `8f692108`, whose Go source is
-  identical to candidate `ce962500`. A first
-  attempt was invalidated because a stale 0.7.x worker on the shared default
-  queue executed it; it is retained as superseded evidence and is not cited.
-  `factory config validate`, `factory doctor`, `factory agents verify` and
-  `make cube-smoke` passed on the new template.
+  cleanup and zero owned sandboxes remaining. The packed source archive sha256 is
+  recorded in the qualification record.
+- Console tests/build (17/17, tracked `dist` unchanged), Python tooling tests
+  (including the repaired Docker fallback, 8+7), Temporal schema check,
+  `make lint`, release-inventory and Pi-inventory checks, and SBOM validation
+  (CycloneDX 1.6, 328 components, no Harness2) passed.
+- Conformance acceptance run `run-44042c2526941b3e1bfc70f5` on isolated
+  Temporal task queue `esf-rc1-validation-20261105` recorded
+  `factory_version = 1.0.0`, passed every deterministic gate with a verified
+  patch, and left zero live sandboxes. `factory config validate`,
+  `factory doctor`, `factory agents verify` and `make cube-smoke` passed on the
+  new template.
 - Release-candidate assets were built from a pristine worktree at the candidate
-  commit as `v1.0.0-rc.1`, passed `scripts/verify-release.sh`, contained no
-  Harness2 paths, produced a valid CycloneDX 1.6 SBOM, and reproduced
-  byte-for-byte on a second build.
+  commit as `v1.0.0-rc.1`; the manifest records commit `1c98bc34`, release
+  `v1.0.0-rc.1` and binary release `v1.0.0`. `scripts/verify-release.sh` passed,
+  archives contained no Harness2 paths, the CycloneDX 1.6 SBOM is valid, and a
+  second build reproduced byte-for-byte.
 - Security validation is summarized above: zero Critical/High on ESF product
   artifacts, with inherited platform residuals recorded with owner and GA gate.
 
