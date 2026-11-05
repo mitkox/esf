@@ -13,8 +13,8 @@
   "replacement_run": {
     "run_id": "run-8426d021f427ff4240804201",
     "factory_version_durable_manifest": "1.0.0",
-    "task_queue": "esf-beta1-validation-20261105 (isolated)",
-    "evidence": "release/qualification/evidence/v1.0.0-beta.1/acceptance.json"
+    "task_queue": "esf-rc1-validation-20261105 (isolated)",
+    "evidence": "release/qualification/evidence/v1.0.0-rc.1/acceptance.json"
   },
   "retained_files": [
     "superseded/acceptance-run-0b3447c0-invalid.json",

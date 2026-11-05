@@ -79,4 +79,4 @@ The experimental Harness2 improvement implementation was removed before 1.0.0
 because it never reached production qualification; ordinary factory runs,
 verification, review and the console are unchanged. See
 [ADR 0009](docs/adr/0009-remove-harness2-poc.md) and the
-[1.0.0-beta.1 release notes](docs/release-v1.0.0-beta.1.md).
+[1.0.0-rc.1 release notes](docs/release-v1.0.0-rc.1.md).

@@ -5,7 +5,7 @@
 27:[temporal]
 28-host_port  = "127.0.0.1:7233"
 29-namespace  = "default"
-30-task_queue = "esf-beta1-validation-20261105"
+30-task_queue = "esf-rc1-validation-20261105"
 31-
 
 ## stale workers (observed, deliberately not stopped)
@@ -33,9 +33,9 @@ ExecStart=/home/mitko/dev/esf/bin/factory --config /home/mitko/dev/esf/factory.t
 before run: none (checked at 2026-11-05T12:11:28+02:00)
 
 ## proof the executed worker used the unique queue
-task_queue=esf-beta1-validation-20261105
-TaskQueue=esf-beta1-validation-20261105
-TaskQueue=esf-beta1-validation-20261105
+task_queue=esf-rc1-validation-20261105
+TaskQueue=esf-rc1-validation-20261105
+TaskQueue=esf-rc1-validation-20261105
 
 ## worker process gone after the run
 no validation-config worker alive

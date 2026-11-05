@@ -1,14 +1,14 @@
-# ESF 1.0.0-beta.1 — first beta of 1.0.0
+# ESF 1.0.0-rc.1 — first release candidate of 1.0.0
 
-1.0.0-beta.1 is the first beta of ESF 1.0.0: a production-oriented candidate of
+1.0.0-rc.1 is the first release candidate of ESF 1.0.0: a production-oriented candidate of
 the factory surface that has been exercised through the 0.7.x release line. It
 removes the unqualified Harness2 improvement proof of concept, freezes the 1.0.0
 release metadata, and carries a semver prerelease tag so it cannot be mistaken
 for the final 1.0.0 release.
 
 The binary, archive, chart and Python distribution version is **1.0.0**; the
-distribution tag is **v1.0.0-beta.1**. Runs produced by this build record
-`factory_version = 1.0.0`. The beta label is deliberate: production qualification
+distribution tag is **v1.0.0-rc.1**. Runs produced by this build record
+`factory_version = 1.0.0`. The release-candidate label is deliberate: production qualification
 is not complete, and the [outstanding GA gates](#outstanding-ga-gates) below must
 close before 1.0.0 is announced as production-ready.
 
@@ -21,7 +21,7 @@ qualification records keep their original pins and statements.
 
 - **Version and release metadata:** 0.7.3 → **1.0.0** in the binary, release
   archives, container images, Helm chart and Python metadata, with
-  `v1.0.0-beta.1` as the prerelease distribution tag. `release/inventory.json`
+  `v1.0.0-rc.1` as the prerelease distribution tag. `release/inventory.json`
   records release `v1.0.0` and the branch baseline; its embedded copy in the
   binary is refreshed from the same pins. Release tooling accepts and verifies
   semver prerelease tags and keeps the final-promotion path unchanged.
@@ -37,7 +37,7 @@ qualification records keep their original pins and statements.
 - **Qualification tooling:** the `tools/cube-test` sandbox id prefix changed from
   `harness2-validation-*` to `esf-validate-*`. This only affects the sandbox IDs
   visible in test-tool runs.
-- **Documentation:** new 1.0.0-beta.1 release notes and ADR 0009, updated
+- **Documentation:** new 1.0.0-rc.1 release notes and ADR 0009, updated
   documentation index and README status, and removal of the Harness2 operator
   guide. Historical records are retained.
 - **Security-driven pin refreshes:** the source-first review and CVE scans were
@@ -66,7 +66,7 @@ state and workflow types was an unacceptable 1.0.0 support and attack surface.
 
 ### Removed surface
 
-| Area | Removed in 1.0.0-beta.1 |
+| Area | Removed in 1.0.0-rc.1 |
 | --- | --- |
 | CLI commands | `factory improve`; `factory profile` including `import`, `inspect`, `qualify`, `promote` and `approval-payload`; `factory budget-gateway` including `budget-gateway digest` |
 | CLI flags / manifest fields | `factory run --harness-profile`, `--improvement-policy`; `harness_profile` and `improvement_policy` in reviewed `factory apply` manifests; the `harness_profile`, `harness_profile_digest` and `improvement` fields in new run manifests |
@@ -80,7 +80,7 @@ No upstream Harness2 runtime was ever shipped: only ESF-native code and adapted
 instruction text were used, so no upstream Python runner or installer dependency
 is removed from operator deployments.
 
-Run manifests written by 1.0.0-beta.1 omit the removed `harness_profile`,
+Run manifests written by 1.0.0-rc.1 omit the removed `harness_profile`,
 `harness_profile_digest` and `improvement` evidence fields. Manifests written by
 earlier releases are still read as-is, so `factory get`/`describe --json`
 consumers must tolerate those fields being absent on new runs.
@@ -106,10 +106,10 @@ consumers must tolerate those fields being absent on new runs.
    sections it is still valid generic configuration, so validation will not flag
    it, but the gateway endpoint no longer exists. The gateway budget ledger,
    profile store, promotion receipts and experiment archives are not read by
-   1.0.0-beta.1; archive or delete them under your retention policy.
+   1.0.0-rc.1; archive or delete them under your retention policy.
 4. **Drain in-flight improvement work.** The improvement workflow types and
    their workers no longer exist, so those workflows cannot resume or replay on a
-   1.0.0-beta.1 worker. Finish or cancel them before stopping the 0.7.3 worker.
+   1.0.0-rc.1 worker. Finish or cancel them before stopping the 0.7.3 worker.
 5. **Remove the deployment overlay.** Delete `deploy/harness-improvement/` from
    deployment automation and image builds; the directory no longer exists in the
    release tree.
@@ -141,7 +141,7 @@ pinned scanners: `govulncheck` 1.9.0 over the module graph and the built binary;
 with the current vulnerability database (DB 2026-11-05T06:21:06Z) for every
 shipped and platform image, including rebuilt images and the Cube template base;
 and `gitleaks` 8.30.1. Evidence is retained under
-`release/qualification/evidence/v1.0.0-beta.1/security/`; scanner versions and
+`release/qualification/evidence/v1.0.0-rc.1/security/`; scanner versions and
 database dates are listed below.
 
 > **Final results (evidence-backed).** All ESF product artifacts below meet the
@@ -168,9 +168,9 @@ database dates are listed below.
 Scanner versions / database dates: govulncheck 1.9.0; npm audit 11.20.0;
 pip-audit 2.10.1; grype 0.121.1 (DB 2026-11-05T06:21:06Z); gitleaks 8.30.1.
 Residual-risk record and scanner evidence:
-`release/qualification/evidence/v1.0.0-beta.1/security/` (source-review,
+`release/qualification/evidence/v1.0.0-rc.1/security/` (source-review,
 security-scan, template-build JSON); the Cube template candidate identity and
-build evidence are in `template-build-1.0.0-beta.1.json`.
+build evidence are in `template-build-1.0.0-rc.1.json`.
 
 The rebuilt `envd`/Unreal payloads were validated on the local Cube stack
 (template `tpl-4fedc58c5f9543a39d721e37`, `cube-smoke`, `factory doctor`,
@@ -185,7 +185,7 @@ The rebuilt `envd`/Unreal payloads were validated on the local Cube stack
 | `diskcache` 5.6.3 (optional Python closure via dspy) | 1 Medium, unfixed upstream | Both DSPy entry points disable the on-disk cache, so the pickle path is not reachable | ESF dependency tracking | Adopt the upstream fix when released; the CI locked-closure audit keeps a narrow documented exception |
 | Cube template arm64 | Not built or scanned; the recipe gates `TARGETARCH=amd64` | Only the amd64 template is shipped/validated | ESF release engineering | Build, scan and qualify an arm64 template before claiming multi-arch template support |
 | Optional upstream Unreal release binary (Go 1.27.0) | 8 High in the upstream GitHub release | Only if an operator installs the upstream binary outside the ESF template; the in-template payload is rebuilt and scans 0/0 | Operator | Prefer the template payload; rebuild or publish a fixed install-path binary before offering the upstream release as a supported option |
-| Per-image SBOM and vulnerability qualification, transitive-license review | Not automated as release gates | Detection and evidence exist for this beta, but no publish-time gate consumes the SBOMs | ESF release engineering | Add SBOM/vulnerability and license gates to the image release workflows for GA |
+| Per-image SBOM and vulnerability qualification, transitive-license review | Not automated as release gates | Detection and evidence exist for this release candidate, but no publish-time gate consumes the SBOMs | ESF release engineering | Add SBOM/vulnerability and license gates to the image release workflows for GA |
 
 ## Toolchain and component status
 
@@ -212,7 +212,7 @@ this document does not duplicate the full digest list.
 2. **Apply the configuration and automation removals from the migration
    section.** A retained 0.7.3 `factory.toml` with Harness2 sections fails
    validation; a retained automation flag fails at argument parsing.
-3. **Install the 1.0.0-beta.1 archive or image** for the exact commit to be run.
+3. **Install the 1.0.0-rc.1 archive or image** for the exact commit to be run.
    The retained `factory.toml` keys, workflow contract, evidence layout and
    result schema are compatible; evidence written by earlier releases is read
    as-is. No schema migration step is required.
@@ -222,9 +222,9 @@ this document does not duplicate the full digest list.
 5. **Restart the worker** and run a disposable conformance run plus
    `factory sandboxes` (expect zero leaked sandboxes) before accepting work.
 6. **Replay boundary:** drain active runs before upgrading; rolling-upgrade
-   replay against production histories is not qualified in this beta. Removed
+   replay against production histories is not qualified in this release candidate. Removed
    improvement workflows cannot be replayed at all.
-7. **Beta caveat:** 1.0.0-beta.1 is a production-oriented candidate, not a
+7. **Release-candidate caveat:** 1.0.0-rc.1 is a production-oriented candidate, not a
    production qualification. Evaluate it in a non-production environment first
    and track the GA gates below. The tag is a prerelease; do not present it as
    the final 1.0.0 release.
@@ -234,8 +234,8 @@ this document does not duplicate the full digest list.
 Executed on 2026-11-05 against candidate
 `ce9625006e180e632e646dc6d11ea8c2c497b15f` on the security-refreshed Cube
 template `tpl-4fedc58c5f9543a39d721e37`. The evidence-bound record is
-[the 1.0.0-beta.1 qualification record](../release/qualification/v1.0.0-beta.1.md)
-with artifacts under `release/qualification/evidence/v1.0.0-beta.1/` (security
+[the 1.0.0-rc.1 qualification record](../release/qualification/v1.0.0-rc.1.md)
+with artifacts under `release/qualification/evidence/v1.0.0-rc.1/` (security
 evidence is separated from build, Cube and acceptance evidence).
 
 - Host compile plus the complete Go suite executed inside disposable Cube
@@ -257,17 +257,17 @@ evidence is separated from build, Cube and acceptance evidence).
   `factory config validate`, `factory doctor`, `factory agents verify` and
   `make cube-smoke` passed on the new template.
 - Release-candidate assets were built from a pristine worktree at the candidate
-  commit as `v1.0.0-beta.1`, passed `scripts/verify-release.sh`, contained no
+  commit as `v1.0.0-rc.1`, passed `scripts/verify-release.sh`, contained no
   Harness2 paths, produced a valid CycloneDX 1.6 SBOM, and reproduced
   byte-for-byte on a second build.
 - Security validation is summarized above: zero Critical/High on ESF product
   artifacts, with inherited platform residuals recorded with owner and GA gate.
 
-This record covers a beta candidate. It does not satisfy the GA gates below.
+This record covers a release candidate. It does not satisfy the GA gates below.
 
 ## Outstanding GA gates
 
-The following are explicitly deferred from this beta and must close before
+The following are explicitly deferred from this release candidate and must close before
 1.0.0 is described as production-qualified:
 
 - **24-hour soak** at the intended concurrency, with leak, cleanup, latency and
@@ -280,7 +280,7 @@ The following are explicitly deferred from this beta and must close before
   replay of retained production histories (including the rolling-upgrade case).
 - **Hosted-provider and model-backed acceptance:** acceptance on HTTPS
   CubeEgress profiles with the hosted providers and models documented for each
-  harness; the beta validation uses deterministic/conformance execution only.
+  harness; the release-candidate validation uses deterministic/conformance execution only.
 - **Image/template publication:** building, attesting and publishing immutable
   factory/intake images and the Cube template with recorded digests, qualifying
   the published template, and consuming per-image SBOM/vulnerability and
@@ -288,10 +288,10 @@ The following are explicitly deferred from this beta and must close before
 - **Performance/load check** at the intended deployment size, and sign-off of
   the residual inherited-platform risk record.
 - **Final release review:** an independent review of the final 1.0.0 release
-  diff. The beta candidate review is complete and recorded in
-  [the review record](review-v1.0.0-beta.1.md).
+  diff. The release candidate review is complete and recorded in
+  [the review record](review-v1.0.0-rc.1.md).
 
-These gates belong to the 1.0.0 GA milestone, not to this beta. A passing beta
+These gates belong to the 1.0.0 GA milestone, not to this release candidate. A passing release candidate
 build does not imply any of them has passed.
 
 ## Historical records

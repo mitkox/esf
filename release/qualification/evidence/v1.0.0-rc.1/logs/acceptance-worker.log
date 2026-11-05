@@ -1,5 +1,5 @@
-time=2026-11-05T12:09:13.266+02:00 level=INFO msg="factory worker starting" temporal.address=127.0.0.1:7233 temporal.namespace=default task_queue=esf-beta1-validation-20261105 sandbox.provider=cubesandbox sandbox.template=tpl-4fedc58c5f9543a39d721e37 harnesses="[claude codex conformance harness-opt-fix noop opencode2 pi unreal]" artifacts=/home/mitko/dev/esf/.factory
-time=2026-11-05T12:09:13.268+02:00 level=INFO msg="Started Worker" Namespace=default TaskQueue=esf-beta1-validation-20261105 WorkerID=factory-worker@hp-z2-2:1262356
+time=2026-11-05T12:09:13.266+02:00 level=INFO msg="factory worker starting" temporal.address=127.0.0.1:7233 temporal.namespace=default task_queue=esf-rc1-validation-20261105 sandbox.provider=cubesandbox sandbox.template=tpl-4fedc58c5f9543a39d721e37 harnesses="[claude codex conformance harness-opt-fix noop opencode2 pi unreal]" artifacts=/home/mitko/dev/esf/.factory
+time=2026-11-05T12:09:13.268+02:00 level=INFO msg="Started Worker" Namespace=default TaskQueue=esf-rc1-validation-20261105 WorkerID=factory-worker@hp-z2-2:1262356
 time=2026-11-05T12:09:14.959+02:00 level=INFO msg="cube sandbox created" sandbox.id=2252435494524ad6ac353dc2d9f475e2 sandbox.template=tpl-4fedc58c5f9543a39d721e37 duration=65.557651ms
 time=2026-11-05T12:09:14.959+02:00 level=INFO msg="sandbox created" run.id=run-8426d021f427ff4240804201 sandbox.id=2252435494524ad6ac353dc2d9f475e2 sandbox.template=tpl-4fedc58c5f9543a39d721e37
 time=2026-11-05T12:09:14.985+02:00 level=INFO msg="harness provisioned" run.id=run-8426d021f427ff4240804201 harness=conformance harness.version="" duration=6.732µs
@@ -13,4 +13,4 @@ time=2026-11-05T12:09:16.061+02:00 level=INFO msg="artifacts collected" run.id=r
 time=2026-11-05T12:09:16.177+02:00 level=INFO msg="sandbox destroyed and verified" run.id=run-8426d021f427ff4240804201 sandbox.id=2252435494524ad6ac353dc2d9f475e2 remaining=0
 time=2026-11-05T12:09:16.209+02:00 level=INFO msg="run finalized" run.id=run-8426d021f427ff4240804201 factory.result=SUCCEEDED agent.result=SUCCESS verification.result=SUCCESS cleanup.result=SUCCESS
 time=2026-11-05T12:09:16.238+02:00 level=INFO msg="change recorded" change.id=run-8426d021f427ff4240804201 run.id=run-8426d021f427ff4240804201 attempts=1 change.status=IN_REVIEW
-time=2026-11-05T12:09:16.267+02:00 level=INFO msg="Stopped Worker" Namespace=default TaskQueue=esf-beta1-validation-20261105 WorkerID=factory-worker@hp-z2-2:1262356
+time=2026-11-05T12:09:16.267+02:00 level=INFO msg="Stopped Worker" Namespace=default TaskQueue=esf-rc1-validation-20261105 WorkerID=factory-worker@hp-z2-2:1262356

@@ -1,14 +1,20 @@
 {
   "schema": "esf-template-build/v1",
-  "candidate": "v1.0.0-beta.1",
+  "candidate": "v1.0.0-rc.1",
   "built_at": "2026-11-05T11:33:00+02:00",
   "baseline_commit": "051062b47060c684b3bd52a8aeb4e9d958b83333",
   "recipe": {
     "file": "deploy/cube/Dockerfile",
-    "sha256": "128757ac757f1e42909dfb475abbe289f1648b2e75026221eec860d57b565fec",
-    "builder_stages": ["envd", "opencode", "unreal", "cube-template"],
+    "sha256": "c4c9126761bb6c1c04f3d7f306c75fb341bafc24340d4b1578221397925799eb",
+    "builder_stages": [
+      "envd",
+      "opencode",
+      "unreal",
+      "cube-template"
+    ],
     "platform": "linux/amd64",
-    "inject_envd": false
+    "inject_envd": false,
+    "note": "Dockerfile comment updated from the v1.0.0-beta.1 label to v1.0.0-rc.1 after the template build; no build instruction changed, so the recorded image digests stand."
   },
   "build_inputs": {
     "go_builder": "docker.io/library/golang@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b (go1.27.3)",
@@ -51,7 +57,7 @@
       "image": "127.0.0.1:32001/esf-cube-template@sha256:37ad97ab7e15a5692d6152f997d42618b1f9d47e1c782f6b9bbf12677ed56be1",
       "local_image_id": "sha256:37ad97ab7e15a5692d6152f997d42618b1f9d47e1c782f6b9bbf12677ed56be1",
       "template_id": "tpl-f08163cb274f456c8754bc72",
-      "alias": "esf-v100-beta1-20261105",
+      "alias": "esf-v100-rc1-20261105",
       "build_job": "134f6b25-440e-4d41-ad3c-fcb50b2ddb35",
       "status": "READY",
       "size": "707MB"
@@ -59,7 +65,7 @@
     "full_native_pi": {
       "image": "127.0.0.1:32001/esf-native-pi@sha256:bd11873f03e34b0c9b051f220fd627a6b175e1c56f37ef25d130b2e1168804c4",
       "template_id": "tpl-4fedc58c5f9543a39d721e37",
-      "alias": "esf-v100-beta1-full-20261105",
+      "alias": "esf-v100-rc1-full-20261105",
       "build_job": "d893dcdf-284b-4397-a7d5-fed70ef5597e",
       "status": "READY",
       "overlays": [

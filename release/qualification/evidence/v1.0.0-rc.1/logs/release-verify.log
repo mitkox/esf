@@ -1,11 +1,11 @@
-esf_factory_1.0.0-beta.1_darwin_amd64.tar.gz: OK
-esf_factory_1.0.0-beta.1_darwin_arm64.tar.gz: OK
-esf_factory_1.0.0-beta.1_linux_amd64.tar.gz: OK
-esf_factory_1.0.0-beta.1_linux_arm64.tar.gz: OK
+esf_factory_1.0.0-rc.1_darwin_amd64.tar.gz: OK
+esf_factory_1.0.0-rc.1_darwin_arm64.tar.gz: OK
+esf_factory_1.0.0-rc.1_linux_amd64.tar.gz: OK
+esf_factory_1.0.0-rc.1_linux_arm64.tar.gz: OK
 release-manifest.json: OK
 dependency-inventory.json: OK
 sbom.cdx.json: OK
-  "release": "v1.0.0-beta.1",
+  "release": "v1.0.0-rc.1",
   "commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
 	build	GOOS=linux
 	build	GOARCH=amd64

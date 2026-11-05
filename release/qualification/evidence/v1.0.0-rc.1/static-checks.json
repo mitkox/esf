@@ -1,6 +1,6 @@
 {
   "schema": "esf-static-checks/v1",
-  "candidate": "v1.0.0-beta.1",
+  "candidate": "v1.0.0-rc.1",
   "source_commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
   "host": {
     "go": "go1.27.3",

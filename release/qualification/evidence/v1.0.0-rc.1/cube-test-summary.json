@@ -1,6 +1,6 @@
 {
   "schema": "esf-cube-test/v1",
-  "candidate": "v1.0.0-beta.1",
+  "candidate": "v1.0.0-rc.1",
   "source_commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
   "source_commit_env": "ce962500",
   "template": "tpl-4fedc58c5f9543a39d721e37",
