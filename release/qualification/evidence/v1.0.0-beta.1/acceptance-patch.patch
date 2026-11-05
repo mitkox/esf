@@ -1,0 +1,13 @@
+diff --git a/greeting.py b/greeting.py
+index 7c9a7a2..fd4a8b9 100644
+--- a/greeting.py
++++ b/greeting.py
+@@ -12,7 +12,7 @@ reproducible.
+ 
+ def greeting() -> str:
+     """Return the current greeting."""
+-    return "hello"
++    return "hello factory"
+ 
+ 
+ if __name__ == "__main__":

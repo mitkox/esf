@@ -1,0 +1,57 @@
+
+> esf-factory-console@0.1.0 build
+> vite build
+
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 2161 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                                0.64 kB │ gzip:  0.35 kB
+dist/assets/manrope-cyrillic-ext-wght-normal-C8S-KRRz.woff2    2.55 kB
+dist/assets/manrope-vietnamese-wght-normal-usUDDRr7.woff2      8.52 kB
+dist/assets/manrope-greek-wght-normal-DL7QRZyv.woff2           9.44 kB
+dist/assets/manrope-cyrillic-wght-normal-Dvxsihut.woff2       14.50 kB
+dist/assets/manrope-latin-ext-wght-normal-Ch3YOpNY.woff2      15.12 kB
+dist/assets/manrope-latin-wght-normal-DHIcAJRg.woff2          24.83 kB
+dist/assets/index-mTDCA2mT.css                                67.68 kB │ gzip: 12.84 kB
+dist/assets/check-CejWgMvk.js                                  0.15 kB │ gzip:  0.16 kB
+dist/assets/chevron-left-Co98DWsE.js                           0.16 kB │ gzip:  0.16 kB
+dist/assets/clock-DGuemnsR.js                                  0.19 kB │ gzip:  0.18 kB
+dist/assets/gauge-DvTW4RI0.js                                  0.20 kB │ gzip:  0.18 kB
+dist/assets/external-link-Bvha8VZJ.js                          0.28 kB │ gzip:  0.22 kB
+dist/assets/list-checks-4puU9PIH.js                            0.30 kB │ gzip:  0.20 kB
+dist/assets/file-exclamation-point-Cgm1DUwi.js                 0.36 kB │ gzip:  0.26 kB
+dist/assets/package-check-BlkMk4cN.js                          0.44 kB │ gzip:  0.29 kB
+dist/assets/sliders-horizontal-DWS2UN4f.js                     0.45 kB │ gzip:  0.25 kB
+dist/assets/radar-BqavYt2H.js                                  0.53 kB │ gzip:  0.32 kB
+dist/assets/database-CEAnc-52.js                               0.54 kB │ gzip:  0.33 kB
+dist/assets/terminal-XW7dTnUQ.js                               0.54 kB │ gzip:  0.31 kB
+dist/assets/scan-search-y27FLjSG.js                            0.77 kB │ gzip:  0.39 kB
+dist/assets/radio-BZcmUJuK.js                                  1.01 kB │ gzip:  0.45 kB
+dist/assets/workflow-CbylmLdy.js                               1.11 kB │ gzip:  0.51 kB
+dist/assets/command-row-U9q-fDKC.js                            1.38 kB │ gzip:  0.73 kB
+dist/assets/copy-button-C8eFAuYw.js                            1.61 kB │ gzip:  0.92 kB
+dist/assets/pagination-uDBWY7xt.js                             2.07 kB │ gzip:  0.98 kB
+dist/assets/table-B1-zwJf7.js                                  2.13 kB │ gzip:  0.83 kB
+dist/assets/skeleton-DtNnaM_b.js                               2.45 kB │ gzip:  0.86 kB
+dist/assets/page-header-D7WsmHJF.js                            3.50 kB │ gzip:  1.17 kB
+dist/assets/kpi-tile-CtBBwAt_.js                               3.79 kB │ gzip:  1.69 kB
+dist/assets/notice-C16Pvn0e.js                                 4.09 kB │ gzip:  1.77 kB
+dist/assets/helpers-C894AnT6.js                                7.99 kB │ gzip:  2.84 kB
+dist/assets/verification-profiles-WlVFOpIo.js                  9.79 kB │ gzip:  2.75 kB
+dist/assets/changes-JUXRVhvX.js                               12.81 kB │ gzip:  4.54 kB
+dist/assets/run-table-CY6r2BxG.js                             13.26 kB │ gzip:  4.48 kB
+dist/assets/dispatch-BTDRNiWP.js                              13.41 kB │ gzip:  4.76 kB
+dist/assets/runs-C9H9CcGC.js                                  14.83 kB │ gzip:  5.02 kB
+dist/assets/reviews-4mlx4Syv.js                               17.97 kB │ gzip:  5.90 kB
+dist/assets/change-detail-DifhRfs8.js                         19.15 kB │ gzip:  5.66 kB
+dist/assets/operations-BKUrys5y.js                            22.58 kB │ gzip:  6.46 kB
+dist/assets/security-Ci54rnJJ.js                              23.55 kB │ gzip:  6.82 kB
+dist/assets/settings-CalY9C7K.js                              23.88 kB │ gzip:  7.13 kB
+dist/assets/button-CzOknZ1H.js                                25.78 kB │ gzip:  9.69 kB
+dist/assets/overview-BQmXeBQW.js                              55.59 kB │ gzip: 15.47 kB
+dist/assets/run-detail-CG_2ZHI8.js                            65.86 kB │ gzip: 16.72 kB
+dist/assets/index-qy3WU21z.js                                286.92 kB │ gzip: 87.09 kB
+
+✓ built in 158ms

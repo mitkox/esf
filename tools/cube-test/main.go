@@ -66,7 +66,7 @@ func run() (err error) {
 	defer p.Close()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	id := fmt.Sprintf("harness2-validation-%d", time.Now().UnixNano())
+	id := fmt.Sprintf("esf-validate-%d", time.Now().UnixNano())
 	closed := false
 	report := map[string]any{"schema": "esf-cube-test/v1", "source_commit": os.Getenv("ESF_TEST_COMMIT"), "template": cfg.Cube.TemplateID, "started_at": time.Now().UTC()}
 	defer func() {

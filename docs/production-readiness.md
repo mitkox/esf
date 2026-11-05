@@ -8,6 +8,13 @@ are development configuration.
 > web UI. Machinist and frontend items in this historical review describe the
 > pre-removal candidate and no longer apply. The factory validation below
 > remains the relevant record; see [the 0.6.2 release notes](release-v0.6.2.md).
+>
+> **Update 2026-11-05:** ESF 1.0.0-beta.1 is the current beta candidate. This
+> historical review describes the validation it performed; it does not qualify
+> the beta, and production qualification is still outstanding. The beta removes
+> the experimental Harness2 improvement PoC and lists the remaining GA gates in
+> [the 1.0.0-beta.1 release notes](release-v1.0.0-beta.1.md). Toolchain versions
+> quoted below are historical.
 
 ## Corrections made
 

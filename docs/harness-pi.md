@@ -193,7 +193,8 @@ HTTPS CubeEgress, failure, review, and recovery acceptance matrix described
 above. See [the component upgrade evidence](../release/qualification/component-upgrade-2026-10-06.md).
 
 The 0.7.2 candidate moved Pi Durable, Pi AI, and Chord to 1.5.0 and the
-bundled runtime to Node 26.13.0; 0.7.3 keeps those pins. The rebuilt bundle and
+bundled runtime to Node 26.13.0; the 0.7.3 refresh and 1.0.0-beta.1 carry those
+pins (the frozen release inventory is authoritative). The rebuilt bundle and
 exported catalog passed the runner regressions in Cube. Earlier model-backed results apply to their recorded versions;
 model-backed and HTTPS credential-injection acceptance must be repeated for
 this execution chain.

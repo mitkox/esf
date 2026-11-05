@@ -8,7 +8,7 @@ RUN go mod download
 COPY . .
 ARG TARGETOS
 ARG TARGETARCH
-ARG ESF_VERSION=0.7.3
+ARG ESF_VERSION=1.0.0
 ARG ESF_COMMIT
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -buildvcs=false -trimpath \
@@ -17,7 +17,6 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 
 FROM ${RUNTIME_BASE} AS factory
 COPY --from=build /out/factory /usr/local/bin/factory
-COPY --from=build /src/third_party/harness2 /usr/share/doc/esf/harness2
 USER 10001:10001
 ENV HOME=/tmp
 ENTRYPOINT ["/usr/local/bin/factory"]

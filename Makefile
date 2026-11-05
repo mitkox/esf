@@ -10,7 +10,7 @@ SHELL := /bin/bash
 GO ?= go
 UV ?= uv
 PYTHON_VERSION ?= 3.15.2
-ESF_VERSION ?= 0.7.3
+ESF_VERSION ?= 1.0.0
 ESF_COMMIT := $(shell git rev-parse HEAD)
 
 BIN_DIR    := bin
@@ -74,8 +74,8 @@ test-python: ## Run optional Python tool tests against uv.lock
 test-python-docker: ## Test optional Python tools in the pinned 3.15.2 image
 	docker build -f deploy/images/Dockerfile.intake --build-arg ESF_COMMIT=$$(git rev-parse HEAD) -t esf/intake:python-tests .
 	docker run --rm --entrypoint /opt/esf/.venv/bin/python esf/intake:python-tests -c 'import sys; assert sys.version_info[:3] == (3, 15, 2)'
-	docker run --rm --entrypoint /opt/esf/.venv/bin/python esf/intake:python-tests -m unittest discover -s tools/intake/tests -p 'test_*.py'
-	docker run --rm --entrypoint /opt/esf/.venv/bin/python esf/intake:python-tests -m unittest discover -s tools/brief_lab/tests -p 'test_*.py'
+	docker run --rm -v "$(CURDIR)":/src -w /src --entrypoint /opt/esf/.venv/bin/python esf/intake:python-tests -m unittest discover -s tools/intake/tests -p 'test_*.py'
+	docker run --rm -v "$(CURDIR)":/src -w /src --entrypoint /opt/esf/.venv/bin/python esf/intake:python-tests -m unittest discover -s tools/brief_lab/tests -p 'test_*.py'
 
 .PHONY: test-unit
 test-unit: ## Run unit tests only (fast)

@@ -1,5 +1,15 @@
+# ESF intake/tooling image.
+#
+# Runtime base is pinned Alpine with no distribution Python packages; the
+# interpreter is a uv-managed CPython 3.15.2 download, so the OS package
+# surface exposed to image scanners is empty instead of the Debian/Alpine
+# python-* package chain. The uv.lock closure is unchanged and installed with
+# --locked. Keep the pinned uv version equal to release/inventory.json
+# toolchains.uv.
 ARG GO_BUILDER=docker.io/library/golang@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b
-ARG PYTHON_BASE=docker.io/library/python@sha256:8c13a3f37a6a5b71498228e902c4b9f51c1f7900d49fabf71f9a650c6120e0d0
+# Build-only interpreter used to run uv; the shipped image does not contain it.
+ARG PYTHON_BUILDER=docker.io/library/python@sha256:4b777652b7ca0a1fae98a847e83e538605d0fb8de3812f3403076aca74368e74
+ARG ALPINE_BASE=docker.io/library/alpine@sha256:ff7f0c727dd796aa36787bfcd9a64bf35a6ce72a73451b3359fde849b6703d63
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS build
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -7,23 +17,31 @@ RUN go mod download
 COPY . .
 ARG TARGETOS
 ARG TARGETARCH
-ARG ESF_VERSION=0.7.3
+ARG ESF_VERSION=1.0.0
 ARG ESF_COMMIT
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -buildvcs=false -trimpath \
       -ldflags="-s -w -X github.com/mitkox/esf/internal/factory.Version=${ESF_VERSION} -X main.buildCommit=${ESF_COMMIT}" \
       -o /out/factory ./cmd/factory
 
-FROM ${PYTHON_BASE} AS intake
+FROM ${PYTHON_BUILDER} AS python-tools
 WORKDIR /opt/esf
-COPY --from=build /out/factory /usr/local/bin/factory
-COPY third_party/harness2 /usr/share/doc/esf/harness2
 COPY pyproject.toml uv.lock ./
 COPY tools/intake tools/intake
 COPY tools/brief_lab tools/brief_lab
+ENV UV_PYTHON_INSTALL_DIR=/opt/python \
+    UV_PYTHON_PREFERENCE=only-managed
 RUN python -m pip install --no-cache-dir uv==0.13.7 && \
-    uv sync --locked --python /usr/local/bin/python3 --no-install-project && \
-    useradd --uid 10001 --no-create-home esf
+    uv python install 3.15.2 && \
+    uv sync --locked --python 3.15.2 --no-install-project && \
+    .venv/bin/python -c 'import sys; assert sys.version_info[:3] == (3,15,2), sys.version'
+
+FROM ${ALPINE_BASE} AS intake
+RUN apk add --no-cache ca-certificates && \
+    adduser -u 10001 -D -H -s /sbin/nologin esf
+COPY --from=build /out/factory /usr/local/bin/factory
+COPY --from=python-tools /opt/python /opt/python
+COPY --from=python-tools /opt/esf/.venv /opt/esf/.venv
 USER 10001:10001
-ENV PATH=/opt/esf/.venv/bin:$PATH HOME=/tmp
+ENV PATH=/opt/esf/.venv/bin:/opt/python/bin:$PATH HOME=/tmp
 ENTRYPOINT ["/usr/local/bin/factory"]

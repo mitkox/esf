@@ -405,10 +405,9 @@ func (s *Server) buildLiveSandboxes(runs []*runRecord, live liveSnapshot, snapsh
 			state.Leaked++
 		case item.FactoryOwned && !recorded:
 			// A factory-owned sandbox with no manifest and no open change
-			// workflow is unattributed. Improvement workflows and their
-			// stage-specific sandbox run IDs are outside the console's
-			// visibility query, so this is NOT provably a leak; report it as
-			// unclassified instead of encouraging cleanup of a live experiment.
+			// workflow is unattributed: it may belong to a workflow outside the
+			// console's visibility query, so this is NOT provably a leak; report
+			// it as unclassified instead of encouraging cleanup of a live run.
 			item.AttributionKnown = false
 			unclassified++
 		default:
@@ -422,7 +421,7 @@ func (s *Server) buildLiveSandboxes(runs []*runRecord, live liveSnapshot, snapsh
 	}
 	if unclassified > 0 {
 		state.Note = fmt.Sprintf(
-			"%d factory-owned sandbox(es) could not be attributed: harness-improvement workflows are outside the console's visibility query, so they are left unclassified rather than reported as leaks.",
+			"%d factory-owned sandbox(es) could not be attributed to a visible workflow or run manifest; they are left unclassified rather than reported as leaks.",
 			unclassified,
 		)
 	}

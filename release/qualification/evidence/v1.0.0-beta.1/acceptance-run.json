@@ -1,0 +1,214 @@
+{
+  "agent_exit_code": 0,
+  "agent_harness": "conformance",
+  "agent_result": "SUCCESS",
+  "artifacts": "runs/run-8426d021f427ff4240804201",
+  "baseline_sha": "d69acb1391b21e336ef2f9002c2ff49ef6a62bca",
+  "cleanup_result": {
+    "attempted": true,
+    "duration": 80499609,
+    "finished_at": "2026-11-05T10:09:16.159632736Z",
+    "outcome": "SUCCESS",
+    "remaining_sandboxes": 0,
+    "sandbox_id": "2252435494524ad6ac353dc2d9f475e2",
+    "verified": true
+  },
+  "completed_at": "2026-11-05T10:09:16.184735135Z",
+  "conditions": [
+    {
+      "last_transition_time": "2026-11-05T10:09:14.246772692Z",
+      "message": "scope=default",
+      "reason": "PolicyAccepted",
+      "status": "True",
+      "type": "Validated"
+    },
+    {
+      "last_transition_time": "2026-11-05T10:09:14.970588127Z",
+      "message": "sandbox=2252435494524ad6ac353dc2d9f475e2 template=tpl-4fedc58c5f9543a39d721e37",
+      "reason": "Created",
+      "status": "True",
+      "type": "SandboxReady"
+    },
+    {
+      "last_transition_time": "2026-11-05T10:09:14.990952871Z",
+      "message": "workspace= digest=",
+      "reason": "Provisioned",
+      "status": "True",
+      "type": "WorkspacePrepared"
+    },
+    {
+      "last_transition_time": "2026-11-05T10:09:15.286938997Z",
+      "message": "sha=d69acb1391b21e336ef2f9002c2ff49ef6a62bca",
+      "reason": "CheckedOut",
+      "status": "True",
+      "type": "RepositoryPrepared"
+    },
+    {
+      "last_transition_time": "2026-11-05T10:09:15.339506156Z",
+      "message": "path=/workspace/.factory/inventory.json digest=sha256:b1257422334f7e22ee69f8f4735f24df97b1d1085e958988b93fb50288ccb118",
+      "reason": "Published",
+      "status": "True",
+      "type": "InventoryWritten"
+    },
+    {
+      "last_transition_time": "2026-11-05T10:09:15.496239589Z",
+      "message": "expect_deny=false internet=reachable metadata=unknown uid=0",
+      "reason": "ProbeInconclusive",
+      "status": "Unknown",
+      "type": "EgressVerified"
+    },
+    {
+      "last_transition_time": "2026-11-05T10:09:15.646114211Z",
+      "reason": "NotBlocked",
+      "status": "False",
+      "type": "AgentBlocked"
+    },
+    {
+      "last_transition_time": "2026-11-05T10:09:15.646114211Z",
+      "message": "attempt=1 duration=43.235299ms",
+      "reason": "ExitZero",
+      "status": "True",
+      "type": "AgentCompleted"
+    },
+    {
+      "last_transition_time": "2026-11-05T10:09:16.068557032Z",
+      "message": "drift=false",
+      "reason": "PostVerification",
+      "status": "True",
+      "type": "ArtifactsCollected"
+    },
+    {
+      "last_transition_time": "2026-11-05T10:09:15.805066524Z",
+      "message": "method=tree-hash gates=3",
+      "reason": "Unmodified",
+      "status": "True",
+      "type": "GateIntegrity"
+    },
+    {
+      "last_transition_time": "2026-11-05T10:09:15.834779168Z",
+      "message": "no findings",
+      "reason": "Clean",
+      "status": "True",
+      "type": "BehaviorScanned"
+    },
+    {
+      "last_transition_time": "2026-11-05T10:09:16.068557032Z",
+      "reason": "AllGatesPassed",
+      "status": "True",
+      "type": "Verified"
+    },
+    {
+      "last_transition_time": "2026-11-05T10:09:16.068557032Z",
+      "reason": "WithinBudget",
+      "status": "False",
+      "type": "BudgetExceeded"
+    },
+    {
+      "last_transition_time": "2026-11-05T10:09:16.184735135Z",
+      "message": "remaining=0",
+      "reason": "NoSandboxesRemain",
+      "status": "True",
+      "type": "CleanupVerified"
+    }
+  ],
+  "cube_version_if_available": "0.7.3",
+  "duration": 1980037406,
+  "egress_digest": "sha256:8f53d55f986a3c9d896ca474e758e338294ab3db5b089a4b69b657eb9270b62d",
+  "egress_policy": "local-model",
+  "egress_summary": "internet=allowed",
+  "factory_result": "SUCCEEDED",
+  "factory_version": "1.0.0",
+  "hardening": {
+    "behavior": {
+      "findings": null,
+      "ruleset_version": "1",
+      "scanned_lines": 16,
+      "tripped": false
+    },
+    "egress_probe": {
+      "agent_uid": 0,
+      "agent_user": "root",
+      "canary": {
+        "decided": true,
+        "detail": "http_200",
+        "reachable": true,
+        "url": "https://example.com/"
+      },
+      "duration": 121097781,
+      "expect_deny": false,
+      "metadata": {
+        "decided": false,
+        "detail": "curl_rc=7",
+        "reachable": false,
+        "url": "http://169.254.169.254/latest/meta-data/"
+      },
+      "notes": [
+        "the metadata probe was undecided (inconclusive): curl_rc=7"
+      ],
+      "policy": "local-model",
+      "probed_at": "2026-11-05T10:09:15.352640459Z",
+      "raw": "ESF_PROBE identity 0 root\nESF_PROBE canary reachable http_200\nESF_PROBE metadata unknown curl_rc=7"
+    },
+    "gate_integrity": {
+      "allowed": false,
+      "checked": true,
+      "gate_paths": [
+        "build.sh",
+        "python3.12",
+        "test.sh"
+      ],
+      "method": "tree-hash"
+    }
+  },
+  "intake": {
+    "ambiguity": {
+      "confidence": 0.28,
+      "level": "clear",
+      "probabilities": {
+        "ambiguous": 0.09,
+        "clear": 0.61,
+        "partial": 0.3
+      },
+      "value": 0.48
+    },
+    "duration_ms": 615,
+    "model": "jev-latest",
+    "program": "intake-v1",
+    "ready": {
+      "confidence": 0.26,
+      "probability": 0.63,
+      "value": true
+    },
+    "status": "ok",
+    "task_type": {
+      "confidence": 0.6,
+      "probabilities": {
+        "bugfix": 0.15,
+        "docs": 0,
+        "feature": 0.68,
+        "other": 0.17,
+        "refactor": 0
+      },
+      "value": "feature"
+    }
+  },
+  "patch": "changes.patch",
+  "post_verification_patch": "verification/post-verification.patch",
+  "repository": "local:/home/mitko/dev/esf/testdata/e2e-repo-work",
+  "repository_kind": "local",
+  "requested_revision": "d69acb1391b21e336ef2f9002c2ff49ef6a62bca",
+  "resource_digest": "sha256:17d3825ce4e01dd176cde0f62d8e73a22617c6f3e92558876b49af2ba4bbce47",
+  "resulting_sha_if_any": "d69acb1391b21e336ef2f9002c2ff49ef6a62bca",
+  "run_id": "run-8426d021f427ff4240804201",
+  "sandbox_id": "2252435494524ad6ac353dc2d9f475e2",
+  "sandbox_provider": "cubesandbox",
+  "sandbox_template": "tpl-4fedc58c5f9543a39d721e37",
+  "scope": "default",
+  "started_at": "2026-11-05T10:09:14.204697729Z",
+  "task_hash": "85400ceedea8a049a4431cc5cea6b18c1d01dd4656d1501ef3f0afe25d2ea06a",
+  "verification_mutated_tree": false,
+  "verification_profile": "default",
+  "verification_result": "SUCCESS",
+  "workflow_id": "factory-run-run-8426d021f427ff4240804201",
+  "workflow_run_id": "01a1ab2f-1dd2-74e6-9508-08a3c19bab09"
+}

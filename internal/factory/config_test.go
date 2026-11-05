@@ -345,6 +345,73 @@ func TestLoadConfigRejectsUnknownFields(t *testing.T) {
 	}
 }
 
+// TestLoadConfigRejectsRemovedHarness2Surfaces pins the 1.0.0 configuration
+// break: the removed Harness2 sections and scope keys must be rejected by the
+// strict decoder, so a retained 0.7.x configuration fails loudly instead of
+// silently running without the settings it still names.
+func TestLoadConfigRejectsRemovedHarness2Surfaces(t *testing.T) {
+	t.Parallel()
+
+	const base = `
+schema_version = 1
+
+[cube]
+api_url = "http://127.0.0.1:4000"
+template_id = "tpl-test"
+
+[temporal]
+host_port = "127.0.0.1:7233"
+task_queue = "factory"
+
+[storage]
+data_dir = "/var/lib/esf/factory"
+
+[harnesses.agent]
+type = "generic"
+executable = "/bin/echo"
+timeout = "2m"
+
+[verification.default]
+name = "default"
+`
+
+	cases := []struct {
+		name    string
+		snippet string
+	}{
+		{"harness_profiles table", "[harness_profiles]\ndefault = \"sha256:" + strings.Repeat("a", 64) + "\"\n"},
+		{"improvement table", "[improvement]\nupstream_url = \"https://provider.invalid/v1\"\n"},
+		{"improvement_policies table", "[improvement_policies.pilot]\nmode = \"offline\"\n"},
+		{"improvement_suites table", "[improvement_suites]\nsuite = \"/var/lib/esf/suite.json\"\n"},
+		{"scope harness_profiles key", "[scopes.default]\nharness_profiles = [\"default\"]\n"},
+		{"scope improvement_policies key", "[scopes.default]\nimprovement_policies = [\"pilot\"]\n"},
+	}
+
+	// The base configuration on its own must load, so a failure below is
+	// attributable to the removed surface rather than to the fixture.
+	basePath := filepath.Join(t.TempDir(), "factory.toml")
+	if err := os.WriteFile(basePath, []byte(base), 0o644); err != nil {
+		t.Fatalf("write base config: %v", err)
+	}
+	if _, err := LoadConfig(basePath); err != nil {
+		t.Fatalf("base configuration does not load: %v", err)
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "factory.toml")
+			if err := os.WriteFile(path, []byte(base+tc.snippet), 0o644); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+			if _, err := LoadConfig(path); err == nil {
+				t.Fatalf("LoadConfig accepted removed Harness2 configuration %q", tc.name)
+			}
+		})
+	}
+}
+
 func TestEffectiveVersion(t *testing.T) {
 	t.Parallel()
 	if got := (Config{}).effectiveVersion(); got != Version {

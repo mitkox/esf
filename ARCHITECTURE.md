@@ -12,10 +12,8 @@ Task → Temporal → CubeSandbox → coding agent → verification → patch + 
 The `factory` CLI is the control plane and the security boundary. It accepts
 only an approved repository, an exact revision and task text; it never accepts
 an executable, a host path or an environment override. The factory exposes no
-general-purpose control-plane HTTP API and no web UI. Two narrow surfaces are
-separate: the optional loopback-only `factory budget-gateway` for the Harness2
-model route (documented in `docs/harness-improvement.md`), and the private sf
-turn service described below.
+general-purpose control-plane HTTP API and no web UI. One narrow surface is
+separate: the private sf turn service described below.
 
 ## The factory layer
 
@@ -76,3 +74,9 @@ inherited `machinist` CLI, local control plane, SQLite store, managed worker and
 web UI were removed in 0.6.2; the factory architecture above is the only
 supported surface. See [ADR 0008](docs/adr/0008-remove-machinist.md) and
 [docs/upstream.md](docs/upstream.md).
+
+The experimental Harness2 improvement implementation was removed before 1.0.0
+because it never reached production qualification; ordinary factory runs,
+verification, review and the console are unchanged. See
+[ADR 0009](docs/adr/0009-remove-harness2-poc.md) and the
+[1.0.0-beta.1 release notes](docs/release-v1.0.0-beta.1.md).

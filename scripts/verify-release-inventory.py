@@ -25,7 +25,6 @@ def main() -> int:
     inventory = json.loads((ROOT / "release/inventory.json").read_text())
     embedded_inventory = ROOT / "internal/releaseinfo/inventory.json"
     dependencies = inventory["dependencies"]
-    harness2 = json.loads((ROOT / "third_party/harness2/UPSTREAM.json").read_text())
     mod = (ROOT / "go.mod").read_text()
     npm_agent = json.loads((ROOT / "agents/opencode/package-lock.json").read_text())["packages"]
     python = tomllib.loads((ROOT / "uv.lock").read_text())
@@ -38,10 +37,6 @@ def main() -> int:
             issues.append(message)
 
     require(embedded_inventory.exists() and embedded_inventory.read_bytes() == (ROOT / "release/inventory.json").read_bytes(), "embedded factory inventory differs from release inventory")
-    require(harness2["commit"] == "1cfe254e8d25b15f37048c3730134686abe60335" and
-            harness2["license"] == "Apache-2.0" and harness2["production_qualified"] is False,
-            "Harness2 provenance or qualification boundary changed")
-    require(dependencies.get("harness2") == harness2, "Harness2 release provenance differs")
     version = inventory["release"].removeprefix("v")
     root_python = tomllib.loads((ROOT / "pyproject.toml").read_text())
     require(root_python["project"]["version"] == version, "root Python version differs from inventory")
@@ -76,7 +71,7 @@ def main() -> int:
     require(f"node-version: {inventory['toolchains']['node']}" in ci, "CI Node differs from inventory")
     require(f"@v{inventory['security_tools']['govulncheck']}" in ci, "CI vulnerability scanner differs from inventory")
     require(f"@v{inventory['security_tools']['gitleaks']}" in ci, "CI secret scanner differs from inventory")
-    for name, bases in (("runtime", ("go", "runtime")), ("intake", ("go", "python"))):
+    for name, bases in (("runtime", ("go", "runtime")), ("intake", ("go", "python", "alpine"))):
         source = (ROOT / f"deploy/images/Dockerfile.{name}").read_text()
         for base in bases:
             require(inventory["build_bases"][base] in source, f"{name} {base} base differs from inventory")
@@ -106,10 +101,16 @@ def main() -> int:
     require(example_agent.get("credential_mode") == "cube_egress" and not example_agent.get("pass_env") and not example_agent.get("provider_files"), "example OpenCode credentials are agent-readable")
     require(example_agent.get("packages") == [] and not example_agent.get("catalog_cache"), "example OpenCode installs packages or uploads a catalog on every run")
     require(example["sandbox"].get("base_packages") == [], "example installs sandbox packages on every run")
-    for base in ("node", "cube"):
+    for base in ("go", "node", "cube"):
         require(inventory["build_bases"][base] in template, f"Cube template {base} base differs from inventory")
-    for name, field in (("opencode", "linux_amd64_binary_sha256"), ("unreal", "binary_sha256"), ("unreal", "linux_amd64_archive_sha256")):
-        require(dependencies[name][field] in template, f"Cube template {name} {field} differs from inventory")
+    require(dependencies["opencode"]["linux_amd64_binary_sha256"] in template,
+            "Cube template opencode linux_amd64_binary_sha256 differs from inventory")
+    envd = dependencies["envd"]
+    for field in ("commit", "source_archive_sha256", "binary_sha256"):
+        require(envd[field] in template, f"Cube template envd {field} differs from inventory")
+    unreal_payload = dependencies["unreal"]["template_payload"]
+    for field in ("commit", "source_archive_sha256", "binary_sha256"):
+        require(unreal_payload[field] in template, f"Cube template unreal payload {field} differs from inventory")
     require(hashlib.sha256(template.encode()).hexdigest() == inventory["templates"]["recipe_sha256"], "Cube template recipe differs from inventory")
     dspy = next((package.get("version") for package in python["package"] if package["name"] == "dspy"), None)
     require(dspy == dependencies["dspy"], "DSPy lock differs from inventory")

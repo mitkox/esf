@@ -216,7 +216,7 @@ the posture. See [`adr/0007-defense-in-depth.md`](adr/0007-defense-in-depth.md).
 | --- | --- |
 | [`upstream.md`](upstream.md) | Fork history, attribution and retained upstream notice |
 | [`architecture/target-state.md`](architecture/target-state.md) | The architecture this project implements, and its Phase 2 seams |
-| [`adr/`](adr/) | Architecture decision records, including defense in depth (0007) and Machinist removal (0008) |
+| [`adr/`](adr/) | Architecture decision records, including defense in depth (0007), Machinist removal (0008) and Harness2 PoC removal (0009) |
 | [`operator-guide.md`](operator-guide.md) | Run, inspect, cancel, harden, extend, and troubleshoot |
 | [`backlog/phase-2.md`](backlog/phase-2.md) | The prioritised Phase 2 backlog |
 

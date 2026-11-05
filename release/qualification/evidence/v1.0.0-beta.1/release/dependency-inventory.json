@@ -1,0 +1,142 @@
+{
+  "release": "v1.0.0",
+  "release_profile": "binary-preview",
+  "qualification_mode": "companion-manifest",
+  "baseline": "051062b47060c684b3bd52a8aeb4e9d958b83333",
+  "dependencies": {
+    "cubesandbox": {
+      "release": "0.7.3",
+      "go_sdk": "v0.7.3",
+      "qualification": "Go SDK lifecycle compatibility passed against local 0.7.3 stack; production deployment qualification pending"
+    },
+    "temporal": {
+      "server": "1.32.2",
+      "admin_tools": "1.32.2",
+      "ui": "2.58.0",
+      "go_sdk": "1.50.0",
+      "api": "1.64.1",
+      "qualification": "candidate; replay and deployment validation pending"
+    },
+    "opencode": {
+      "package": "@opencode/cli",
+      "version": "2.2.5",
+      "npm_integrity": "sha512-sJAwrwuVa5b+pA3O1UOiSDcC9DgdPVmtkWv6aF6q3+rOiOTCqrE41tkz1kyyE2O8BYPs4eOvBuzkQ6oEm8w5Mw==",
+      "linux_amd64_binary_sha256": "8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050",
+      "license": "MIT",
+      "qualification": "candidate; refreshed package integrity verified; Cube and provider validation recorded separately",
+      "linux_amd64_package": "@opencode/cli-linux-x64-baseline",
+      "linux_amd64_npm_integrity": "sha512-oPOT+EMmdz56HnSFPRVwZ0QTVL5defhOacnwzazu0XOuCWUtEKh8icIn323SdCLtqZtzjuU1mt6p2/13V93WWg=="
+    },
+    "unreal": {
+      "release": "0.3.1",
+      "linux_amd64_archive_sha256": "fd6e15236cc6f126ea3ddf2fc85c4be05bc5e8e4967977a89720bf95e22b304b",
+      "sha256sums_sha256": "9ad58d715a35e901b9cabc67c686a4b3cf9ef606bb56ee4514715f16256095f5",
+      "binary_sha256": "d289aa2046bb79d2b063679c6e0e6b714c759f8a5ed6f969d3b3ea1eeeec03ee",
+      "license": "MIT",
+      "qualification": "release checksums and local-model factory acceptance passed; hosted-provider qualification pending",
+      "template_payload": {
+        "source_repo": "https://github.com/unreallabsai/unreal-agent",
+        "tag": "v0.3.1",
+        "commit": "55747f5f449c07cf76b3a0747370b5817aa52d5b",
+        "source_archive_sha256": "5d734ef8129979a5238959320ba649840b49c69a1b4ebcb14b24863017f3ba93",
+        "binary_sha256": "056c3492d2eeec1ad21cb75728a85acbf01657447710da4176fc524c70ce8dd9",
+        "go": "1.27.3",
+        "integration": "rebuilt from pinned upstream source for the Cube template payload; upstream release pins remain authoritative for install-agents.sh"
+      }
+    },
+    "grpc": "1.85.0",
+    "otel": "1.47.0",
+    "dspy": "3.4.1",
+    "postgresql": "18.6",
+    "x_net": "0.62.0",
+    "envd": {
+      "source_repo": "https://github.com/e2b-dev/infra",
+      "tag": "2026.16",
+      "commit": "b8ca332f435370397bf42be614b2a5b620d65d39",
+      "source_archive_sha256": "0d8523b35f7bdee50668496f88411c0af75714653cd2e569c761259b95273b80",
+      "binary_sha256": "de39ec5aa736f47288644397b673efc34519bacbe2dc0a375867b5973c434fe1",
+      "go": "1.27.3",
+      "integration": "rebuilt from pinned upstream source in the Cube template recipe; replaces the vulnerable vendor base payload"
+    }
+  },
+  "toolchains": {
+    "go": "1.27.3",
+    "node": "26.13.0",
+    "python_optional": "3.15.2",
+    "kubernetes_qualification": "1.37.2",
+    "helm_qualification": "4.3.1",
+    "uv": "0.13.7"
+  },
+  "build_bases": {
+    "go": "docker.io/library/golang@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b",
+    "runtime": "gcr.io/distroless/static-debian13@sha256:448810357cc8e67b7208988abdba0f5ec3d3aebee0a5b13eb624979792cffc0f",
+    "python": "docker.io/library/python@sha256:4b777652b7ca0a1fae98a847e83e538605d0fb8de3812f3403076aca74368e74",
+    "node": "docker.io/library/node@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39",
+    "cube": "ghcr.io/tencentcloud/cubesandbox-base@sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472",
+    "alpine": "docker.io/library/alpine@sha256:ff7f0c727dd796aa36787bfcd9a64bf35a6ce72a73451b3359fde849b6703d63"
+  },
+  "images": {
+    "factory": null,
+    "intake": null,
+    "cube_template": null,
+    "cube": null,
+    "temporal": null,
+    "postgresql": null
+  },
+  "templates": {
+    "recipe_sha256": "128757ac757f1e42909dfb475abbe289f1648b2e75026221eec860d57b565fec",
+    "architecture": "linux/amd64",
+    "git_package": null,
+    "ca_certificates_package": null,
+    "python3_package": null,
+    "cube_template_id": null,
+    "template_sha256": null,
+    "qualification": "candidate; rebuilt envd and Unreal payloads validated by local template smoke and factory doctor; full image and template deployment qualification pending"
+  },
+  "transitive_licenses": "pending SBOM and notice review",
+  "qualification": {
+    "vm": "pending",
+    "kubernetes": "pending",
+    "soak_24h": "pending",
+    "restore": "pending",
+    "security": "pending",
+    "performance": "pending",
+    "temporal_replay": "pending",
+    "agent_acceptance": "pending",
+    "cube_lifecycle": "pending",
+    "migration_drill": "pending"
+  },
+  "optional_harnesses": {
+    "claude": {
+      "type": "claude",
+      "credential_mode": "cube_egress",
+      "tested_cli_version": "2.1.318",
+      "installation": "operator-provisioned standalone binary or complete runtime in a pinned Cube template",
+      "qualification": "candidate; official archive digest verified; CLI startup verified in Cube; provider qualification pending",
+      "linux_amd64_binary_sha256": "708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd",
+      "archive_url": "https://github.com/anthropics/claude-code/releases/download/v2.1.318/claude-linux-x64.tar.gz",
+      "archive_sha256": "e6d426ca0c123f61fad58a361da0329f2a93cd206bc87040ed8d9576dd9eb583",
+      "sha256sums_sha256": "fdf91f973d12ef87258e9d4c0fa0189e33f2172dab66861349947452dc299b8e"
+    },
+    "codex": {
+      "type": "codex",
+      "credential_mode": "cube_egress",
+      "tested_cli_version": "0.166.0",
+      "installation": "operator-provisioned standalone binary or complete runtime in a pinned Cube template",
+      "qualification": "candidate; official archive digest verified; CLI startup verified in Cube; provider qualification pending",
+      "linux_amd64_binary_sha256": "b8a11fedf24b2dfb59a70c9e52b030f9a508dcd49cd2dd0d41956f4c785156b8",
+      "archive_url": "https://github.com/openai/codex/releases/download/rust-v0.166.0/codex-x86_64-unknown-linux-musl.tar.gz",
+      "archive_sha256": "a0bf572d2f93f056c6712a6da348e96078dc84f3885fd7be67807ef389cb3978"
+    }
+  },
+  "service_images": {
+    "temporal": "docker.io/temporalio/server@sha256:7bf69188a6232fea14869b9cef3d94aa82a1601d99517f7e86c71f22da4e0670",
+    "temporal-admin": "docker.io/temporalio/admin-tools@sha256:4a95866efba29d7e17ab012df5232795e8b0ad0f7d5f9d1ec4df321f7792a754",
+    "temporal-ui": "docker.io/temporalio/ui@sha256:d36185e811d0ce1720b8d3ca4d9ac4dac504b67181e9b5e3d3ca72b2294f3590",
+    "postgresql": "docker.io/library/postgres@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5"
+  },
+  "security_tools": {
+    "govulncheck": "1.9.0",
+    "gitleaks": "8.30.1"
+  }
+}

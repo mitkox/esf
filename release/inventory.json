@@ -1,8 +1,8 @@
 {
-  "release": "v0.7.3",
+  "release": "v1.0.0",
   "release_profile": "binary-preview",
   "qualification_mode": "companion-manifest",
-  "baseline": "482d963afa5f6ac7addcb4bb8c2c9dbe68684a8f",
+  "baseline": "051062b47060c684b3bd52a8aeb4e9d958b83333",
   "dependencies": {
     "cubesandbox": {
       "release": "0.7.3",
@@ -33,26 +33,30 @@
       "sha256sums_sha256": "9ad58d715a35e901b9cabc67c686a4b3cf9ef606bb56ee4514715f16256095f5",
       "binary_sha256": "d289aa2046bb79d2b063679c6e0e6b714c759f8a5ed6f969d3b3ea1eeeec03ee",
       "license": "MIT",
-      "qualification": "release checksums and local-model factory acceptance passed; hosted-provider qualification pending"
+      "qualification": "release checksums and local-model factory acceptance passed; hosted-provider qualification pending",
+      "template_payload": {
+        "source_repo": "https://github.com/unreallabsai/unreal-agent",
+        "tag": "v0.3.1",
+        "commit": "55747f5f449c07cf76b3a0747370b5817aa52d5b",
+        "source_archive_sha256": "5d734ef8129979a5238959320ba649840b49c69a1b4ebcb14b24863017f3ba93",
+        "binary_sha256": "056c3492d2eeec1ad21cb75728a85acbf01657447710da4176fc524c70ce8dd9",
+        "go": "1.27.3",
+        "integration": "rebuilt from pinned upstream source for the Cube template payload; upstream release pins remain authoritative for install-agents.sh"
+      }
     },
     "grpc": "1.85.0",
     "otel": "1.47.0",
     "dspy": "3.4.1",
     "postgresql": "18.6",
     "x_net": "0.62.0",
-    "harness2": {
-      "repository": "https://github.com/google-research/harness2",
-      "version": "0.1.0",
-      "commit": "1cfe254e8d25b15f37048c3730134686abe60335",
-      "license": "Apache-2.0",
-      "integration": "ESF-native algorithm and adapted role instructions; no upstream runtime",
-      "editable_surface": [
-        "systemprompt.md",
-        "tool_guidance.md",
-        "memory.md",
-        "skills/*/SKILL.md"
-      ],
-      "production_qualified": false
+    "envd": {
+      "source_repo": "https://github.com/e2b-dev/infra",
+      "tag": "2026.16",
+      "commit": "b8ca332f435370397bf42be614b2a5b620d65d39",
+      "source_archive_sha256": "0d8523b35f7bdee50668496f88411c0af75714653cd2e569c761259b95273b80",
+      "binary_sha256": "de39ec5aa736f47288644397b673efc34519bacbe2dc0a375867b5973c434fe1",
+      "go": "1.27.3",
+      "integration": "rebuilt from pinned upstream source in the Cube template recipe; replaces the vulnerable vendor base payload"
     }
   },
   "toolchains": {
@@ -66,9 +70,10 @@
   "build_bases": {
     "go": "docker.io/library/golang@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b",
     "runtime": "gcr.io/distroless/static-debian13@sha256:448810357cc8e67b7208988abdba0f5ec3d3aebee0a5b13eb624979792cffc0f",
-    "python": "docker.io/library/python@sha256:8c13a3f37a6a5b71498228e902c4b9f51c1f7900d49fabf71f9a650c6120e0d0",
+    "python": "docker.io/library/python@sha256:4b777652b7ca0a1fae98a847e83e538605d0fb8de3812f3403076aca74368e74",
     "node": "docker.io/library/node@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39",
-    "cube": "ghcr.io/tencentcloud/cubesandbox-base@sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472"
+    "cube": "ghcr.io/tencentcloud/cubesandbox-base@sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472",
+    "alpine": "docker.io/library/alpine@sha256:ff7f0c727dd796aa36787bfcd9a64bf35a6ce72a73451b3359fde849b6703d63"
   },
   "images": {
     "factory": null,
@@ -79,14 +84,14 @@
     "postgresql": null
   },
   "templates": {
-    "recipe_sha256": "db2ad990fea76abab48bde5cac37d2ae5a988ea1a5c753914c5e533ae921f4ad",
+    "recipe_sha256": "128757ac757f1e42909dfb475abbe289f1648b2e75026221eec860d57b565fec",
     "architecture": "linux/amd64",
     "git_package": null,
     "ca_certificates_package": null,
     "python3_package": null,
     "cube_template_id": null,
     "template_sha256": null,
-    "qualification": "candidate; refreshed image and template qualification pending"
+    "qualification": "candidate; rebuilt envd and Unreal payloads validated by local template smoke and factory doctor; full image and template deployment qualification pending"
   },
   "transitive_licenses": "pending SBOM and notice review",
   "qualification": {

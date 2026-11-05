@@ -9,10 +9,11 @@ not open public issues for unpatched vulnerabilities.
 
 ## Supported versions
 
-ESF is under active development. Only the latest release and the latest
-commit on `master` receive security fixes. Go 1.27.3 is the pinned supported
-toolchain. Dependency and toolchain minimums may increase when a security fix
-requires it.
+ESF is under active development. Security fixes apply to the latest release —
+currently the ESF 1.0.0 beta line, `1.0.0-beta.1` — and to the latest commit on
+`master`. Earlier 0.7.x and 0.6.x releases are historical and unsupported. Go
+1.27.3 is the pinned supported toolchain. Dependency and toolchain minimums may
+increase when a security fix requires it.
 
 ## Trust model
 
@@ -54,6 +55,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the implemented security boundaries.
 The factory runs coding agents in CubeSandbox microVMs. Temporal authentication,
 encrypted workflow payloads, evidence storage, credential provisioning and
 operational boundaries are described in [the deployment guide](docs/production-deployment.md).
+Per-release security validation, including the zero Critical/High requirement for
+ESF product artifacts and the recorded inherited platform risks, is summarized in
+the [1.0.0-beta.1 release notes](docs/release-v1.0.0-beta.1.md#security-validation).
 
 Candidate source, task prompts and evidence can contain unpublished work even
 when they contain no detected credentials. Keep the database, object store,

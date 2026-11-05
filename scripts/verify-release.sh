@@ -40,7 +40,7 @@ for target in "${targets[@]}"; do
   archive="$release_dir/esf_factory_${release_name}_${goos}_${goarch}.tar.gz"
   test -f "$archive"
   contents=$(tar -tzf "$archive" | LC_ALL=C sort)
-  expected=$(printf '%s\n' LICENSE HARNESS2-LICENSE HARNESS2-NOTICE HARNESS2-UPSTREAM.json README.md factory.example.toml factory | LC_ALL=C sort)
+  expected=$(printf '%s\n' LICENSE README.md factory.example.toml factory | LC_ALL=C sort)
   test "$contents" = "$expected"
   tar -C "$target_dir" -xzf "$archive"
   test -x "$target_dir/factory"

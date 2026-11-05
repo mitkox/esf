@@ -1,0 +1,189 @@
+{
+  "schema": "esf-cube-test/v1",
+  "candidate": "v1.0.0-beta.1",
+  "source_commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+  "source_commit_env": "ce962500",
+  "template": "tpl-4fedc58c5f9543a39d721e37",
+  "sandbox_id": "ce81c6517f104b08acb022e42cb3f283",
+  "source_sha256": "dc936ad966aab1b16c68da96d73b23a25094d8f5b538944291511105549bb1f0",
+  "python_runtime": "CPython 3.12.13 portable runtime (bin/ + lib/)",
+  "python_runtime_sha256": "37a7c68a42f8dc7581892b39c83b77d64359edc036dcf36200f4a8747ba84be8",
+  "scanner": "gitleaks 8.30.1",
+  "scanner_sha256": "88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509",
+  "started_at": "2026-11-05T09:45:48.494956965Z",
+  "completed_at": "2026-11-05T09:45:57.011950559Z",
+  "binary_count": 15,
+  "check_count": 2,
+  "all_exit_zero": true,
+  "test_pass_records": 692,
+  "test_fail_records": 0,
+  "test_skip_records": 0,
+  "cleanup_verified": true,
+  "remaining_owned": 0,
+  "secret_scan": {
+    "exit_code": 0,
+    "findings": 0
+  },
+  "binaries": [
+    {
+      "binary": "cmd_factory.test",
+      "exit_code": 0,
+      "duration": "26.586859ms",
+      "sha256": "04073a150de024e1b41c1687fd26d5b358b72540f53565ab8a52eab396edfdb5",
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "cmd_turn-executor.test",
+      "exit_code": 0,
+      "duration": "17.695113ms",
+      "sha256": "89f0499d2d41339aa2e770f1b91180f4fd5d3488b9b7800162a6a71a50509966",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "internal_agentharness.test",
+      "exit_code": 0,
+      "duration": "22.229144ms",
+      "sha256": "5472e6bf2fa5ccdfd7b0104549a29d37a8f6f516f6106610679089c1bb0b0d90",
+      "passed": 72,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "internal_console.test",
+      "exit_code": 0,
+      "duration": "182.753392ms",
+      "sha256": "fe46117d8ddccfc979d78076a327b1e094336621e03aacac658617df1c78c3a9",
+      "passed": 43,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "internal_factory.test",
+      "exit_code": 0,
+      "duration": "3.035465879s",
+      "sha256": "7170a946168c272d4871bee1b18b292def2873e78b7b423c1e95bb7e4a163369",
+      "passed": 232,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "internal_factoryartifacts.test",
+      "exit_code": 0,
+      "duration": "142.929717ms",
+      "sha256": "e4d9ad5c8e4b19492c50a35fe51b3567c0c708797c0c68c04ff23289a55206b4",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "internal_httpsecurity.test",
+      "exit_code": 0,
+      "duration": "11.336335ms",
+      "sha256": "c185516e16c38f8cf347d5302dd698026485ac98a69235ed5e2877724f10cd8b",
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "internal_notify.test",
+      "exit_code": 0,
+      "duration": "133.880685ms",
+      "sha256": "cc802980a9da04ca5408605c15dd12675c6f519ead0137bcde31b37c4135133f",
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "internal_repository.test",
+      "exit_code": 0,
+      "duration": "47.334ms",
+      "sha256": "ac95478d02ceaf54f8c5a7309d4569bc9cdd943200852d4cb11f08d556068172",
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "internal_sandbox.test",
+      "exit_code": 0,
+      "duration": "12.341951ms",
+      "sha256": "dcce441c08cbd8d0f8367c85026e0d3889c613730d3e2fb0b45b04cd2058c3b8",
+      "passed": 29,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "internal_sandbox_cube.test",
+      "exit_code": 0,
+      "duration": "52.367664ms",
+      "sha256": "7bd861ba27489effd92ff620176ae4997738c1f3ba7aefdbe3aea8ad4be8f724",
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "internal_secretfile.test",
+      "exit_code": 0,
+      "duration": "10.661417ms",
+      "sha256": "2405cf7de75e5eec524f06328fef7130613722428bab023d95bcb15ed2bd100e",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "internal_threatmon.test",
+      "exit_code": 0,
+      "duration": "16.703593ms",
+      "sha256": "d6c6047e3f37462fcaecf6cb6a1242ec42b4694044992978c0367dbe78f28a63",
+      "passed": 115,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "internal_turnexec.test",
+      "exit_code": 0,
+      "duration": "1.492425752s",
+      "sha256": "cc26266aa6e5946c83177ad4009adf2c27871b4f0bdf90b9cb71531a0191c95d",
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "binary": "internal_verification.test",
+      "exit_code": 0,
+      "duration": "12.860081ms",
+      "sha256": "6cef3c9f7cc5755806de2705f1a6a70ad5444725f2e04c205b4681c5d651578d",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "checks": [
+    {
+      "argv": [
+        "/workspace/python-runtime/bin/python3.12",
+        "scripts/verify-release-inventory.py"
+      ],
+      "exit_code": 0,
+      "duration": "68.874441ms"
+    },
+    {
+      "argv": [
+        "/workspace/python-runtime/bin/python3.12",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_*.py"
+      ],
+      "exit_code": 0,
+      "duration": "120.919112ms"
+    }
+  ],
+  "failures": []
+}

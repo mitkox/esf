@@ -134,10 +134,8 @@ When `--live=true`:
 - CubeSandbox is queried for the live sandbox inventory. A factory-owned sandbox
   is flagged as a **leak** only when its run has a durable manifest with a
   verified cleanup but no open workflow. Factory-owned sandboxes without a
-  durable manifest are left unclassified instead of being called leaks:
-  harness-improvement workflows and their stage-specific sandbox run IDs are
-  outside the console's visibility query, so a live experiment could otherwise
-  look like a leak.
+  durable manifest are left unclassified instead of being called leaks, because
+  the console cannot prove that such a sandbox is orphaned.
 
 Both calls are bounded (6 second ceiling), cached (5–20 seconds) and fail
 independently. An unreachable backend degrades the relevant card to

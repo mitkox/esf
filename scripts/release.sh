@@ -16,7 +16,7 @@ if [[ "${version%%-*}" != "$inventory_version" ]]; then
   echo "release version does not match the input inventory" >&2
   exit 1
 fi
-if [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(test|rc)\.[1-9][0-9]*$ ]]; then
+if [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(test|rc|beta)\.[1-9][0-9]*$ ]]; then
   # A prerelease is a validation artifact. Pending deployment qualifications
   # remain visible in the embedded inventory and do not imply production use.
   python3 scripts/verify-release-inventory.py
@@ -59,16 +59,11 @@ for target in "${targets[@]}"; do
     go build -buildvcs=false -trimpath -ldflags="-s -w -X github.com/mitkox/esf/internal/factory.Version=$binary_release -X main.buildCommit=$commit" \
     -o "$target_dir/factory" ./cmd/factory
   cp -L LICENSE README.md factory.example.toml "$target_dir/"
-  cp third_party/harness2/LICENSE "$target_dir/HARNESS2-LICENSE"
-  cp third_party/harness2/NOTICE "$target_dir/HARNESS2-NOTICE"
-  cp third_party/harness2/UPSTREAM.json "$target_dir/HARNESS2-UPSTREAM.json"
-  chmod 0644 "$target_dir/HARNESS2-LICENSE" "$target_dir/HARNESS2-NOTICE" "$target_dir/HARNESS2-UPSTREAM.json"
-  touch -t 198001010000 "$target_dir/HARNESS2-LICENSE" "$target_dir/HARNESS2-NOTICE" "$target_dir/HARNESS2-UPSTREAM.json"
   chmod 0644 "$target_dir/LICENSE" "$target_dir/README.md" "$target_dir/factory.example.toml"
   chmod 0755 "$target_dir/factory"
   touch -t 198001010000 "$target_dir/LICENSE" "$target_dir/README.md" "$target_dir/factory.example.toml" "$target_dir/factory"
   archive="$output_dir/esf_factory_${release_name}_${goos}_${goarch}.tar.gz"
-  files=(LICENSE HARNESS2-LICENSE HARNESS2-NOTICE HARNESS2-UPSTREAM.json README.md factory.example.toml factory)
+  files=(LICENSE README.md factory.example.toml factory)
   COPYFILE_DISABLE=1 tar --format=ustar --owner=0 --group=0 --numeric-owner -C "$target_dir" -cf - "${files[@]}" | gzip -n > "$archive"
 done
 

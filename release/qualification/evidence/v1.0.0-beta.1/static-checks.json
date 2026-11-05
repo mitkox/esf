@@ -1,0 +1,114 @@
+{
+  "schema": "esf-static-checks/v1",
+  "candidate": "v1.0.0-beta.1",
+  "source_commit": "ce9625006e180e632e646dc6d11ea8c2c497b15f",
+  "host": {
+    "go": "go1.27.3",
+    "go_full": "go version go1.27.3 linux/amd64",
+    "node": "v26.13.0",
+    "npm": "11.20.0",
+    "python3": "Python 3.15.2",
+    "uv": "uv 0.13.7 (x86_64-unknown-linux-gnu)"
+  },
+  "gates": [
+    {
+      "gate": "make lint (gofmt, go vet, shellcheck)",
+      "command": "make lint",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "logs/make-lint.log"
+    },
+    {
+      "gate": "console npm ci",
+      "command": "cd internal/console/web && npm ci",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "logs/npm-ci.log"
+    },
+    {
+      "gate": "console unit tests",
+      "command": "cd internal/console/web && npm test",
+      "exit_code": 0,
+      "result": "PASS (17/17)",
+      "log": "logs/console-tests.log"
+    },
+    {
+      "gate": "console production build",
+      "command": "cd internal/console/web && npm run build",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "logs/console-build.log"
+    },
+    {
+      "gate": "tracked console dist unchanged",
+      "command": "git status --porcelain --untracked-files=all -- internal/console/web/dist",
+      "exit_code": 0,
+      "result": "PASS (empty output)",
+      "log": "logs/console-dist-status.log"
+    },
+    {
+      "gate": "Python optional tool tests",
+      "command": "make test-python (uv 3.15.2, --locked)",
+      "exit_code": 0,
+      "result": "PASS (8 intake + 7 brief_lab tests)",
+      "log": "logs/make-test-python.log"
+    },
+    {
+      "gate": "Temporal restored-database schema safety",
+      "command": "sh deployments/dev/temporal/tests/setup-postgres-test.sh",
+      "exit_code": 0,
+      "result": "PASS (6 scenarios)",
+      "log": "logs/temporal-schema.log"
+    },
+    {
+      "gate": "release inventory verifier",
+      "command": "python3 scripts/verify-release-inventory.py",
+      "exit_code": 0,
+      "result": "PASS (pins match lockfiles)",
+      "log": "logs/verify-release-inventory.log"
+    },
+    {
+      "gate": "Pi inventory verifier",
+      "command": "python3 scripts/verify-pi-inventory.py",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "logs/verify-pi-inventory.log"
+    },
+    {
+      "gate": "SBOM generation",
+      "command": "python3 scripts/generate-sbom.py /tmp/esf-sbom.json",
+      "exit_code": 0,
+      "result": "PASS: CycloneDX 1.6; product version 1.0.0 at metadata.component.version (CycloneDX BOM version field = 1); 328 components; 0 harness2 components; deterministic regeneration",
+      "log": "logs/generate-sbom.log"
+    },
+    {
+      "gate": "release checks inside Cube sandbox",
+      "command": "bin/cube-test --checks (verify-release-inventory.py + scripts/tests discover)",
+      "exit_code": 0,
+      "result": "PASS (2/2 checks)",
+      "log": "../../cube-test.json"
+    },
+    {
+      "gate": "Python optional tool tests (Docker fallback, post-candidate tooling repair)",
+      "command": "make test-python-docker",
+      "exit_code": 0,
+      "result": "PASS (8 intake + 7 brief_lab tests)",
+      "log": "logs/make-test-python-docker.log",
+      "note": "Follow-up test-tooling-only change after candidate ce962500: the docker run commands mount $(CURDIR) at /src and run unittest discovery with -w /src (Makefile test-python-docker only). The fix touches only the test target; no image, product code, config or shipped artifact changed; the rebuilt test image still uses ESF_VERSION=1.0.0 and ESF_COMMIT=ce962500. The candidate commit and release assets remain ce962500."
+    }
+  ],
+  "known_issues": [
+    {
+      "severity": "Low",
+      "status": "resolved-after-candidate (test tooling only)",
+      "component": "Makefile test-python-docker / deploy/images/Dockerfile.intake final stage",
+      "finding": "Found during candidate validation: make test-python-docker failed because the rewritten intake image final stage does not contain pyproject.toml/uv.lock/tools sources or WORKDIR /opt/esf (they remain in the python-tools builder stage), and the target ran unittest discovery from /, so it could not import tools/intake/tests.",
+      "resolution": "Repaired by a follow-up test-tooling-only change after candidate ce962500: the target now mounts the checkout at /src and runs discovery with -w /src. No image, product code, config or shipped artifact changed; candidate commit and release assets remain ce962500.",
+      "pre_fix_reproduction": "make test-python-docker",
+      "pre_fix_evidence": "logs/make-test-python-docker-failure.log (retained as history; superseded by the post-fix run)",
+      "post_fix_evidence": "logs/make-test-python-docker.log",
+      "post_fix_log_sha256": "52fb90909e2d7ec35f9ae1ca38e59ec7dc3acbaef9153aa629818eb008ba4144",
+      "impact": "Test-tooling only; the shipped intake image content was never affected."
+    }
+  ]
+}
