@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mitkox/esf/internal/forge"
 	"github.com/mitkox/esf/internal/threatmon"
 )
 
@@ -151,6 +152,45 @@ type PreviewLink struct {
 	URL  string `json:"url"`
 }
 
+// WorkItemEvidence is the forge origin of a pipeline-driven run.
+//
+// It is deliberately a record of facts resolved by an activity: the connector,
+// operator pipeline, mapped repository, work-item revision, and the digest of
+// the exact forge bytes the run was derived from. The work-item body itself is
+// not copied here; the task artifact carries the bytes that were hashed.
+type WorkItemEvidence struct {
+	Connector    string `json:"connector"`
+	Pipeline     string `json:"pipeline,omitempty"`
+	ID           string `json:"id"`
+	Revision     string `json:"revision"`
+	SnapshotHash string `json:"snapshot_hash"`
+	Repository   string `json:"repository"`
+	Source       string `json:"source,omitempty"`
+}
+
+// PullRequestIdentity is the forge pull request a change published.
+//
+// It is added to the manifest by the publication step, outside the sandbox, so
+// the run remains the authoritative record of where its result went.
+type PullRequestIdentity struct {
+	ID         string `json:"id"`
+	URL        string `json:"url,omitempty"`
+	Repository string `json:"repository,omitempty"`
+	Branch     string `json:"branch,omitempty"`
+	Draft      bool   `json:"draft,omitempty"`
+}
+
+// AcceptanceRecord is the forge-native merge state read for a pull request.
+//
+// ESF never merges or approves: the state is an observation, recorded so a
+// merged pull request is never confused with a successful run.
+type AcceptanceRecord struct {
+	State       forge.AcceptanceState `json:"state"`
+	MergeCommit string                `json:"merge_commit,omitempty"`
+	Note        string                `json:"note,omitempty"`
+	ReadAt      time.Time             `json:"read_at,omitempty"`
+}
+
 // RunManifest is the durable record of one factory run.
 //
 // Field groups below the MVP fields are the explicit Phase 2 extension points
@@ -250,6 +290,15 @@ type RunManifest struct {
 	CleanupResult      CleanupResult `json:"cleanup_result"`
 	// Intake is operator-visible advice and never changes FactoryResult.
 	Intake *IntakeResult `json:"intake,omitempty"`
+	// WorkItem is the forge origin of a pipeline-driven run. It is absent for
+	// CLI and API runs that were not created from a work item.
+	WorkItem *WorkItemEvidence `json:"work_item,omitempty"`
+	// PullRequest is the forge pull request this change published, recorded by
+	// the host-side publication step after the run passed every gate.
+	PullRequest *PullRequestIdentity `json:"pull_request,omitempty"`
+	// Acceptance is the forge-native merge state of PullRequest. It is observed,
+	// never decided, by the factory.
+	Acceptance *AcceptanceRecord `json:"acceptance,omitempty"`
 
 	// ── Evidence pointers (store-relative) ──────────────────────────────────
 	Artifacts string `json:"artifacts"`
@@ -375,6 +424,14 @@ type RunRequest struct {
 	// ParentRunID records the run this one reworks, when a review asked for
 	// changes. It is lineage evidence, never an authority.
 	ParentRunID string `json:"parent_run_id,omitempty"`
+
+	// WorkItem is the forge origin of a pipeline-driven run. It is resolved by
+	// an activity before the run starts and is never a caller-selected input.
+	WorkItem *WorkItemEvidence `json:"work_item,omitempty"`
+	// ForgeConnector names the operator-configured connector whose clone
+	// credential is injected at the Cube egress boundary. It is a name, never a
+	// credential, and it is empty for runs that do not use a forge.
+	ForgeConnector string `json:"forge_connector,omitempty"`
 
 	// Timeouts.
 	AgentTimeout        time.Duration `json:"agent_timeout"`

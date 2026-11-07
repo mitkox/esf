@@ -101,6 +101,35 @@ func (c *Client) CloneEgressRules() ([]sandbox.NetworkRule, error) {
 	return c.clone.EgressRules()
 }
 
+// CloneEgressRulesForRepository derives the exact clone endpoints for one
+// operator-mapped Azure DevOps repository and returns the egress rules that
+// inject the clone credential at the trusted boundary.
+//
+// The sandbox sees only the repository URL; the Authorization header is added
+// by the Cube egress proxy. The returned rules contain the injected secret and
+// must never be persisted as evidence or placed in the sandbox environment.
+func (c *Client) CloneEgressRulesForRepository(repository string) ([]sandbox.NetworkRule, error) {
+	project, repo, err := c.repositoryCoordinates(repository)
+	if err != nil {
+		return nil, err
+	}
+	basePath := strings.Trim(c.base.Path, "/")
+	prefix := ""
+	if basePath != "" {
+		prefix = "/" + basePath
+	}
+	clone := c.clone
+	clone.Host = c.base.Host
+	if len(clone.Paths) == 0 {
+		root := prefix + "/" + url.PathEscape(project) + "/_git/" + url.PathEscape(repo)
+		clone.Paths = []string{
+			root + "/info/refs",
+			root + "/git-upload-pack",
+		}
+	}
+	return clone.EgressRules()
+}
+
 func cloneHost(raw string) (host string, port int, err error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || strings.ContainsAny(raw, "/ \t\r\n\x00") {

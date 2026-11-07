@@ -69,6 +69,18 @@ const (
 	// ConditionAlerted reports whether a security alert was delivered to the
 	// configured webhook. A delivery failure is recorded, never fatal.
 	ConditionAlerted ConditionType = "Alerted"
+	// ConditionIntake reports whether an intake event produced a durable change
+	// activation. It is False for a duplicate, stale, conflicting, or unmapped
+	// delivery, so "no run started" is visible without reading the history.
+	ConditionIntake ConditionType = "Intake"
+	// ConditionPublication reports whether a change reached the forge. It is
+	// separate from Intake because an accepted delivery can still fail before a
+	// pull request exists.
+	ConditionPublication ConditionType = "Publication"
+	// ConditionAcceptance reports whether the forge merge state was read. It is
+	// an observation: a merged pull request marks the change done, while ESF
+	// never merges or approves one.
+	ConditionAcceptance ConditionType = "Acceptance"
 )
 
 // ConditionStatus is the tri-state used by every condition.

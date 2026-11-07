@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/mitkox/esf/internal/forge"
+	"github.com/mitkox/esf/internal/forge/azuredevops"
+	"github.com/mitkox/esf/internal/sandbox"
 )
 
 // ConnectorConfig declares one host-side forge adapter.
@@ -104,6 +106,49 @@ func (c Config) ResolvePipeline(name string, fields forge.WorkItemFields) (Resol
 		return ResolvedPipeline{}, fmt.Errorf("pipeline %q: %s", name, strings.Join(problems, "; "))
 	}
 	return pipeline.resolve(name, fields)
+}
+
+// ResolvePipelineForConnector maps a work item through the unique pipeline
+// declared for a connector.
+//
+// An intake event names its connector but not an operator pipeline, so the
+// operator configuration is the only source of that mapping. Exactly one
+// pipeline may match; zero or several is a configuration error rather than a
+// guess.
+func (c Config) ResolvePipelineForConnector(connector string, fields forge.WorkItemFields) (ResolvedPipeline, error) {
+	connector = strings.TrimSpace(connector)
+	if connector == "" {
+		return ResolvedPipeline{}, fmt.Errorf("connector name is required")
+	}
+	var matches []ResolvedPipeline
+	var failures []string
+	for _, name := range sortedForgeNames(c.Pipelines) {
+		pipeline := c.Pipelines[name]
+		if strings.TrimSpace(pipeline.Connector) != connector {
+			continue
+		}
+		resolved, err := c.ResolvePipeline(name, fields)
+		if err != nil {
+			failures = append(failures, err.Error())
+			continue
+		}
+		matches = append(matches, resolved)
+	}
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		if len(failures) > 0 {
+			return ResolvedPipeline{}, fmt.Errorf("no operator pipeline maps connector %q: %s", connector, strings.Join(failures, "; "))
+		}
+		return ResolvedPipeline{}, fmt.Errorf("no operator pipeline is configured for connector %q", connector)
+	default:
+		names := make([]string, 0, len(matches))
+		for _, match := range matches {
+			names = append(names, match.Pipeline)
+		}
+		return ResolvedPipeline{}, fmt.Errorf("connector %q maps to multiple pipelines (%s); the mapping is ambiguous", connector, strings.Join(names, ", "))
+	}
 }
 
 // validateForge accumulates connector and pipeline problems for Config.Validate.
@@ -397,4 +442,45 @@ func sortedForgeNames[V any](m map[string]V) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// connectorCloneEgressRules builds the sandbox egress rules that let a private
+// forge repository clone at the Cube boundary without a credential in the
+// sandbox.
+//
+// The rules are constructed in an activity at sandbox-creation time, never in
+// workflow code and never from a payload. The returned rules carry the injected
+// Authorization value and must not be persisted into evidence or workflow
+// history.
+func (c Config) connectorCloneEgressRules(connectorName, repositoryURL string) ([]sandbox.NetworkRule, error) {
+	connectorName = strings.TrimSpace(connectorName)
+	repositoryURL = strings.TrimSpace(repositoryURL)
+	if connectorName == "" {
+		return nil, fmt.Errorf("forge connector name is required for clone egress")
+	}
+	if repositoryURL == "" {
+		return nil, fmt.Errorf("repository is required for forge clone egress")
+	}
+	settings, err := c.Connector(connectorName)
+	if err != nil {
+		return nil, err
+	}
+	switch settings.Kind {
+	case forge.KindAzureDevOps:
+		connectorConfig := c.Connectors[connectorName]
+		client, err := azuredevops.NewClient(azuredevops.Config{
+			Name:       settings.Name,
+			BaseURL:    settings.BaseURL,
+			Credential: settings.Credential,
+			Clone: azuredevops.CloneCredential{
+				SecretFile: strings.TrimSpace(connectorConfig.TokenFile),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return client.CloneEgressRulesForRepository(repositoryURL)
+	default:
+		return nil, fmt.Errorf("connector %q does not declare clone egress", connectorName)
+	}
 }

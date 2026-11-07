@@ -415,12 +415,14 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	}
 	var created CreateSandboxOutput
 	if err := executeActivity(ctx, acts.CreateSandbox, infraRetry(), CreateSandboxInput{
-		ExecutionID: s.executionID,
-		RunID:       req.RunID,
-		Template:    template,
-		Harness:     req.AgentHarness,
-		IdleTimeout: req.TotalTimeout,
-		Network:     s.resources.Egress,
+		ExecutionID:    s.executionID,
+		RunID:          req.RunID,
+		Template:       template,
+		Harness:        req.AgentHarness,
+		IdleTimeout:    req.TotalTimeout,
+		Network:        s.resources.Egress,
+		Repository:     req.Repository,
+		ForgeConnector: req.ForgeConnector,
 	}).Get(ctx, &created); err != nil {
 		s.status.State = StateInfrastructureFailed
 		s.setCondition(ctx, ConditionSandboxReady, ConditionFalse, "CreateFailed", err.Error())

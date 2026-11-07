@@ -237,6 +237,11 @@ type CreateSandboxInput struct {
 	// Network is the effective egress policy resolved from the run's named
 	// EgressPolicy. A zero value leaves the deployment default untouched.
 	Network sandbox.Network `json:"network,omitempty"`
+	// Repository and ForgeConnector let this activity add the connector's clone
+	// egress rule. The injected credential is created here, at the trusted
+	// boundary, and never enters workflow history, evidence, or the sandbox.
+	Repository     string `json:"repository,omitempty"`
+	ForgeConnector string `json:"forge_connector,omitempty"`
 	// Env is operator-approved environment injected at creation.
 	Env map[string]string `json:"env,omitempty"`
 }
@@ -575,6 +580,7 @@ func (a *Activities) ValidateRequest(ctx context.Context, in ValidateInput) (Val
 		"verification_profile": req.VerificationProfile,
 		"sandbox_template":     req.SandboxTemplate,
 		"scope":                resolved.Scope,
+		"work_item":            req.WorkItem,
 		"workspace":            resolved.Workspace,
 		"egress_policy":        resolved.EgressPolicy,
 		"model":                resolved.Model,
@@ -596,6 +602,22 @@ func (a *Activities) CreateSandbox(ctx context.Context, in CreateSandboxInput) (
 	if template == "" {
 		template = a.cfg.Cube.TemplateID
 	}
+	network := in.Network
+	network.Rules = append([]sandbox.NetworkRule(nil), in.Network.Rules...)
+	if connector := strings.TrimSpace(in.ForgeConnector); connector != "" {
+		rules, err := a.cfg.connectorCloneEgressRules(connector, in.Repository)
+		if err != nil {
+			return CreateSandboxOutput{}, fmt.Errorf("resolve forge clone egress: %w", err)
+		}
+		for _, rule := range rules {
+			for _, injection := range rule.Action.Inject {
+				// A provider error may echo the submitted policy; register the
+				// injected value so tracing and persistence cannot leak it.
+				a.redactor.Add(injection.Secret)
+			}
+		}
+		network.Rules = append(network.Rules, rules...)
+	}
 	spec := sandbox.Spec{
 		Template: template,
 		Metadata: map[string]string{
@@ -610,7 +632,7 @@ func (a *Activities) CreateSandbox(ctx context.Context, in CreateSandboxInput) (
 		IdleTimeout: in.IdleTimeout,
 		Limits:      in.Limits,
 		Env:         in.Env,
-		Network:     in.Network,
+		Network:     network,
 	}
 
 	// Recover an acknowledged or ambiguously completed create by ownership.
@@ -644,8 +666,9 @@ func (a *Activities) CreateSandbox(ctx context.Context, in CreateSandboxInput) (
 	started := time.Now()
 	sb, err := a.provider.Create(ctx, spec)
 	if err != nil {
-		span.RecordError(err)
-		return CreateSandboxOutput{}, fmt.Errorf("create sandbox: %w", err)
+		safeErr := fmt.Errorf("create sandbox: %s", a.redactor.Redact(err.Error()))
+		span.RecordError(safeErr)
+		return CreateSandboxOutput{}, safeErr
 	}
 	out := CreateSandboxOutput{SandboxID: sb.ID(), Template: sb.Template(), Duration: time.Since(started)}
 
@@ -1308,6 +1331,7 @@ func (a *Activities) FinalizeResult(ctx context.Context, in FinalizeInput) (Fina
 		BudgetExceeded:          in.BudgetExceeded,
 		Hardening:               in.Hardening,
 		Intake:                  in.Intake,
+		WorkItem:                in.Request.WorkItem,
 		// HumanResult is the same value under its Phase-2 name: it drives the
 		// change lifecycle, where an approval closes the change and a rejection
 		// returns it to OPEN.

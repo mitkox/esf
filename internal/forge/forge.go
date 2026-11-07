@@ -178,7 +178,10 @@ type Status struct {
 
 // ReportRequest reports an outcome on a work item, a pull request, or both.
 type ReportRequest struct {
-	WorkItem      WorkItemRef
+	WorkItem WorkItemRef
+	// Repository is the operator-mapped repository that owns PullRequestID. It
+	// is required only when a status is posted to a pull request.
+	Repository    string
 	PullRequestID string
 	Status        Status
 	Comment       string

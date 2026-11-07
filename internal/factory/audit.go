@@ -39,6 +39,19 @@ const (
 	AuditResume AuditAction = "resume"
 	// AuditReviewDecision records a human decision sent to a paused run.
 	AuditReviewDecision AuditAction = "review-decision"
+	// AuditIntake records a work-item intake decision: accepted, duplicate,
+	// stale, conflicting, or unmapped. Rejections have no run of their own, so
+	// they are appended to the intake audit trail instead of a run artifact.
+	AuditIntake AuditAction = "intake"
+)
+
+// Audit outcome names for decisions whose result is not SUCCESS or FAILED.
+const (
+	// AuditOutcomeRejected records an audited no-run decision.
+	AuditOutcomeRejected = "REJECTED"
+	// AuditOutcomeDuplicate records a delivery that converged on an existing
+	// intake record.
+	AuditOutcomeDuplicate = "DUPLICATE"
 )
 
 // AuditEntry is one privileged action.

@@ -8,6 +8,7 @@
 package azuredevops
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -349,12 +350,21 @@ func (c *Client) repositoryCoordinates(repository string) (project, repo string,
 
 // get performs a bounded, authenticated GET with 429 backoff.
 func (c *Client) get(ctx context.Context, endpoint *url.URL) ([]byte, error) {
+	return c.do(ctx, http.MethodGet, endpoint, nil, "")
+}
+
+// do performs a bounded, authenticated request with 429 backoff.
+func (c *Client) do(ctx context.Context, method string, endpoint *url.URL, payload []byte, contentType string) ([]byte, error) {
 	var lastErr error
 	for attempt := 0; attempt < c.retry.MaxAttempts; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+		var bodyReader io.Reader
+		if payload != nil {
+			bodyReader = bytes.NewReader(payload)
+		}
+		request, err := http.NewRequestWithContext(ctx, method, endpoint.String(), bodyReader)
 		if err != nil {
 			return nil, fmt.Errorf("azuredevops: build request: %w", err)
 		}
@@ -362,6 +372,9 @@ func (c *Client) get(ctx context.Context, endpoint *url.URL) ([]byte, error) {
 		request.SetBasicAuth(username, password)
 		request.Header.Set("Accept", "application/json")
 		request.Header.Set("User-Agent", "esf-azuredevops-connector")
+		if contentType != "" {
+			request.Header.Set("Content-Type", contentType)
+		}
 
 		response, err := c.http.Do(request)
 		if err != nil {
