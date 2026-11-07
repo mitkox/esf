@@ -1,0 +1,32 @@
+{
+  "id": 42,
+  "rev": 6,
+  "fields": {
+    "System.Id": 42,
+    "System.TeamProject": "Payments",
+    "System.AreaPath": "Payments\\Bugs",
+    "System.WorkItemType": "Bug",
+    "System.State": "Active",
+    "System.Title": "Payment retry loop spins forever",
+    "System.Description": "<div>Retry loop never exits after a gateway timeout.</div><div>Repro: submit an extra-long card, then wait for the gateway timeout.</div>",
+    "System.Tags": "esf; repro",
+    "System.CreatedBy": {
+      "displayName": "Ada Lovelace",
+      "id": "actor-ada",
+      "uniqueName": "ada@example.com",
+      "descriptor": "aad.ada-lovelace"
+    },
+    "System.ChangedBy": {
+      "displayName": "Ada Lovelace",
+      "id": "actor-ada",
+      "uniqueName": "ada@example.com",
+      "descriptor": "aad.ada-lovelace"
+    }
+  },
+  "_links": {
+    "self": {
+      "href": "https://dev.azure.com/acme/_apis/wit/workItems/42"
+    }
+  },
+  "url": "https://dev.azure.com/acme/_apis/wit/workItems/42"
+}

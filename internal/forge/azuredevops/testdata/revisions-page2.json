@@ -1,0 +1,30 @@
+{
+  "values": [
+    {
+      "id": 42,
+      "rev": 6,
+      "fields": {
+        "System.Id": 42,
+        "System.TeamProject": "Payments",
+        "System.AreaPath": "Payments\\Bugs",
+        "System.WorkItemType": "Bug",
+        "System.State": "Active",
+        "System.Title": "Payment retry loop spins forever"
+      }
+    },
+    {
+      "id": 43,
+      "rev": 2,
+      "fields": {
+        "System.Id": 43,
+        "System.TeamProject": "Payments",
+        "System.AreaPath": "Payments\\Bugs",
+        "System.WorkItemType": "Bug",
+        "System.State": "Active",
+        "System.Title": "Duplicate charge after timeout"
+      }
+    }
+  ],
+  "continuationToken": "watermark-2",
+  "isLastBatch": true
+}

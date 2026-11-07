@@ -1,0 +1,28 @@
+{
+  "id": "event-0002",
+  "notificationId": 1002,
+  "eventType": "workitem.updated",
+  "publisherId": "tfs",
+  "scope": "all",
+  "message": {
+    "text": "Bug #42 moved on the board"
+  },
+  "resource": {
+    "id": 42,
+    "workItemId": 42,
+    "rev": 6,
+    "revisedBy": {
+      "id": "actor-ada",
+      "displayName": "Ada Lovelace",
+      "uniqueName": "ada@example.com"
+    },
+    "fields": {
+      "System.BoardColumn": {
+        "oldValue": "New",
+        "newValue": "Active"
+      }
+    }
+  },
+  "resourceVersion": "1.0",
+  "createdDate": "2026-11-07T22:01:00.000Z"
+}
