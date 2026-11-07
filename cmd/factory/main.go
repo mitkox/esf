@@ -1,17 +1,21 @@
 // Command factory is the software factory's command-line entry point.
 //
-// The MVP deliberately has no web UI. Operators drive the factory with:
+// The CLI is the operator's control plane. The versioned execution API accepts
+// the same three caller inputs, but the CLI is where operators submit, inspect,
+// review, cancel and verify work.
 //
 //	factory run      submit a task and optionally wait for the verified patch
 //	factory status   inspect a run
 //	factory logs     show a run's evidence
 //	factory worker   run the Temporal worker
+//	factory api      serve the public execution API
+//	factory verify   verify a signed evidence bundle offline
 //	factory doctor   verify Cube, Temporal and configuration before running
 //	factory sandboxes list Cube sandboxes to find leaks
 //
-// The CLI is also the control plane's security boundary: it accepts only an
-// approved repository, an exact revision and task text. It never accepts an
-// executable, a host path or an environment override.
+// The CLI and the API are the control plane's security boundary: they accept
+// only an approved repository, an exact revision and task text. They never
+// accept an executable, a host path or an environment override.
 package main
 
 import (
@@ -63,9 +67,11 @@ verification, one verified patch out.`,
 	root.AddCommand(
 		newVersionCommand(),
 		newConfigCommand(&configPath),
+		newVerifyCommand(),
 		newCredentialsCommand(),
 		newAgentsCommand(&configPath),
 		newConsoleCommand(&configPath),
+		newAPICommand(&configPath),
 		newStorageCommand(&configPath),
 		newRetentionCommand(&configPath),
 		newRunCommand(&configPath),
