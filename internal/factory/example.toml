@@ -129,6 +129,36 @@ allowed = []
 local_paths = []
 # local_paths = ["/srv/esf/fixtures/factory-e2e"]
 
+# ── Forge connectors and work-item pipelines ────────────────────────────────
+# A connector is a host-side adapter for one forge platform. It is constructed
+# by the worker, never inside a Cube sandbox, so a forge credential never
+# reaches agent code. The token is a private-file reference, not a value.
+#
+# [connectors.azuredevops]
+# kind       = "azuredevops"
+# base_url   = "https://dev.azure.com/acme"
+# token_file = "/run/credentials/factory-worker.service/azuredevops-token"
+#
+# A pipeline is the ONLY place a work item learns its repository, scope, base
+# branch, and verification profile. Work-item payloads can match rules but can
+# never supply those targets. A rule with more non-empty match fields wins; two
+# equally specific rules with different targets are rejected as ambiguous, and a
+# work item that matches no rule is rejected.
+#
+# [pipelines.bugfix]
+# connector = "azuredevops"
+#
+# [[pipelines.bugfix.rules]]
+# project              = "Payments"
+# area                 = "Payments\\Bugs"
+# label                = "esf"
+# type                 = "Bug"
+# state                = "Active"
+# scope                = "payments"
+# repository           = "https://dev.azure.com/acme/payments/_git/payments"
+# base_branch          = "main"
+# verification_profile = "default"
+
 # ── Agent harnesses ──────────────────────────────────────────────────────────
 # The harness name is what a request may select. The executable and arguments
 # are operator configuration and are never client-supplied.

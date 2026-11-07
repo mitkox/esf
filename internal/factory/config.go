@@ -86,6 +86,13 @@ type Config struct {
 	// Evidence configures host-side signing of the change-evidence bundle.
 	// Signing is disabled unless a key file is configured.
 	Evidence EvidenceConfig `toml:"evidence"`
+
+	// Connectors are host-side forge adapters, keyed by connector name. An
+	// empty map is valid: the execution API keeps working without a pipeline.
+	Connectors map[string]ConnectorConfig `toml:"connectors"`
+
+	// Pipelines are operator-only work-item mappings, keyed by pipeline name.
+	Pipelines map[string]PipelineConfig `toml:"pipelines"`
 }
 
 // EvidenceConfig configures host-side evidence signing.
@@ -408,6 +415,8 @@ func Default() Config {
 			Enabled: false,
 			Listen:  "127.0.0.1:8090",
 		},
+		Connectors: map[string]ConnectorConfig{},
+		Pipelines:  map[string]PipelineConfig{},
 	}
 }
 
@@ -605,6 +614,7 @@ func (c Config) Validate() error {
 			}
 		}
 	}
+	problems = append(problems, c.validateForge()...)
 	if c.Review.Timeout < 0 {
 		problems = append(problems, "review.timeout must not be negative")
 	}
