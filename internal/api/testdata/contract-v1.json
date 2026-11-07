@@ -1,0 +1,68 @@
+{
+  "request": {
+    "run_id": "run-contract",
+    "repository": "https://github.com/acme/repository",
+    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "task": "make the API contract concrete",
+    "agent_harness": "opencode",
+    "agent_model": "gpt-5",
+    "verification_profile": "default",
+    "scope": "team-a",
+    "workspace": "workspace-a",
+    "model": "gpt-5.1",
+    "egress_policy": "default",
+    "change_id": "change-contract",
+    "parent_run_id": "run-parent"
+  },
+  "run_status": {
+    "run_id": "run-contract",
+    "workflow_id": "factory-run-run-contract",
+    "state": "SUCCEEDED",
+    "current_step": "verify",
+    "repository": "https://github.com/acme/repository",
+    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "scope": "team-a",
+    "change_id": "change-contract",
+    "agent_harness": "opencode",
+    "verification_profile": "default",
+    "agent_result": "PASSED",
+    "verification_result": "PASSED",
+    "started_at": "2026-11-07T10:00:00Z",
+    "completed_at": "2026-11-07T10:05:00Z",
+    "conditions": [
+      {
+        "type": "Validated",
+        "status": "True",
+        "reason": "ChecksPassed",
+        "message": "all checks passed",
+        "last_transition_time": "2026-11-07T10:02:00Z"
+      }
+    ],
+    "error": "none"
+  },
+  "condition": {
+    "type": "Validated",
+    "status": "True",
+    "reason": "ChecksPassed",
+    "message": "all checks passed",
+    "last_transition_time": "2026-11-07T10:02:00Z"
+  },
+  "event": {
+    "seq": 1,
+    "type": "Validated",
+    "status": "True",
+    "reason": "ChecksPassed",
+    "message": "all checks passed",
+    "time": "2026-11-07T10:02:00Z"
+  },
+  "evidence": {
+    "run_id": "run-contract",
+    "manifest": {
+      "run_id": "run-contract"
+    }
+  },
+  "error": {
+    "error": "The run does not exist.",
+    "code": "run_not_found"
+  }
+}
