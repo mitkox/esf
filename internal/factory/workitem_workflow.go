@@ -34,6 +34,17 @@ const (
 	// signalling so histories recorded before those steps replay without them.
 	workItemPipelineVersion = "workitem-pipeline-v1"
 
+	// workItemPublicationVersion gates host-side publication and acceptance so
+	// histories recorded before those steps replay without them.
+	workItemPublicationVersion = "workitem-publication-v1"
+
+	// Status values below are outcome names, not run states. They make a
+	// publication failure distinguishable from a verification failure.
+	workItemStatusPublicationFailed = "publication_failed"
+	workItemStatusAcceptanceDrift   = "acceptance_drift"
+	workItemStatusAcceptanceUnknown = "acceptance_unresolved"
+	workItemStatusRework            = "rework"
+
 	workItemWorkflowPrefix  = "factory-workitem-"
 	changeActivationPrefix  = "factory-change-"
 	workItemRunPrefix       = "wi-"
@@ -90,14 +101,16 @@ type WorkItemRunRecord struct {
 // "snapshot_conflict", ...) or the last child's factory result, so a caller can
 // distinguish a rejected delivery from a run that completed badly.
 type WorkItemOutcome struct {
-	Connector  string              `json:"connector"`
-	Repository string              `json:"repository,omitempty"`
-	WorkItemID string              `json:"work_item_id"`
-	Revision   string              `json:"revision"`
-	ChangeID   string              `json:"change_id,omitempty"`
-	Status     string              `json:"status"`
-	Runs       []WorkItemRunRecord `json:"runs,omitempty"`
-	Conditions []Condition         `json:"conditions,omitempty"`
+	Connector   string               `json:"connector"`
+	Repository  string               `json:"repository,omitempty"`
+	WorkItemID  string               `json:"work_item_id"`
+	Revision    string               `json:"revision"`
+	ChangeID    string               `json:"change_id,omitempty"`
+	Status      string               `json:"status"`
+	Runs        []WorkItemRunRecord  `json:"runs,omitempty"`
+	Conditions  []Condition          `json:"conditions,omitempty"`
+	PullRequest *PullRequestIdentity `json:"pull_request,omitempty"`
+	Acceptance  *AcceptanceRecord    `json:"acceptance,omitempty"`
 }
 
 // WorkItemResolveInput asks an activity to resolve an intake proposal against
@@ -263,6 +276,31 @@ func WorkItemWorkflow(ctx workflow.Context, in WorkItemWorkflowInput) (WorkItemO
 		recordStatus := intakeRecordFailed
 		if manifest.FactoryResult == StateSucceeded {
 			recordStatus = intakeRecordSucceeded
+			if workflow.GetVersion(ctx, workItemPublicationVersion, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+				publication, acceptance, publicationErr := publishAndReadAcceptance(ctx, acts, manifest, &outcome)
+				if publicationErr != nil {
+					workflow.GetLogger(ctx).Warn("publication step failed",
+						"run_id", resolved.RunID, "error", publicationErr)
+				}
+				switch {
+				case publication.Failure != "":
+					outcome.Status = workItemStatusPublicationFailed
+					if publication.GateFailed {
+						outcome.Status = string(StateGateTampered)
+					}
+					recordStatus = intakeRecordFailed
+				case publicationErr != nil && outcome.PullRequest == nil:
+					outcome.Status = workItemStatusPublicationFailed
+					recordStatus = intakeRecordFailed
+				case acceptance != nil && acceptance.Drift:
+					outcome.Status = workItemStatusAcceptanceDrift
+					recordStatus = intakeRecordFailed
+				case acceptance != nil && acceptance.Decision == string(publicationDecisionClosedService):
+					outcome.Status = workItemStatusAcceptanceUnknown
+				case acceptance != nil && acceptance.Decision == string(publicationDecisionClosedHuman):
+					outcome.Status = workItemStatusRework
+				}
+			}
 		}
 		recordWorkItemOutcome(ctx, acts, WorkItemOutcomeInput{
 			Connector: resolved.Connector, Repository: resolved.Repository,
@@ -369,6 +407,103 @@ func drainWorkItemSignals(signals workflow.ReceiveChannel, pending *[]forge.Prop
 		}
 		queueWorkItemSignal(pending, signal)
 	}
+}
+
+// publishAndReadAcceptance runs the host-side publication, then observes the
+// forge merge state once. It does not wait for a developer: a later sweep can
+// read acceptance again from the durable publication record.
+func publishAndReadAcceptance(
+	ctx workflow.Context,
+	acts *Activities,
+	manifest RunManifest,
+	outcome *WorkItemOutcome,
+) (PublishChangeOutput, *ReadPublicationAcceptanceOutput, error) {
+	opts := workflow.ActivityOptions{
+		StartToCloseTimeout: 10 * time.Minute,
+		// Publication is idempotent by branch and pull request. The forge
+		// client already honours 429 retry hints, so a bounded retry is enough.
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    2 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumAttempts:    3,
+		},
+	}
+	var publication PublishChangeOutput
+	publicationErr := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, opts), acts.PublishChange,
+		PublishChangeInput{RunID: manifest.RunID}).Get(ctx, &publication)
+	if publicationErr != nil {
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionPublication, ConditionFalse, "PublishError", publicationErr.Error())
+		return PublishChangeOutput{}, nil, publicationErr
+	}
+	switch {
+	case publication.Disabled:
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionPublication, ConditionUnknown, "NotConfigured",
+			"evidence signing is not configured, so publication is disabled")
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "NotConfigured",
+			"publication did not run")
+		return publication, nil, nil
+	case publication.EmptyPatch:
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionPublication, ConditionUnknown, "EmptyPatch",
+			"the patch is empty; no pull request was opened")
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "NotApplicable",
+			"there is no pull request to accept")
+		return publication, nil, nil
+	case publication.Failure != "":
+		reason := publication.FailureClass
+		if reason == "" {
+			reason = "PublishFailed"
+		}
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionPublication, ConditionFalse, reason, publication.Failure)
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "NotPublished",
+			"no pull request was published")
+		return publication, nil, nil
+	}
+	outcome.PullRequest = &PullRequestIdentity{
+		ID: publication.PullRequestID, URL: publication.PullRequestURL,
+		Repository: manifest.Repository, Branch: publication.Branch,
+		Commit: publication.Commit, Tree: publication.Tree,
+		BundleDigest: publication.BundleDigest,
+	}
+	setWorkItemCondition(ctx, &outcome.Conditions, ConditionPublication, ConditionTrue, "Published",
+		"pull request "+publication.PullRequestID+" branch "+publication.Branch)
+
+	acceptanceOpts := workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumAttempts:    3,
+		},
+	}
+	var acceptance ReadPublicationAcceptanceOutput
+	if err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, acceptanceOpts), acts.ReadPublicationAcceptance,
+		ReadPublicationAcceptanceInput{RunID: manifest.RunID}).Get(ctx, &acceptance); err != nil {
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "ReadFailed", err.Error())
+		return publication, nil, err
+	}
+	if !acceptance.Read {
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "NoPullRequest",
+			"the forge did not report a pull request to observe")
+		return publication, &acceptance, nil
+	}
+	outcome.Acceptance = acceptance.Acceptance
+	switch acceptance.Decision {
+	case string(publicationDecisionAccepted), string(publicationDecisionAlreadyApplied):
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionTrue, "Merged",
+			"merge commit "+acceptance.MergeCommit)
+	case string(publicationDecisionClosedHuman):
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionFalse, "Closed", acceptance.Note)
+	case string(publicationDecisionClosedService):
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionFalse, "ServiceClosed", acceptance.Note)
+	case string(publicationDecisionDrift):
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionFalse, "Drift", acceptance.Note)
+	case string(publicationDecisionPending):
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "PendingPublication", acceptance.Note)
+	default:
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "Open",
+			"the pull request is still open")
+	}
+	return publication, &acceptance, nil
 }
 
 // finishWorkItemOutcome records the publication and acceptance conditions that

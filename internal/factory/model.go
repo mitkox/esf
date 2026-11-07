@@ -178,6 +178,12 @@ type PullRequestIdentity struct {
 	Repository string `json:"repository,omitempty"`
 	Branch     string `json:"branch,omitempty"`
 	Draft      bool   `json:"draft,omitempty"`
+	// Commit and Tree identify the host-built source revision. They are the
+	// tree acceptance must match before a merge can mark the change done.
+	Commit string `json:"commit,omitempty"`
+	Tree   string `json:"tree,omitempty"`
+	// BundleDigest is the signed evidence bundle carried by the pull request.
+	BundleDigest string `json:"bundle_digest,omitempty"`
 }
 
 // AcceptanceRecord is the forge-native merge state read for a pull request.
@@ -187,8 +193,14 @@ type PullRequestIdentity struct {
 type AcceptanceRecord struct {
 	State       forge.AcceptanceState `json:"state"`
 	MergeCommit string                `json:"merge_commit,omitempty"`
+	MergeTree   string                `json:"merge_tree,omitempty"`
 	Note        string                `json:"note,omitempty"`
 	ReadAt      time.Time             `json:"read_at,omitempty"`
+	// Votes and the actors below are observations, not permissions: ESF never
+	// approves or merges a pull request.
+	Votes             []forge.ApprovalVote `json:"votes,omitempty"`
+	AutoCompleteSetBy string               `json:"auto_complete_set_by,omitempty"`
+	ClosedBy          string               `json:"closed_by,omitempty"`
 }
 
 // RunManifest is the durable record of one factory run.

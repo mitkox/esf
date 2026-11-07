@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/mitkox/esf/internal/agentharness"
 	"github.com/mitkox/esf/internal/factoryartifacts"
+	"github.com/mitkox/esf/internal/forge"
 	"github.com/mitkox/esf/internal/notify"
 	"github.com/mitkox/esf/internal/repository"
 	"github.com/mitkox/esf/internal/sandbox"
@@ -144,6 +146,8 @@ type Activities struct {
 	redactor        *Redactor
 	telemetry       *Telemetry
 	cfg             Config
+	connectors      map[string]forge.Connector
+	connectorsMu    sync.Mutex
 	log             *slog.Logger
 }
 
@@ -157,7 +161,11 @@ type ActivitiesOptions struct {
 	Redactor        *Redactor
 	Telemetry       *Telemetry
 	Config          Config
-	Logger          *slog.Logger
+	// Connectors replaces operator-built adapters for tests and for an
+	// embedding process that already owns them. A connector here still holds a
+	// host-side credential and never enters a sandbox.
+	Connectors map[string]forge.Connector
+	Logger     *slog.Logger
 }
 
 // NewActivities builds the activity set.
@@ -186,6 +194,12 @@ func NewActivities(opts ActivitiesOptions) (*Activities, error) {
 			return nil, err
 		}
 	}
+	connectors := make(map[string]forge.Connector, len(opts.Connectors))
+	for name, connector := range opts.Connectors {
+		if connector != nil {
+			connectors[name] = connector
+		}
+	}
 	return &Activities{
 		provider:        opts.Provider,
 		repos:           opts.Repositories,
@@ -195,8 +209,26 @@ func NewActivities(opts ActivitiesOptions) (*Activities, error) {
 		redactor:        opts.Redactor,
 		telemetry:       telemetry,
 		cfg:             opts.Config,
+		connectors:      connectors,
 		log:             log,
 	}, nil
+}
+
+// forgeConnector returns the host-side adapter for a connector. Injected
+// adapters win so tests and embedders can supply a fake without a credential.
+func (a *Activities) forgeConnector(name string) (forge.Connector, error) {
+	name = strings.TrimSpace(name)
+	a.connectorsMu.Lock()
+	defer a.connectorsMu.Unlock()
+	if connector, ok := a.connectors[name]; ok {
+		return connector, nil
+	}
+	connector, err := a.cfg.NewForgeConnector(name)
+	if err != nil {
+		return nil, err
+	}
+	a.connectors[name] = connector
+	return connector, nil
 }
 
 // ── Activity input/output types ──────────────────────────────────────────────
@@ -602,6 +634,9 @@ func (a *Activities) CreateSandbox(ctx context.Context, in CreateSandboxInput) (
 	if template == "" {
 		template = a.cfg.Cube.TemplateID
 	}
+	if err := a.cfg.AssertSandboxSecretIsolation(in.Env); err != nil {
+		return CreateSandboxOutput{}, err
+	}
 	network := in.Network
 	network.Rules = append([]sandbox.NetworkRule(nil), in.Network.Rules...)
 	if connector := strings.TrimSpace(in.ForgeConnector); connector != "" {
@@ -968,6 +1003,9 @@ func (a *Activities) RunAgent(ctx context.Context, in RunAgentInput) (RunAgentOu
 			return RunAgentOutput{}, fmt.Errorf("resolved model credential environment variable %s is empty", name)
 		}
 		env[name] = value
+	}
+	if err := a.cfg.AssertSandboxSecretIsolation(env); err != nil {
+		return RunAgentOutput{}, err
 	}
 
 	result, err := harness.Run(ctx, sb, agentharness.Task{

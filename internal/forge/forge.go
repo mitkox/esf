@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/mitkox/esf/internal/secretfile"
@@ -29,6 +30,11 @@ const maxCredentialBytes = 4096
 // EvidenceBundleAttachmentName is the file name used when a forge can attach
 // the full evidence bundle to a pull request.
 const EvidenceBundleAttachmentName = "evidence-bundle.json"
+
+// VerificationStatusName is the forge status name attached to a published
+// change. It is deliberately stable across releases so a branch policy can
+// require it.
+const VerificationStatusName = "esf/verification"
 
 // Credential is a forge credential read from an operator-owned private file.
 //
@@ -244,11 +250,60 @@ type PullRequest struct {
 	ID    string
 	URL   string
 	Draft bool
+	// Commit and Tree identify the source revision when the forge reports it.
+	Commit string
+	Tree   string
 }
 
 // PublishResult is the forge's response to a publication.
 type PublishResult struct {
 	PullRequest PullRequest
+}
+
+// BranchPublication is a host-built branch the forge should create.
+//
+// The patch is applied by the factory host, never inside a sandbox. The commit
+// is deterministic so a retried publication addresses the same branch state.
+type BranchPublication struct {
+	Repository string
+	// RemoteURL overrides the git remote used for the push. It is empty in
+	// production, where Repository is already the push URL.
+	RemoteURL   string
+	BaselineSHA string
+	Branch      string
+	ChangeID    string
+	Attempt     int
+	Message     string
+	AuthorName  string
+	AuthorEmail string
+	CommitTime  time.Time
+	Patch       []byte
+}
+
+// BranchPublicationResult describes the branch that now exists on the forge.
+type BranchPublicationResult struct {
+	Branch             string
+	Commit             string
+	Tree               string
+	ChangedPaths       []string
+	GitmodulesBaseline []byte
+	GitmodulesResult   []byte
+	AlreadyPresent     bool
+}
+
+// BranchPublisher is an optional connector capability: a forge adapter that
+// can create the branch a pull request needs. The factory falls back to no
+// publication when the connector does not implement it.
+type BranchPublisher interface {
+	PublishBranch(ctx context.Context, req BranchPublication) (BranchPublicationResult, error)
+}
+
+// ApprovalVote is one reviewer vote read from the forge.
+type ApprovalVote struct {
+	Reviewer    string
+	DisplayName string
+	Descriptor  string
+	Vote        int
 }
 
 // AcceptanceRequest asks for the forge-native state of a pull request.
@@ -280,9 +335,19 @@ func (s AcceptanceState) Valid() bool {
 }
 
 // AcceptanceResult is the acceptance state read from the forge.
+//
+// MergeTree is the tree of the merge commit. The factory accepts a merged pull
+// request only when it matches the tree derived from the evidenced patch.
 type AcceptanceResult struct {
-	PullRequest PullRequest
-	State       AcceptanceState
+	PullRequest       PullRequest
+	State             AcceptanceState
+	MergeCommit       string
+	MergeTree         string
+	SourceCommit      string
+	Votes             []ApprovalVote
+	AutoCompleteSetBy string
+	ClosedBy          string
+	ClosedAt          time.Time
 }
 
 // digestLabel prefixes the mandatory evidence digest in a pull-request body.

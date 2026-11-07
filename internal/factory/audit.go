@@ -43,6 +43,11 @@ const (
 	// stale, conflicting, or unmapped. Rejections have no run of their own, so
 	// they are appended to the intake audit trail instead of a run artifact.
 	AuditIntake AuditAction = "intake"
+	// AuditPublication records a host-side branch, pull request, and status
+	// attempt. It never carries a forge credential.
+	AuditPublication AuditAction = "publication"
+	// AuditAcceptance records an observed forge merge state.
+	AuditAcceptance AuditAction = "acceptance"
 )
 
 // Audit outcome names for decisions whose result is not SUCCESS or FAILED.

@@ -92,6 +92,26 @@ func (c Config) Connector(name string) (forge.ConnectorSettings, error) {
 	}, nil
 }
 
+// NewForgeConnector constructs the host-side adapter for one operator
+// connector. The credential is read here and never enters workflow history or
+// a sandbox environment.
+func (c Config) NewForgeConnector(name string) (forge.Connector, error) {
+	settings, err := c.Connector(name)
+	if err != nil {
+		return nil, err
+	}
+	switch settings.Kind {
+	case forge.KindAzureDevOps:
+		return azuredevops.NewClient(azuredevops.Config{
+			Name:       settings.Name,
+			BaseURL:    settings.BaseURL,
+			Credential: settings.Credential,
+		})
+	default:
+		return nil, fmt.Errorf("connector %q: kind %q has no host-side adapter", name, settings.Kind)
+	}
+}
+
 // ResolvePipeline maps one work item through an operator-configured pipeline.
 //
 // The mapping input is WorkItemFields, which contains only the forge attributes

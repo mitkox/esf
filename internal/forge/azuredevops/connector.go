@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mitkox/esf/internal/forge"
 )
@@ -21,7 +22,7 @@ var _ forge.Connector = (*Client)(nil)
 const (
 	// azureDevOpsMaxBodyBytes is the documented pull-request description cap.
 	azureDevOpsMaxBodyBytes = 4000
-	defaultStatusName       = "esf/verification"
+	defaultStatusName       = forge.VerificationStatusName
 	statusGenre             = "esf"
 )
 
@@ -138,13 +139,40 @@ func (c *Client) Reconcile(ctx context.Context, req forge.ReconcileRequest) (for
 	return out, nil
 }
 
+type azureIdentity struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"displayName"`
+	UniqueName  string `json:"uniqueName"`
+	Descriptor  string `json:"descriptor"`
+}
+
+type azureCommitRef struct {
+	CommitID string `json:"commitId"`
+}
+
 type azurePullRequest struct {
-	PullRequestID int64  `json:"pullRequestId"`
-	Status        string `json:"status"`
-	MergeStatus   string `json:"mergeStatus"`
-	IsDraft       bool   `json:"isDraft"`
-	URL           string `json:"url"`
-	Repository    struct {
+	PullRequestID         int64          `json:"pullRequestId"`
+	Status                string         `json:"status"`
+	MergeStatus           string         `json:"mergeStatus"`
+	IsDraft               bool           `json:"isDraft"`
+	URL                   string         `json:"url"`
+	SourceRefName         string         `json:"sourceRefName"`
+	TargetRefName         string         `json:"targetRefName"`
+	CreatedBy             azureIdentity  `json:"createdBy"`
+	ClosedBy              azureIdentity  `json:"closedBy"`
+	AutoCompleteSetBy     azureIdentity  `json:"autoCompleteSetBy"`
+	LastMergeCommit       azureCommitRef `json:"lastMergeCommit"`
+	LastMergeSourceCommit azureCommitRef `json:"lastMergeSourceCommit"`
+	LastMergeTargetCommit azureCommitRef `json:"lastMergeTargetCommit"`
+	ClosedDate            string         `json:"closedDate"`
+	Reviewers             []struct {
+		ID          string `json:"id"`
+		DisplayName string `json:"displayName"`
+		UniqueName  string `json:"uniqueName"`
+		Descriptor  string `json:"descriptor"`
+		Vote        int    `json:"vote"`
+	} `json:"reviewers"`
+	Repository struct {
 		Name    string `json:"name"`
 		WebURL  string `json:"webUrl"`
 		Project struct {
@@ -182,6 +210,13 @@ func (c *Client) Publish(ctx context.Context, plan forge.PublicationPlan) (forge
 		return forge.PublishResult{}, err
 	}
 	if existing != nil {
+		if plan.Attachment != nil && c.Capabilities().Attachments {
+			// Attaching by the fixed bundle name makes a retry update the same
+			// attachment rather than creating a second pull request.
+			if err := c.attach(ctx, project, repo, existing.PullRequestID, *plan.Attachment); err != nil {
+				return forge.PublishResult{}, err
+			}
+		}
 		return c.publishResult(existing, plan, project, repo), nil
 	}
 
@@ -246,14 +281,37 @@ func (c *Client) ReadAcceptance(ctx context.Context, req forge.AcceptanceRequest
 	if err != nil {
 		return forge.AcceptanceResult{}, err
 	}
-	return forge.AcceptanceResult{
+	result := forge.AcceptanceResult{
 		PullRequest: forge.PullRequest{
-			ID:    strconv.FormatInt(pullRequest.PullRequestID, 10),
-			URL:   pullRequestURL(pullRequest, c.base, project, repo),
-			Draft: pullRequest.IsDraft,
+			ID:     strconv.FormatInt(pullRequest.PullRequestID, 10),
+			URL:    pullRequestURL(pullRequest, c.base, project, repo),
+			Draft:  pullRequest.IsDraft,
+			Commit: pullRequest.LastMergeCommit.CommitID,
 		},
-		State: state,
-	}, nil
+		State:             state,
+		MergeCommit:       pullRequest.LastMergeCommit.CommitID,
+		SourceCommit:      pullRequest.LastMergeSourceCommit.CommitID,
+		AutoCompleteSetBy: identityName(pullRequest.AutoCompleteSetBy),
+		ClosedBy:          identityName(pullRequest.ClosedBy),
+	}
+	if closedAt := strings.TrimSpace(pullRequest.ClosedDate); closedAt != "" {
+		if parsed, err := time.Parse(time.RFC3339, closedAt); err == nil {
+			result.ClosedAt = parsed
+		}
+	}
+	for _, reviewer := range pullRequest.Reviewers {
+		result.Votes = append(result.Votes, forge.ApprovalVote{
+			Reviewer:    firstNonEmpty(reviewer.UniqueName, reviewer.ID),
+			DisplayName: reviewer.DisplayName,
+			Descriptor:  reviewer.Descriptor,
+			Vote:        reviewer.Vote,
+		})
+	}
+	if state == forge.AcceptanceMerged && result.MergeCommit != "" {
+		result.MergeTree = c.commitTree(ctx, project, repo, result.MergeCommit)
+		result.PullRequest.Tree = result.MergeTree
+	}
+	return result, nil
 }
 
 func (c *Client) findActivePullRequest(ctx context.Context, project, repo, sourceRef string) (*azurePullRequest, error) {
@@ -334,6 +392,37 @@ func acceptanceState(status string) (forge.AcceptanceState, error) {
 	default:
 		return "", fmt.Errorf("azuredevops: unsupported pull request status %q", status)
 	}
+}
+
+func identityName(identity azureIdentity) string {
+	return firstNonEmpty(identity.Descriptor, identity.UniqueName, identity.DisplayName, identity.ID)
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func (c *Client) commitTree(ctx context.Context, project, repo, commit string) string {
+	endpoint := c.apiURL(project, "_apis", "git", "repositories", repo, "commits", commit)
+	query := endpoint.Query()
+	query.Set("api-version", apiVersion)
+	endpoint.RawQuery = query.Encode()
+	body, err := c.get(ctx, endpoint)
+	if err != nil {
+		return ""
+	}
+	var response struct {
+		TreeID string `json:"treeId"`
+	}
+	if json.Unmarshal(body, &response) != nil {
+		return ""
+	}
+	return strings.TrimSpace(response.TreeID)
 }
 
 func azureStatusState(state forge.StatusState) string {

@@ -33,13 +33,34 @@ type workItemTestEnvironment struct {
 	acts        *Activities
 	config      Config
 	fake        *sandbox.Fake
+	connector   forge.Connector
 	artifactDir string
+}
+
+type workItemTestOptions struct {
+	mutateConfig func(*Config)
+	connectors   map[string]forge.Connector
+}
+
+type workItemTestOption func(*workItemTestOptions)
+
+func withWorkItemConfig(mutate func(*Config)) workItemTestOption {
+	return func(opts *workItemTestOptions) { opts.mutateConfig = mutate }
+}
+
+func withWorkItemConnector(name string, connector forge.Connector) workItemTestOption {
+	return func(opts *workItemTestOptions) {
+		if opts.connectors == nil {
+			opts.connectors = map[string]forge.Connector{}
+		}
+		opts.connectors[name] = connector
+	}
 }
 
 // newWorkItemTestEnvironment builds the same fake sandbox and real activity
 // set the existing workflow harness uses, with one operator pipeline mapped to
 // an Azure DevOps repository.
-func newWorkItemTestEnvironment(t *testing.T, artifactDir string) *workItemTestEnvironment {
+func newWorkItemTestEnvironment(t *testing.T, artifactDir string, options ...workItemTestOption) *workItemTestEnvironment {
 	t.Helper()
 
 	harness, err := agentharness.NewGeneric(agentharness.Spec{
@@ -96,6 +117,13 @@ func newWorkItemTestEnvironment(t *testing.T, artifactDir string) *workItemTestE
 			},
 		},
 	}
+	opts := workItemTestOptions{}
+	for _, option := range options {
+		option(&opts)
+	}
+	if opts.mutateConfig != nil {
+		opts.mutateConfig(&cfg)
+	}
 	if artifactDir == "" {
 		artifactDir = t.TempDir()
 	}
@@ -116,6 +144,7 @@ func newWorkItemTestEnvironment(t *testing.T, artifactDir string) *workItemTestE
 		Redactor:        NewRedactor(workItemTestToken),
 		Telemetry:       telemetry,
 		Config:          cfg,
+		Connectors:      opts.connectors,
 		Logger:          slog.New(slog.DiscardHandler),
 	})
 	if err != nil {
@@ -133,7 +162,7 @@ func newWorkItemTestEnvironment(t *testing.T, artifactDir string) *workItemTestE
 	env.RegisterWorkflow(SoftwareChangeWorkflow)
 	env.RegisterActivity(acts)
 	return &workItemTestEnvironment{
-		env: env, acts: acts, config: cfg, fake: fake, artifactDir: artifactDir,
+		env: env, acts: acts, config: cfg, fake: fake, connector: opts.connectors["azdo"], artifactDir: artifactDir,
 	}
 }
 

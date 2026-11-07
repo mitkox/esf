@@ -95,6 +95,11 @@ trip_severity = "HIGH"
 # Set true only when the repository legitimately owns gate changes.
 allow_gate_self_modification = false
 
+# Publication rejects a .gitmodules URL change unless both the old and the new
+# URL match an entry here. A trailing "*" matches a URL prefix. Empty permits no
+# submodule URL change, which is the hardened default.
+# submodule_url_allowlist = ["https://dev.azure.com/acme/shared/_git/*"]
+
 # Security alerts. Empty disables delivery; every alert is still recorded in the
 # run's evidence. The token is a path, never a value.
 # alert_webhook_url = "https://hooks.example.org/esf"

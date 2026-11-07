@@ -10,19 +10,23 @@ type Fake struct {
 	ReconcileResult  ReconcileResult
 	PublishResult    PublishResult
 	AcceptanceResult AcceptanceResult
+	BranchResult     BranchPublicationResult
 
 	ReportErr     error
 	ReconcileErr  error
 	PublishErr    error
 	AcceptanceErr error
+	BranchErr     error
 
 	Reports         []ReportRequest
 	Reconciliations []ReconcileRequest
 	Publications    []PublicationPlan
 	Acceptances     []AcceptanceRequest
+	Branches        []BranchPublication
 }
 
 var _ Connector = (*Fake)(nil)
+var _ BranchPublisher = (*Fake)(nil)
 
 // NewFake creates a fake connector with the given capabilities.
 func NewFake(caps Capabilities) *Fake { return &Fake{Caps: caps} }
@@ -53,4 +57,10 @@ func (f *Fake) Publish(_ context.Context, plan PublicationPlan) (PublishResult, 
 func (f *Fake) ReadAcceptance(_ context.Context, req AcceptanceRequest) (AcceptanceResult, error) {
 	f.Acceptances = append(f.Acceptances, req)
 	return f.AcceptanceResult, f.AcceptanceErr
+}
+
+// PublishBranch records a branch publication and returns the configured result.
+func (f *Fake) PublishBranch(_ context.Context, req BranchPublication) (BranchPublicationResult, error) {
+	f.Branches = append(f.Branches, req)
+	return f.BranchResult, f.BranchErr
 }

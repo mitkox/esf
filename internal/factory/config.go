@@ -484,6 +484,9 @@ func (c Config) Validate() error {
 	if err := c.Evidence.validate(); err != nil {
 		problems = append(problems, err.Error())
 	}
+	if err := c.validateSecretIsolationConfig(); err != nil {
+		problems = append(problems, err.Error())
+	}
 	if err := c.Intake.Validate(); err != nil {
 		problems = append(problems, "intake: "+err.Error())
 	}

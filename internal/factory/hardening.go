@@ -74,6 +74,11 @@ type HardeningConfig struct {
 	// gate, so a self-modifying patch is recorded and fails closed.
 	AllowGateSelfModification bool `toml:"allow_gate_self_modification"`
 
+	// SubmoduleURLAllowlist lists submodule URLs a publication may change.
+	// Publication rejects a .gitmodules URL change unless both the old and the
+	// new URL are allowlisted. Empty permits no submodule URL change.
+	SubmoduleURLAllowlist []string `toml:"submodule_url_allowlist"`
+
 	// AlertWebhookURL receives bounded security alerts. Empty disables alerts.
 	AlertWebhookURL string `toml:"alert_webhook_url"`
 
@@ -185,6 +190,12 @@ func (h HardeningConfig) validate() error {
 	}
 	if h.AlertTimeout < 0 {
 		problems = append(problems, "alert_timeout must not be negative")
+	}
+	for i, raw := range h.SubmoduleURLAllowlist {
+		value := strings.TrimSpace(raw)
+		if value == "" || len(value) > 2048 || strings.ContainsAny(value, "\x00\r\n\t ") {
+			problems = append(problems, fmt.Sprintf("submodule_url_allowlist entry %d is invalid", i+1))
+		}
 	}
 	if raw := strings.TrimSpace(h.AlertWebhookURL); raw != "" {
 		if err := validateProbeURL(raw, false); err != nil {
