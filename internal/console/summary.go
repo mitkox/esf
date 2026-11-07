@@ -85,7 +85,7 @@ func isSecurityState(state factory.RunState) bool { return state.IsSecurityTermi
 
 func isFailedState(state factory.RunState) bool {
 	switch state {
-	case factory.StateAgentFailed, factory.StateVerificationFailed, factory.StateInfrastructureFailed, factory.StateInvalidRequest, factory.StateRejected:
+	case factory.StateAgentFailed, factory.StateVerificationFailed, factory.StateInfrastructureFailed, factory.StateInvalidRequest, factory.StateRejected, factory.StateEvidenceFailed:
 		return true
 	default:
 		return false
@@ -349,6 +349,8 @@ func humanRunState(state factory.RunState) string {
 		return "egress unverified"
 	case factory.StateRejected:
 		return "rejected in review"
+	case factory.StateEvidenceFailed:
+		return "evidence signing failed"
 	case factory.StatePaused:
 		return "paused for review"
 	case factory.StateRunning:

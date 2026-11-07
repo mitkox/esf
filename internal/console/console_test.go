@@ -432,6 +432,17 @@ func TestPatchAndArtifactEndpoints(t *testing.T) {
 		t.Fatalf("artifact = %+v", artifact)
 	}
 
+	// Signed evidence is part of the run's artifact tree and must be readable
+	// through the same allow-listed endpoint as the other evidence.
+	writeTextFile(t, filepath.Join(root, "runs", "run-success", "evidence", "bundle.json"), "{}\n")
+	writeTextFile(t, filepath.Join(root, "runs", "run-success", "evidence", "signature.json"), "{}\n")
+	for _, path := range []string{"evidence%2Fbundle.json", "evidence%2Fsignature.json"} {
+		status, body, _ = request(t, server, http.MethodGet, "/api/v1/console/runs/run-success/artifacts?path="+path, testToken)
+		if status != http.StatusOK {
+			t.Fatalf("artifact %q status = %d: %s", path, status, body)
+		}
+	}
+
 	for _, path := range []string{"..%2F..%2Fetc%2Fpasswd", "hardening%2F..%2F..%2Frun.json", "run.json%00.txt"} {
 		status, _, _ = request(t, server, http.MethodGet, "/api/v1/console/runs/run-success/artifacts?path="+path, testToken)
 		if status == http.StatusOK {

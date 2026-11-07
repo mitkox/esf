@@ -10,10 +10,12 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/mitkox/esf/internal/agentharness"
+	"github.com/mitkox/esf/internal/evidence"
 	artifacts "github.com/mitkox/esf/internal/factoryartifacts"
 	"github.com/mitkox/esf/internal/httpsecurity"
 	"github.com/mitkox/esf/internal/repository"
 	"github.com/mitkox/esf/internal/sandbox/cube"
+	"github.com/mitkox/esf/internal/secretfile"
 	"github.com/mitkox/esf/internal/tomlx"
 	"github.com/mitkox/esf/internal/verification"
 )
@@ -80,6 +82,42 @@ type Config struct {
 	// API is the public execution listener. It is disabled unless the operator
 	// enables it, and it never widens the caller inputs the CLI accepts.
 	API APIConfig `toml:"api"`
+
+	// Evidence configures host-side signing of the change-evidence bundle.
+	// Signing is disabled unless a key file is configured.
+	Evidence EvidenceConfig `toml:"evidence"`
+}
+
+// EvidenceConfig configures host-side evidence signing.
+//
+// The signing key is operator-owned and host-local. It is read through the
+// private-file rules: a regular file, no symlink, owner-only permissions and a
+// bounded size. It never enters a sandbox or workflow history.
+type EvidenceConfig struct {
+	// SigningKeyFile is a PKCS#8 PEM ed25519 private key. Empty disables
+	// signing.
+	SigningKeyFile string `toml:"signing_key_file"`
+}
+
+// configured reports whether evidence signing is enabled.
+func (c EvidenceConfig) configured() bool {
+	return strings.TrimSpace(c.SigningKeyFile) != ""
+}
+
+// validate fails at startup rather than after a run has already completed,
+// when an unusable key would leave the run without its evidence.
+func (c EvidenceConfig) validate() error {
+	if !c.configured() {
+		return nil
+	}
+	body, err := secretfile.Read(c.SigningKeyFile, maxEvidenceSigningKeyBytes)
+	if err != nil {
+		return fmt.Errorf("evidence.signing_key_file: %w", err)
+	}
+	if _, err := evidence.ParsePrivateKey(body); err != nil {
+		return fmt.Errorf("evidence.signing_key_file: %w", err)
+	}
+	return nil
 }
 
 // APIConfig configures the public execution listener.
@@ -432,6 +470,9 @@ func (c Config) Validate() error {
 		problems = append(problems, "observability: "+err.Error())
 	}
 	if err := c.API.validate(); err != nil {
+		problems = append(problems, err.Error())
+	}
+	if err := c.Evidence.validate(); err != nil {
 		problems = append(problems, err.Error())
 	}
 	if err := c.Intake.Validate(); err != nil {

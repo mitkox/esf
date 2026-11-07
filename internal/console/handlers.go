@@ -531,6 +531,8 @@ var allowedArtifactExact = map[string]bool{
 	factory.ArtifactPatchScan:          true,
 	factory.ArtifactGateIntegrity:      true,
 	factory.ArtifactAudit:              true,
+	factory.ArtifactEvidenceBundle:     true,
+	factory.ArtifactEvidenceSignature:  true,
 }
 
 var allowedArtifactPrefixes = []string{"verification/", "hardening/"}

@@ -250,6 +250,11 @@ func softwareChangeWorkflow(ctx workflow.Context, req RunRequest) (RunManifest, 
 	// changes` and in the worker log.
 	state.changeRecorded = recordChange(ctx, acts, state)
 
+	manifest, err = signCompletedRun(ctx, acts, state, req, manifest)
+	if err != nil {
+		return manifest, err
+	}
+
 	state.status.State = manifest.FactoryResult
 	state.status.AgentOutcome = manifest.AgentResult
 	state.status.VerifyOutcome = manifest.VerificationResult
@@ -291,6 +296,66 @@ func recordChange(ctx workflow.Context, acts *Activities, state *workflowState) 
 	}
 	state.changeID = out.ChangeID
 	return true
+}
+
+// signCompletedRun writes the signed evidence for a run that passed every gate.
+//
+// The step is version-gated because histories recorded before it must replay
+// without it. Signing is deliberately after the manifest is durable: the bundle
+// describes the finalized record, not a value that only exists in workflow
+// memory. A signing failure is terminal and distinct, so no publication can
+// follow a change whose evidence is missing.
+func signCompletedRun(
+	ctx workflow.Context,
+	acts *Activities,
+	state *workflowState,
+	req RunRequest,
+	manifest RunManifest,
+) (RunManifest, error) {
+	if workflow.GetVersion(ctx, evidenceSigningVersion, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return manifest, nil
+	}
+	if state.status.State != StateSucceeded {
+		return manifest, nil
+	}
+
+	state.status.CurrentStep = "evidence.sign"
+	disconnected, _ := workflow.NewDisconnectedContext(ctx)
+	actx := workflow.WithActivityOptions(disconnected, workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumAttempts:    3,
+		},
+	})
+
+	var signed SignEvidenceOutput
+	if err := workflow.ExecuteActivity(actx, acts.SignEvidence, SignEvidenceInput{RunID: req.RunID}).Get(disconnected, &signed); err != nil {
+		signingErr := fmt.Errorf("evidence signing failed: %w", err)
+		state.status.Error = appendError(state.status.Error, signingErr.Error())
+		state.status.State = StateEvidenceFailed
+		state.setCondition(ctx, ConditionEvidenceSigned, ConditionFalse, "SignFailed", signingErr.Error())
+
+		var revised FinalizeOutput
+		if err := workflow.ExecuteActivity(actx, acts.RecordEvidenceFailure, RecordEvidenceFailureInput{
+			RunID:      req.RunID,
+			Error:      signingErr.Error(),
+			Conditions: state.status.Conditions,
+		}).Get(disconnected, &revised); err != nil {
+			return manifest, fmt.Errorf("record evidence failure: %w", err)
+		}
+		state.changeRecorded = recordChange(disconnected, acts, state)
+		return revised.Manifest, nil
+	}
+	if !signed.Configured {
+		state.setCondition(ctx, ConditionEvidenceSigned, ConditionUnknown, "NotConfigured",
+			"evidence signing is not configured")
+		return manifest, nil
+	}
+	state.setCondition(ctx, ConditionEvidenceSigned, ConditionTrue, "Signed",
+		"bundle="+signed.BundleArtifact)
+	return manifest, nil
 }
 
 // run executes the workflow body, recording outcome state as it proceeds.

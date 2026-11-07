@@ -553,3 +553,61 @@ func hardenedDefaults() Config {
 	cfg.Hardening.EgressProbe = boolPtr(false)
 	return cfg
 }
+
+func TestLoadConfigEvidenceSection(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "factory.toml")
+	body := "[evidence]\nsigning_key_file = \"/run/secrets/evidence-signing-key.pem\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Evidence.SigningKeyFile != "/run/secrets/evidence-signing-key.pem" {
+		t.Fatalf("evidence = %#v", cfg.Evidence)
+	}
+
+	unknownPath := filepath.Join(t.TempDir(), "factory.toml")
+	if err := os.WriteFile(unknownPath, []byte("[evidence]\nsurprise_option = true\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := LoadConfig(unknownPath); err == nil {
+		t.Fatal("an unknown [evidence] key must be rejected")
+	}
+}
+
+func TestEvidenceConfigValidation(t *testing.T) {
+	t.Setenv("CUBE_API_URL", "http://127.0.0.1:4000")
+	t.Setenv("CUBE_TEMPLATE_ID", "tpl-test")
+
+	cfg := hardenedDefaults()
+	if cfg.Evidence.configured() {
+		t.Fatal("evidence signing must be disabled without a key file")
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("disabled evidence signing must not invalidate the configuration: %v", err)
+	}
+
+	cfg.Evidence = EvidenceConfig{SigningKeyFile: filepath.Join(t.TempDir(), "missing.pem")}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "evidence.signing_key_file") {
+		t.Fatalf("missing signing key = %v, want a named validation error", err)
+	}
+
+	keyPath, _ := writeSigningKey(t)
+	cfg.Evidence = EvidenceConfig{SigningKeyFile: keyPath}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("a valid signing key must be accepted: %v", err)
+	}
+
+	badPath := filepath.Join(t.TempDir(), "not-a-key.pem")
+	if err := os.WriteFile(badPath, []byte("not a private key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Evidence = EvidenceConfig{SigningKeyFile: badPath}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "evidence.signing_key_file") {
+		t.Fatalf("invalid signing key = %v, want a named validation error", err)
+	}
+}

@@ -2,6 +2,13 @@ package factory
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"log/slog"
 	"os"
@@ -9,10 +16,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/mitkox/esf/internal/agentharness"
+	"github.com/mitkox/esf/internal/evidence"
 	"github.com/mitkox/esf/internal/factoryartifacts"
 	"github.com/mitkox/esf/internal/repository"
 	"github.com/mitkox/esf/internal/sandbox"
@@ -24,6 +33,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 )
 
 const testSHA = "1111111111111111111111111111111111111111"
@@ -78,6 +88,9 @@ type workflowRunOptions struct {
 	// budget without duplicating the fixture.
 	mutateConfig func(*Config)
 	artifactDir  string
+	// artifactFactory replaces the local store, so a test can observe write
+	// order or make one artifact unwritable.
+	artifactFactory artifacts.Factory
 }
 
 // runWorkflow executes the workflow in Temporal's in-memory test environment
@@ -112,9 +125,12 @@ func runWorkflowOpts(t *testing.T, fake sandbox.Provider, req RunRequest, opts w
 	if artifactDir == "" {
 		artifactDir = t.TempDir()
 	}
-	store, err := artifacts.NewLocal(artifactDir)
-	if err != nil {
-		t.Fatalf("NewLocal: %v", err)
+	artifactFactory := opts.artifactFactory
+	if artifactFactory == nil {
+		artifactFactory, err = artifacts.NewLocal(artifactDir)
+		if err != nil {
+			t.Fatalf("NewLocal: %v", err)
+		}
 	}
 	telemetry, err := NewTelemetry(context.Background(), ObservabilityConfig{})
 	if err != nil {
@@ -146,7 +162,7 @@ func runWorkflowOpts(t *testing.T, fake sandbox.Provider, req RunRequest, opts w
 		Repositories:    repository.New(cfg.Repositories.Allowed, repository.WithLocalPaths(cfg.Repositories.LocalPaths)),
 		Harnesses:       registry,
 		Profiles:        cfg.VerificationProfiles(),
-		ArtifactFactory: store,
+		ArtifactFactory: artifactFactory,
 		Redactor:        NewRedactor(),
 		Telemetry:       telemetry,
 		Config:          cfg,
@@ -724,5 +740,397 @@ func TestEvidenceFailuresCannotReportSuccess(t *testing.T) {
 				t.Fatal("sandbox leaked")
 			}
 		})
+	}
+}
+
+// writeRecordingFactory records artifact write order so a test can prove the
+// manifest is durable before the evidence bundle that describes it.
+type writeRecordingFactory struct {
+	artifacts.Factory
+	mu     sync.Mutex
+	writes []string
+}
+
+func (f *writeRecordingFactory) ForRun(runID string) (artifacts.Store, error) {
+	store, err := f.Factory.ForRun(runID)
+	if err != nil {
+		return nil, err
+	}
+	return &writeRecordingStore{Store: store, factory: f}, nil
+}
+
+func (f *writeRecordingFactory) record(path string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.writes = append(f.writes, path)
+}
+
+func (f *writeRecordingFactory) indexOf(path string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i, written := range f.writes {
+		if written == path {
+			return i
+		}
+	}
+	return -1
+}
+
+type writeRecordingStore struct {
+	artifacts.Store
+	factory *writeRecordingFactory
+}
+
+func (s *writeRecordingStore) Write(path string, data []byte) error {
+	s.factory.record(path)
+	return s.Store.Write(path, data)
+}
+
+// writeSigningKey creates an owner-only PKCS#8 ed25519 key file.
+func writeSigningKey(t *testing.T) (string, ed25519.PublicKey) {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate signing key: %v", err)
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("marshal signing key: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "evidence-signing-key.pem")
+	body := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatalf("write signing key: %v", err)
+	}
+	return path, publicKey
+}
+
+func enableEvidenceSigning(keyPath string) func(*Config) {
+	return func(cfg *Config) {
+		cfg.Evidence = EvidenceConfig{SigningKeyFile: keyPath}
+	}
+}
+
+// TestWorkflowSignsEvidenceAfterManifest proves a successful run writes a
+// bundle that verifies with the operator key, after the manifest is durable.
+func TestWorkflowSignsEvidenceAfterManifest(t *testing.T) {
+	keyPath, publicKey := writeSigningKey(t)
+	local, err := artifacts.NewLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := &writeRecordingFactory{Factory: local}
+	fake := sandbox.NewFake()
+	fake.ExecuteFunc = wrapWithBuildSuccess(gitAwareExecute("diff --git a/greeting.py b/greeting.py"))
+
+	manifest, err := runWorkflowOpts(t, fake, baseRequest(t), workflowRunOptions{
+		artifactFactory: recorder,
+		mutateConfig:    enableEvidenceSigning(keyPath),
+	})
+	if err != nil {
+		t.Fatalf("workflow returned an error: %v", err)
+	}
+	if manifest.FactoryResult != StateSucceeded {
+		t.Fatalf("factory_result = %s, want SUCCEEDED (error: %s)", manifest.FactoryResult, manifest.Error)
+	}
+	if manifestIndex, bundleIndex := recorder.indexOf(ArtifactRun), recorder.indexOf(ArtifactEvidenceBundle); manifestIndex < 0 || bundleIndex < 0 || bundleIndex < manifestIndex {
+		t.Fatalf("write order manifest=%d bundle=%d, want the bundle after the manifest", manifestIndex, bundleIndex)
+	}
+
+	store, err := local.ForRun(manifest.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundleBody, err := store.Read(ArtifactEvidenceBundle)
+	if err != nil {
+		t.Fatalf("read evidence bundle: %v", err)
+	}
+	var envelope evidence.Envelope
+	if err := json.Unmarshal(bundleBody, &envelope); err != nil {
+		t.Fatalf("decode evidence bundle: %v", err)
+	}
+	statement, err := evidence.Verify(&envelope, publicKey)
+	if err != nil {
+		t.Fatalf("bundle did not verify: %v", err)
+	}
+	if statement.Predicate.Run.RunID != manifest.RunID {
+		t.Fatalf("bundle run = %q, want %q", statement.Predicate.Run.RunID, manifest.RunID)
+	}
+	if statement.Predicate.Run.ChangeID != manifest.RunID {
+		t.Fatalf("bundle change = %q, want the recorded change %q", statement.Predicate.Run.ChangeID, manifest.RunID)
+	}
+	patchBody, err := store.Read(ArtifactPatch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	patchDigest := sha256.Sum256(patchBody)
+	if len(statement.Subject) == 0 || statement.Subject[0].Digest["sha256"] != hex.EncodeToString(patchDigest[:]) {
+		t.Fatalf("patch subject = %#v", statement.Subject)
+	}
+
+	signatureBody, err := store.Read(ArtifactEvidenceSignature)
+	if err != nil {
+		t.Fatalf("read evidence signature: %v", err)
+	}
+	var sidecar struct {
+		PayloadType string               `json:"payloadType"`
+		Signatures  []evidence.Signature `json:"signatures"`
+	}
+	if err := json.Unmarshal(signatureBody, &sidecar); err != nil {
+		t.Fatalf("decode evidence signature: %v", err)
+	}
+	if sidecar.PayloadType != envelope.PayloadType || len(sidecar.Signatures) != 1 || sidecar.Signatures[0].Sig != envelope.Signatures[0].Sig {
+		t.Fatalf("signature sidecar = %#v, envelope = %#v", sidecar, envelope.Signatures)
+	}
+}
+
+// TestWorkflowUnusableSigningKeyIsEvidenceFailure proves a missing or
+// unreadable key is a distinct run result, with no bundle and no inventory of
+// success.
+func TestWorkflowUnusableSigningKeyIsEvidenceFailure(t *testing.T) {
+	cases := []struct {
+		name string
+		key  func(t *testing.T) string
+	}{
+		{
+			name: "missing",
+			key: func(t *testing.T) string {
+				return filepath.Join(t.TempDir(), "missing-signing-key.pem")
+			},
+		},
+		{
+			name: "readable outside its owner",
+			key: func(t *testing.T) string {
+				keyPath, _ := writeSigningKey(t)
+				if err := os.Chmod(keyPath, 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return keyPath
+			},
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			artifactDir := t.TempDir()
+			fake := sandbox.NewFake()
+			fake.ExecuteFunc = wrapWithBuildSuccess(gitAwareExecute("diff --git a/greeting.py b/greeting.py"))
+			req := baseRequest(t)
+
+			manifest, err := runWorkflowOpts(t, fake, req, workflowRunOptions{
+				artifactDir:  artifactDir,
+				mutateConfig: enableEvidenceSigning(tc.key(t)),
+			})
+			if err != nil {
+				t.Fatalf("workflow returned an error: %v", err)
+			}
+			if manifest.FactoryResult != StateEvidenceFailed {
+				t.Fatalf("factory_result = %s, want EVIDENCE_FAILED", manifest.FactoryResult)
+			}
+			if !strings.Contains(manifest.Error, "evidence signing failed") {
+				t.Fatalf("manifest error does not record the signing failure: %q", manifest.Error)
+			}
+			condition, ok := ConditionFor(manifest.Conditions, ConditionEvidenceSigned)
+			if !ok || condition.Status != ConditionFalse || condition.Reason != "SignFailed" {
+				t.Fatalf("evidence condition = %#v, %v", condition, ok)
+			}
+			local, err := artifacts.NewLocal(artifactDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			store, err := local.ForRun(req.RunID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.Read(ArtifactEvidenceBundle); err == nil {
+				t.Fatal("a bundle was written despite the signing failure")
+			}
+			if _, err := store.Read(ArtifactEvidenceSignature); err == nil {
+				t.Fatal("a signature was written despite the signing failure")
+			}
+			changes, err := NewChangeStore(artifactDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			change, err := changes.Load(req.RunID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if change.LastResult != StateEvidenceFailed {
+				t.Fatalf("change last_result = %s, want EVIDENCE_FAILED", change.LastResult)
+			}
+		})
+	}
+}
+
+// TestWorkflowIgnoresRepositoryEvidenceFile proves the signer reads the durable
+// artifact tree, never a file the agent could have written in the repository.
+func TestWorkflowIgnoresRepositoryEvidenceFile(t *testing.T) {
+	keyPath, publicKey := writeSigningKey(t)
+	req := baseRequest(t)
+	agentBody := []byte("{\"payloadType\":\"agent-authored\",\"payload\":\"not evidence\"}\n")
+	if err := os.MkdirAll(filepath.Join(req.LocalPath, "evidence"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(req.LocalPath, "evidence", "bundle.json"), agentBody, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	artifactDir := t.TempDir()
+	fake := sandbox.NewFake()
+	fake.ExecuteFunc = wrapWithBuildSuccess(gitAwareExecute("diff --git a/greeting.py b/greeting.py"))
+	manifest, err := runWorkflowOpts(t, fake, req, workflowRunOptions{
+		artifactDir:  artifactDir,
+		mutateConfig: enableEvidenceSigning(keyPath),
+	})
+	if err != nil {
+		t.Fatalf("workflow returned an error: %v", err)
+	}
+	if manifest.FactoryResult != StateSucceeded {
+		t.Fatalf("factory_result = %s, want SUCCEEDED (error: %s)", manifest.FactoryResult, manifest.Error)
+	}
+	local, err := artifacts.NewLocal(artifactDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := local.ForRun(req.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundleBody, err := store.Read(ArtifactEvidenceBundle)
+	if err != nil {
+		t.Fatalf("read evidence bundle: %v", err)
+	}
+	if string(bundleBody) == string(agentBody) {
+		t.Fatal("the repository file was used as evidence")
+	}
+	var envelope evidence.Envelope
+	if err := json.Unmarshal(bundleBody, &envelope); err != nil {
+		t.Fatalf("decode evidence bundle: %v", err)
+	}
+	statement, err := evidence.Verify(&envelope, publicKey)
+	if err != nil {
+		t.Fatalf("bundle did not verify: %v", err)
+	}
+	if statement.Predicate.Run.RunID != req.RunID {
+		t.Fatalf("bundle run = %q, want %q", statement.Predicate.Run.RunID, req.RunID)
+	}
+}
+
+// TestWorkflowEvidenceSigningVersionReplay covers both replay paths: a history
+// recorded before the marker takes the old path, and a new history signs.
+func TestWorkflowEvidenceSigningVersionReplay(t *testing.T) {
+	cases := []struct {
+		name       string
+		version    workflow.Version
+		wantBundle bool
+	}{
+		{name: "new marker", version: workflow.Version(1), wantBundle: true},
+		{name: "history without marker", version: workflow.DefaultVersion, wantBundle: false},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			keyPath, _ := writeSigningKey(t)
+			artifactDir := t.TempDir()
+			fake := sandbox.NewFake()
+			fake.ExecuteFunc = wrapWithBuildSuccess(gitAwareExecute("diff --git a/greeting.py b/greeting.py"))
+			req := baseRequest(t)
+			manifest, err := runWorkflowOpts(t, fake, req, workflowRunOptions{
+				artifactDir:  artifactDir,
+				mutateConfig: enableEvidenceSigning(keyPath),
+			}, func(env *testsuite.TestWorkflowEnvironment) {
+				env.OnGetVersion(evidenceSigningVersion, workflow.DefaultVersion, workflow.Version(1)).
+					Return(tc.version).Once()
+			})
+			if err != nil {
+				t.Fatalf("workflow returned an error: %v", err)
+			}
+			if manifest.FactoryResult != StateSucceeded {
+				t.Fatalf("factory_result = %s, want SUCCEEDED", manifest.FactoryResult)
+			}
+			local, err := artifacts.NewLocal(artifactDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			store, err := local.ForRun(req.RunID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, bundleErr := store.Read(ArtifactEvidenceBundle)
+			if tc.wantBundle && bundleErr != nil {
+				t.Fatalf("new history did not write a bundle: %v", bundleErr)
+			}
+			if !tc.wantBundle && bundleErr == nil {
+				t.Fatal("a history without the marker ran the signing step")
+			}
+		})
+	}
+}
+
+// TestWorkflowEvidenceWriteFailureCannotSucceed proves a failure while writing
+// the signed artifacts leaves the run short of success.
+func TestWorkflowEvidenceWriteFailureCannotSucceed(t *testing.T) {
+	keyPath, _ := writeSigningKey(t)
+	local, err := artifacts.NewLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := sandbox.NewFake()
+	fake.ExecuteFunc = wrapWithBuildSuccess(gitAwareExecute("diff --git a/greeting.py b/greeting.py"))
+	req := baseRequest(t)
+
+	manifest, err := runWorkflowOpts(t, fake, req, workflowRunOptions{
+		artifactFactory: failingEvidenceFactory{Factory: local, fail: ArtifactEvidenceBundle},
+		mutateConfig:    enableEvidenceSigning(keyPath),
+	})
+	if err != nil {
+		t.Fatalf("workflow returned an error: %v", err)
+	}
+	if manifest.FactoryResult != StateEvidenceFailed {
+		t.Fatalf("factory_result = %s, want EVIDENCE_FAILED", manifest.FactoryResult)
+	}
+	if !strings.Contains(manifest.Error, "evidence signing failed") {
+		t.Fatalf("manifest error does not record the write failure: %q", manifest.Error)
+	}
+	store, err := local.ForRun(req.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Read(ArtifactEvidenceBundle); err == nil {
+		t.Fatal("an incomplete evidence write was reported as evidence")
+	}
+	if len(fake.Live()) != 0 {
+		t.Fatalf("sandbox leaked: %v", fake.Live())
+	}
+}
+
+// TestWorkflowEvidenceSigningDisabledByDefault proves the signer is off until
+// the operator configures a key, and that its absence does not fail a good run.
+func TestWorkflowEvidenceSigningDisabledByDefault(t *testing.T) {
+	artifactDir := t.TempDir()
+	fake := sandbox.NewFake()
+	fake.ExecuteFunc = wrapWithBuildSuccess(gitAwareExecute("diff --git a/greeting.py b/greeting.py"))
+	req := baseRequest(t)
+	manifest, err := runWorkflowOpts(t, fake, req, workflowRunOptions{artifactDir: artifactDir})
+	if err != nil {
+		t.Fatalf("workflow returned an error: %v", err)
+	}
+	if manifest.FactoryResult != StateSucceeded {
+		t.Fatalf("factory_result = %s, want SUCCEEDED", manifest.FactoryResult)
+	}
+	local, err := artifacts.NewLocal(artifactDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := local.ForRun(req.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Read(ArtifactEvidenceBundle); err == nil {
+		t.Fatal("signing is disabled but a bundle was written")
+	}
+	if _, err := store.Read(ArtifactEvidenceSignature); err == nil {
+		t.Fatal("signing is disabled but a signature was written")
 	}
 }

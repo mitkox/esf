@@ -83,6 +83,11 @@ const (
 	// StateRejected means every gate passed but a human reviewer rejected the
 	// change. A human decision is a gate, so it cannot coexist with SUCCEEDED.
 	StateRejected RunState = "REJECTED"
+	// StateEvidenceFailed means the change passed every gate but its signed
+	// evidence could not be produced. It is distinct from a build failure: the
+	// code may be good, but the claim about it is missing, so no publication
+	// may follow.
+	StateEvidenceFailed RunState = "EVIDENCE_FAILED"
 )
 
 // Valid reports whether s is a known state.
@@ -90,7 +95,8 @@ func (s RunState) Valid() bool {
 	switch s {
 	case StateRequested, StateRunning, StatePaused, StateAgentFailed, StateVerificationFailed,
 		StateSucceeded, StateCancelled, StateInfrastructureFailed, StateInvalidRequest,
-		StateBlocked, StateQuarantined, StateGateTampered, StateEgressUnverified, StateRejected:
+		StateBlocked, StateQuarantined, StateGateTampered, StateEgressUnverified, StateRejected,
+		StateEvidenceFailed:
 		return true
 	default:
 		return false
@@ -314,6 +320,12 @@ const (
 	// ArtifactGateIntegrity records whether the agent modified the
 	// deterministic gates it is judged by.
 	ArtifactGateIntegrity = "hardening/gate-integrity.json"
+	// ArtifactEvidenceBundle is the signed DSSE change-evidence envelope. It is
+	// written by the host after the manifest is durable, never by an agent.
+	ArtifactEvidenceBundle = "evidence/bundle.json"
+	// ArtifactEvidenceSignature is the detached copy of the bundle signature,
+	// for consumers that publish the signature separately from the envelope.
+	ArtifactEvidenceSignature = "evidence/signature.json"
 )
 
 // RunRequest is the input to a factory run.

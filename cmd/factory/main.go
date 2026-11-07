@@ -564,7 +564,8 @@ func watchRunStatus(ctx context.Context, c client.Client, workflowID, runID stri
 func isTerminalRunState(state factory.RunState) bool {
 	switch state {
 	case factory.StateAgentFailed, factory.StateVerificationFailed, factory.StateSucceeded,
-		factory.StateCancelled, factory.StateInfrastructureFailed, factory.StateInvalidRequest:
+		factory.StateCancelled, factory.StateInfrastructureFailed, factory.StateInvalidRequest,
+		factory.StateEvidenceFailed:
 		return true
 	default:
 		return false

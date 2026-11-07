@@ -46,6 +46,10 @@ const (
 	ConditionCleanupVerified ConditionType = "CleanupVerified"
 	// ConditionEvidenceWritten reports that the durable manifest was persisted.
 	ConditionEvidenceWritten ConditionType = "EvidenceWritten"
+	// ConditionEvidenceSigned reports that the run's signed evidence bundle was
+	// written. It is separate from EvidenceWritten because a durable manifest
+	// without a signature is not the evidence a consumer accepts.
+	ConditionEvidenceSigned ConditionType = "EvidenceSigned"
 	// ConditionBudgetExceeded reports that recorded usage crossed a configured
 	// ceiling. It is evidence, never enforcement: the factory does not rewrite a
 	// result because a budget was hit.
