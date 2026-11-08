@@ -203,6 +203,19 @@ func (f connectorSweeperFunc) Sweep(ctx context.Context) (forge.SweepResult, err
 
 func (connectorSweeperFunc) CommitSweep(context.Context, string) error { return nil }
 
+// seedIntakeState writes the durable intake state a connector health sweep
+// reads. The records are the on-disk shape the intake store persists.
+func seedIntakeState(t *testing.T, dataDir, body string) {
+	t.Helper()
+	dir := filepath.Join(dataDir, "intake")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("create intake directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(body), 0o600); err != nil {
+		t.Fatalf("write intake state: %v", err)
+	}
+}
+
 // TestConnectorHealthObserverWritesSweepSnapshot runs the real connector
 // runtime and the production health adapter, then reads the durable snapshot
 // the console and metrics consume.
@@ -210,6 +223,15 @@ func TestConnectorHealthObserverWritesSweepSnapshot(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+	seedIntakeState(t, dir, `{
+  "heads": {},
+  "records": {
+    "accepted-payments-1": {"status": "accepted", "scope": "payments"},
+    "accepted-payments-2": {"status": "accepted", "scope": "payments"},
+    "terminal-payments": {"status": "succeeded", "scope": "payments"},
+    "legacy-no-scope": {"status": "accepted"}
+  }
+}`)
 	artifactFactory, err := artifacts.NewLocal(dir)
 	if err != nil {
 		t.Fatalf("NewLocal: %v", err)
@@ -238,6 +260,7 @@ func TestConnectorHealthObserverWritesSweepSnapshot(t *testing.T) {
 		Subscription: func(context.Context) (forge.SubscriptionState, string) {
 			return forge.SubscriptionActive, "1 subscription enabled"
 		},
+		QueueDepth: reporter.QueueDepth,
 		Observe: func(ctx context.Context, observation connector.HealthObservation) error {
 			err := observe(ctx, observation)
 			if observation.Event == connector.HealthEventSweep && observation.Successful {
@@ -287,6 +310,12 @@ func TestConnectorHealthObserverWritesSweepSnapshot(t *testing.T) {
 	}
 	if health.Subscription != forge.SubscriptionActive {
 		t.Fatalf("subscription = %q, want active", health.Subscription)
+	}
+	if health.QueueDepth["payments"] != 2 {
+		t.Fatalf("queue depth = %v, want two accepted payments records", health.QueueDepth)
+	}
+	if len(health.QueueDepth) != 1 {
+		t.Fatalf("queue depth = %v, want only scoped, non-terminal records", health.QueueDepth)
 	}
 	if health.Status != forge.HealthDegraded || health.Reason != "no_delivery_since_sweep" {
 		t.Fatalf("health = %#v, want the degraded no-delivery state", health)
@@ -567,11 +596,22 @@ func TestBuildConnectorRuntimeRunsSweepOnlyWithoutWebhook(t *testing.T) {
 	cfg.Connectors = map[string]factory.ConnectorConfig{
 		"azdo": {Kind: "azuredevops", BaseURL: "http://127.0.0.1:1", TokenFile: tokenFile},
 	}
-	specs, err := buildConnectorRuntime(cfg, &recordingIntakeSink{}, nil)
+	artifactFactory, err := artifacts.NewLocal(dir)
+	if err != nil {
+		t.Fatalf("NewLocal: %v", err)
+	}
+	reporter, err := factory.NewConnectorHealthReporter(factory.Default(), artifactFactory, nil, nil)
+	if err != nil {
+		t.Fatalf("NewConnectorHealthReporter: %v", err)
+	}
+	specs, err := buildConnectorRuntime(cfg, &recordingIntakeSink{}, reporter)
 	if err != nil {
 		t.Fatalf("buildConnectorRuntime: %v", err)
 	}
 	if len(specs) != 1 || specs[0].WebhookHandler != nil || specs[0].WebhookListen != "" {
 		t.Fatalf("sweep-only spec = %#v, want no webhook listener", specs)
+	}
+	if specs[0].Observe == nil || specs[0].QueueDepth == nil {
+		t.Fatalf("sweep-only spec = %#v, want the health observer and queue-depth reader", specs[0])
 	}
 }

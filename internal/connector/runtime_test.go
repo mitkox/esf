@@ -276,6 +276,57 @@ func TestRuntimeReportsSweepAndFailedDeliveryHealth(t *testing.T) {
 	}
 }
 
+// TestRuntimeReportsQueueDepthWithSweepObservation proves a sweep observation
+// carries the durable pending-work count and the configured sweep interval.
+func TestRuntimeReportsQueueDepthWithSweepObservation(t *testing.T) {
+	t.Parallel()
+
+	observations := make(chan HealthObservation, 4)
+	runtime, err := New([]Spec{{
+		Name:          "azdo",
+		SweepInterval: time.Minute,
+		Sweeper:       &fakeSweeper{sweep: func(context.Context) (forge.SweepResult, error) { return forge.SweepResult{}, nil }},
+		Deliver:       func(context.Context, forge.Candidate) error { return nil },
+		WebhookListen: "127.0.0.1:0",
+		WebhookHandler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		}),
+		QueueDepth: func(context.Context) (map[string]int, error) {
+			return map[string]int{"payments": 3}, nil
+		},
+		Observe: func(_ context.Context, observation HealthObservation) error {
+			observations <- observation
+			return nil
+		},
+	}}, Options{Logger: quietLogger()})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	runtime.newTicker = func(time.Duration) ticker { return &fakeTicker{ch: make(chan time.Time, 1)} }
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+
+	sweep := <-observations
+	if sweep.Event != HealthEventSweep || !sweep.Successful {
+		cancel()
+		waitRuntimeStop(t, done)
+		t.Fatalf("observation = %#v, want a successful sweep", sweep)
+	}
+	if sweep.QueueDepth["payments"] != 3 {
+		cancel()
+		waitRuntimeStop(t, done)
+		t.Fatalf("queue depth = %v, want the durable pending count", sweep.QueueDepth)
+	}
+	if sweep.SweepInterval != time.Minute {
+		cancel()
+		waitRuntimeStop(t, done)
+		t.Fatalf("sweep interval = %s, want the configured interval", sweep.SweepInterval)
+	}
+
+	cancel()
+	waitRuntimeStop(t, done)
+}
+
 func TestRuntimeReportsFailedWebhookDeliveryHealth(t *testing.T) {
 	t.Parallel()
 

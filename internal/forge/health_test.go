@@ -8,60 +8,99 @@ import (
 	"time"
 )
 
-func TestEvaluateHealthDegradesWhenNoDeliveryFollowedTheSweep(t *testing.T) {
+func TestEvaluateHealth(t *testing.T) {
 	t.Parallel()
 
 	sweep := time.Date(2026, 11, 7, 10, 0, 0, 0, time.UTC)
-	now := sweep.Add(2 * time.Minute)
 	cases := []struct {
 		name        string
+		now         time.Time
 		observation HealthObservation
 		wantStatus  HealthStatus
 		wantReason  string
+		wantDetail  string
 	}{
 		{
 			name:        "no observations",
+			now:         sweep,
 			observation: HealthObservation{Connector: "azdo"},
 			wantStatus:  HealthUnknown,
 			wantReason:  "no_observations",
 		},
 		{
-			name: "no delivery since the sweep",
+			name: "no delivery after a sweep",
+			now:  sweep.Add(time.Minute),
 			observation: HealthObservation{
-				Connector: "azdo", LastSuccessfulSweep: sweep, LastDelivery: sweep.Add(-time.Minute),
+				Connector: "azdo", LastSuccessfulSweep: sweep,
 				Subscription: SubscriptionActive,
 			},
 			wantStatus: HealthDegraded,
 			wantReason: "no_delivery_since_sweep",
 		},
 		{
-			name: "delivery exactly at the sweep",
+			name: "delivery within the idle grace",
+			now:  sweep.Add(2 * time.Minute),
 			observation: HealthObservation{
 				Connector: "azdo", LastSuccessfulSweep: sweep, LastDelivery: sweep,
 				Subscription: SubscriptionActive,
 			},
-			wantStatus: HealthDegraded,
-			wantReason: "no_delivery_since_sweep",
+			wantStatus: HealthHealthy,
+			wantReason: "recent_delivery",
+		},
+		{
+			name: "delivery within the idle grace after a newer sweep",
+			now:  sweep.Add(2 * time.Minute),
+			observation: HealthObservation{
+				Connector: "azdo", LastSuccessfulSweep: sweep.Add(time.Minute), LastDelivery: sweep,
+				Subscription: SubscriptionActive,
+			},
+			wantStatus: HealthHealthy,
+			wantReason: "recent_delivery",
 		},
 		{
 			name: "delivery after the sweep",
+			now:  sweep.Add(2 * time.Minute),
 			observation: HealthObservation{
 				Connector: "azdo", LastSuccessfulSweep: sweep, LastDelivery: sweep.Add(time.Minute),
 				Subscription: SubscriptionActive,
 			},
 			wantStatus: HealthHealthy,
-			wantReason: "delivery_after_sweep",
+			wantReason: "recent_delivery",
 		},
 		{
-			name: "sweep without any delivery",
+			name: "delivery older than the freshness window",
+			now:  sweep.Add(5 * time.Minute),
 			observation: HealthObservation{
-				Connector: "azdo", LastSuccessfulSweep: sweep, Subscription: SubscriptionActive,
+				Connector: "azdo", LastSuccessfulSweep: sweep.Add(4 * time.Minute), LastDelivery: sweep,
+				Subscription: SubscriptionActive,
 			},
 			wantStatus: HealthDegraded,
-			wantReason: "no_delivery_since_sweep",
+			wantReason: "no_recent_delivery",
+		},
+		{
+			name: "stale sweep with a newer delivery",
+			now:  sweep.Add(4 * time.Minute),
+			observation: HealthObservation{
+				Connector: "azdo", LastSuccessfulSweep: sweep, LastDelivery: sweep.Add(time.Minute),
+				Subscription: SubscriptionActive,
+			},
+			wantStatus: HealthDegraded,
+			wantReason: "stale_sweep",
+		},
+		{
+			name: "configured sweep interval sizes the freshness window",
+			now:  sweep.Add(20 * time.Minute),
+			observation: HealthObservation{
+				Connector: "azdo", SweepInterval: 10 * time.Minute,
+				LastSuccessfulSweep: sweep, LastDelivery: sweep.Add(-5 * time.Minute),
+				Subscription: SubscriptionActive,
+			},
+			wantStatus: HealthHealthy,
+			wantReason: "recent_delivery",
 		},
 		{
 			name: "delivery without a successful sweep",
+			now:  sweep.Add(2 * time.Minute),
 			observation: HealthObservation{
 				Connector: "azdo", LastDelivery: sweep.Add(time.Minute), Subscription: SubscriptionActive,
 			},
@@ -69,7 +108,43 @@ func TestEvaluateHealthDegradesWhenNoDeliveryFollowedTheSweep(t *testing.T) {
 			wantReason: "no_successful_sweep",
 		},
 		{
+			name: "failed sweep attempt after a recent delivery",
+			now:  sweep.Add(2 * time.Minute),
+			observation: HealthObservation{
+				Connector: "azdo", Event: HealthEventSweep, Successful: false,
+				Detail:              "reconciliation sweep failed: upstream 503",
+				LastSuccessfulSweep: sweep, LastDelivery: sweep.Add(time.Minute),
+				Subscription: SubscriptionActive,
+			},
+			wantStatus: HealthDegraded,
+			wantReason: "sweep_failed",
+			wantDetail: "upstream 503",
+		},
+		{
+			name: "failed sweep attempt with no prior observations",
+			now:  sweep,
+			observation: HealthObservation{
+				Connector: "azdo", Event: HealthEventSweep, Successful: false,
+				Detail: "reconciliation sweep failed", Subscription: SubscriptionActive,
+			},
+			wantStatus: HealthDegraded,
+			wantReason: "sweep_failed",
+		},
+		{
+			name: "failed delivery attempt does not degrade a fresh connector",
+			now:  sweep.Add(2 * time.Minute),
+			observation: HealthObservation{
+				Connector: "azdo", Event: HealthEventDelivery, Successful: false,
+				Detail:              "webhook delivery failed with status 502",
+				LastSuccessfulSweep: sweep, LastDelivery: sweep.Add(time.Minute),
+				Subscription: SubscriptionActive,
+			},
+			wantStatus: HealthHealthy,
+			wantReason: "recent_delivery",
+		},
+		{
 			name: "disabled subscription",
+			now:  sweep.Add(2 * time.Minute),
 			observation: HealthObservation{
 				Connector: "azdo", LastSuccessfulSweep: sweep, LastDelivery: sweep.Add(time.Minute),
 				Subscription: SubscriptionDisabled,
@@ -79,6 +154,7 @@ func TestEvaluateHealthDegradesWhenNoDeliveryFollowedTheSweep(t *testing.T) {
 		},
 		{
 			name: "probationary subscription",
+			now:  sweep.Add(2 * time.Minute),
 			observation: HealthObservation{
 				Connector: "azdo", LastSuccessfulSweep: sweep, LastDelivery: sweep.Add(time.Minute),
 				Subscription: SubscriptionProbationary,
@@ -91,16 +167,23 @@ func TestEvaluateHealthDegradesWhenNoDeliveryFollowedTheSweep(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := EvaluateHealth(now, tc.observation)
+			got := EvaluateHealth(tc.now, tc.observation)
 			if got.Status != tc.wantStatus || got.Reason != tc.wantReason {
 				t.Fatalf("EvaluateHealth() = %s/%s, want %s/%s (%+v)",
 					got.Status, got.Reason, tc.wantStatus, tc.wantReason, got)
 			}
-			if got.Connector != "azdo" || !got.EvaluatedAt.Equal(now) {
+			if got.Connector != "azdo" || !got.EvaluatedAt.Equal(tc.now) {
 				t.Fatalf("unexpected health identity: %+v", got)
 			}
-			if got.LastSuccessfulSweep != nil && !got.LastSuccessfulSweep.Equal(sweep) {
-				t.Fatalf("last successful sweep = %v", got.LastSuccessfulSweep)
+			if tc.observation.LastSuccessfulSweep.IsZero() {
+				if got.LastSuccessfulSweep != nil {
+					t.Fatalf("last successful sweep = %v, want none", got.LastSuccessfulSweep)
+				}
+			} else if got.LastSuccessfulSweep == nil || !got.LastSuccessfulSweep.Equal(tc.observation.LastSuccessfulSweep) {
+				t.Fatalf("last successful sweep = %v, want %v", got.LastSuccessfulSweep, tc.observation.LastSuccessfulSweep)
+			}
+			if tc.wantDetail != "" && !strings.Contains(got.Detail, tc.wantDetail) {
+				t.Fatalf("health detail = %q, want it to contain %q", got.Detail, tc.wantDetail)
 			}
 			if tc.wantReason == "subscription_disabled" {
 				if got.Subscription != SubscriptionDisabled || !strings.Contains(got.Detail, "disabled") {
@@ -144,7 +227,7 @@ func TestHealthSnapshotRoundTripIsBoundedAndPrivate(t *testing.T) {
 	if err := SaveConnectorHealth(root, first); err != nil {
 		t.Fatalf("SaveConnectorHealth: %v", err)
 	}
-	second := ConnectorHealth{Connector: "github", Status: HealthHealthy, Reason: "delivery_after_sweep", Subscription: SubscriptionActive}
+	second := ConnectorHealth{Connector: "github", Status: HealthHealthy, Reason: "recent_delivery", Subscription: SubscriptionActive}
 	if err := SaveConnectorHealth(root, second); err != nil {
 		t.Fatalf("SaveConnectorHealth second: %v", err)
 	}

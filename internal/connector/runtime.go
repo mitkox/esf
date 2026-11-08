@@ -63,9 +63,11 @@ const (
 // LastSuccessfulSweep and LastDelivery are the last SUCCESSFUL observations,
 // never the current attempt: a failed sweep or delivery must leave the
 // timestamp unchanged. Event, Successful and Detail describe the attempt that
-// produced this update.
+// produced this update. QueueDepth is the durable pending-work count per
+// operator scope captured at the same instant.
 type HealthObservation struct {
 	Connector           string
+	SweepInterval       time.Duration
 	Event               HealthEvent
 	Successful          bool
 	Detail              string
@@ -73,11 +75,17 @@ type HealthObservation struct {
 	LastDelivery        time.Time
 	Subscription        forge.SubscriptionState
 	SubscriptionDetail  string
+	QueueDepth          map[string]int
 }
 
 // HealthObserver records one liveness update. An error is logged and never
 // stops the connector.
 type HealthObserver func(ctx context.Context, observation HealthObservation) error
+
+// QueueDepthReader reports the durable pending work-item count per operator
+// scope. It is called once per sweep so a health observation carries the queue
+// state.
+type QueueDepthReader func(ctx context.Context) (map[string]int, error)
 
 // SubscriptionReader reads the forge's event-subscription state. It is
 // called once per sweep so a silently disabled subscription becomes observable.
@@ -104,6 +112,9 @@ type Spec struct {
 	// Observe receives liveness updates after every sweep and delivery. Nil
 	// disables health observation.
 	Observe HealthObserver
+	// QueueDepth reports the pending work-item count per operator scope. It is
+	// called once per sweep; nil reports no queue depth.
+	QueueDepth QueueDepthReader
 	// Subscription reads the forge subscription state for the observation. Nil
 	// reports unknown.
 	Subscription SubscriptionReader
@@ -413,6 +424,7 @@ func (r *Runtime) observe(ctx context.Context, spec Spec, event HealthEvent, suc
 	}
 	var subscription forge.SubscriptionState
 	var subscriptionDetail string
+	var queueDepth map[string]int
 	if event == HealthEventSweep {
 		subscription = forge.SubscriptionUnknown
 		if spec.Subscription != nil {
@@ -425,6 +437,17 @@ func (r *Runtime) observe(ctx context.Context, spec Spec, event HealthEvent, suc
 			tracker.lastSuccessfulSweep = r.now()
 		}
 		tracker.mu.Unlock()
+		if spec.QueueDepth != nil {
+			depths, err := spec.QueueDepth(ctx)
+			if err != nil {
+				if ctx.Err() == nil {
+					r.logger.WarnContext(ctx, "connector queue depth unavailable",
+						"connector", spec.Name, "error", err)
+				}
+			} else {
+				queueDepth = depths
+			}
+		}
 	}
 	lastSweep, lastDelivery, storedSubscription, storedDetail := tracker.status()
 	if event != HealthEventSweep {
@@ -437,6 +460,7 @@ func (r *Runtime) observe(ctx context.Context, spec Spec, event HealthEvent, suc
 	}
 	observation := HealthObservation{
 		Connector:           spec.Name,
+		SweepInterval:       spec.SweepInterval,
 		Event:               event,
 		Successful:          successful,
 		Detail:              detail,
@@ -444,6 +468,7 @@ func (r *Runtime) observe(ctx context.Context, spec Spec, event HealthEvent, suc
 		LastDelivery:        lastDelivery,
 		Subscription:        storedSubscription,
 		SubscriptionDetail:  storedDetail,
+		QueueDepth:          queueDepth,
 	}
 	if err := spec.Observe(ctx, observation); err != nil && ctx.Err() == nil {
 		r.logger.WarnContext(ctx, "connector health observation not recorded",

@@ -372,25 +372,38 @@ The factory exports these instruments through the configured OTLP endpoint
 | `factory_connector_subscription_state` | One-hot forge subscription state, labelled `factory.subscription.state` (`active`, `disabled`, `probationary`, `unknown`) |
 | `factory_publication_failures_total` | Failed publication attempts, labelled `factory.failure.class` |
 | `factory_evidence_failures_total` | Evidence signing or verification failures, labelled `factory.failure.class` |
-| `factory_scope_queue_depth` | Pending work items per scope, labelled `factory.scope` |
+| `factory_scope_queue_depth` | Work items still pending intake, counted from durable intake records without an outcome and grouped by their resolved scope, labelled `factory.scope`. Records written before scopes were persisted contribute no series |
 
-A degraded connector raises `connector.degraded`; publication failures raise
-`publication.failed` or `publication.tampered`; an evidence signing failure
-raises `evidence.failed`. Alerts are best-effort: a delivery failure is recorded
-under `hardening.alerts` in `run.json` (or the connector health snapshot) and
-never fails a run or a sweep. The read-only console shows the same connector
-state at `/api/v1/console/connectors`.
+Connector health is evaluated from the latest attempt, not from the newest
+successful timestamps alone. A failed sweep attempt degrades the connector
+immediately. A successful sweep and an authenticated delivery each stay fresh for
+three sweep intervals, so with the default one-minute cadence a healthy
+connector is not degraded just because a later sweep succeeded after its last
+delivery. A delivery may therefore be older than the newest successful sweep and
+still count as current. A connector with a successful sweep but no delivery at
+all is degraded because the delivery path has never been proven.
+
+A connector raises `connector.degraded` when it enters the degraded state or its
+reason changes; a connector that stays degraded with the same reason does not
+re-alert on every sweep, and a degradation after recovery alerts again.
+Publication failures raise `publication.failed` or `publication.tampered`; an
+evidence signing failure raises `evidence.failed`. Alerts are best-effort: a
+delivery failure is recorded under `hardening.alerts` in `run.json` (or the
+connector health snapshot) and never fails a run or a sweep. The read-only
+console shows the same connector state at `/api/v1/console/connectors`.
 
 ### Connector outage or missed deliveries
 
-Symptom: no new runs, the last successful sweep stops advancing, the last
-delivery is older than that sweep, and the console or alert reports
-`degraded`/`no_delivery_since_sweep`.
+Symptom: no new runs, and the console or alert reports `degraded` with reason
+`sweep_failed`, `stale_sweep`, `no_delivery_since_sweep`, or
+`no_recent_delivery`.
 
 1. Confirm the connector process is running and can reach the forge base URL.
 2. Check the connector log for HTTP 401, 403, 429, and DNS/TLS errors. A failed
    sweep deliberately does not advance
-   `factory_connector_last_successful_sweep_timestamp_seconds`.
+   `factory_connector_last_successful_sweep_timestamp_seconds`, and once the last
+   success is older than three sweep intervals health is stale even when no newer
+   delivery arrived.
 3. Do not re-register the webhook first. Reconciliation is the primary intake
    path: the next successful sweep reads the durable watermark and recovers every
    missed revision.

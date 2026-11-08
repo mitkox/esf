@@ -889,6 +889,7 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 		RunID:               resolution.RunID,
 		ActivationID:        resolution.ActivationID,
 		BaseBranch:          resolved.BaseBranch,
+		Scope:               resolution.Scope,
 		VerificationProfile: request.VerificationProfile,
 	})
 	if err != nil {
@@ -1002,6 +1003,7 @@ type intakeRecord struct {
 	ActivationID        string    `json:"activation_id"`
 	ParentRunID         string    `json:"parent_run_id,omitempty"`
 	BaseBranch          string    `json:"base_branch,omitempty"`
+	Scope               string    `json:"scope,omitempty"`
 	VerificationProfile string    `json:"verification_profile,omitempty"`
 	Status              string    `json:"status"`
 	FactoryResult       string    `json:"factory_result,omitempty"`
@@ -1061,6 +1063,7 @@ func (s *intakeStore) Claim(ctx context.Context, rec intakeRecord) (intakeClaim,
 	rec.UpdatedAt = now
 	rec.Status = intakeRecordAccepted
 	rec.ActorDescriptor = strings.TrimSpace(rec.ActorDescriptor)
+	rec.Scope = strings.TrimSpace(rec.Scope)
 
 	var claim intakeClaim
 	err := s.withState(func(state *intakeState) error {
@@ -1159,6 +1162,44 @@ func (s *intakeStore) RecordOutcome(ctx context.Context, in WorkItemOutcomeInput
 		}
 		return nil
 	})
+}
+
+// QueueDepth counts intake records that have not reached a terminal state,
+// grouped by the resolved operator scope.
+//
+// Records written before the scope was persisted carry none and contribute no
+// series rather than a wrong one.
+func (s *intakeStore) QueueDepth() (map[string]int, error) {
+	state, err := s.Load()
+	if err != nil {
+		return nil, err
+	}
+	depths := make(map[string]int)
+	for _, record := range state.Records {
+		if intakeRecordTerminal(record.Status) {
+			continue
+		}
+		scope := strings.TrimSpace(record.Scope)
+		if scope == "" {
+			continue
+		}
+		depths[scope]++
+	}
+	if len(depths) == 0 {
+		return nil, nil
+	}
+	return depths, nil
+}
+
+// intakeRecordTerminal reports whether an intake record has an outcome. Accepted
+// work has none yet and is still queued.
+func intakeRecordTerminal(status string) bool {
+	switch status {
+	case intakeRecordSucceeded, intakeRecordFailed, intakeRecordWithdrawn, intakeRecordError:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *intakeStore) Load() (intakeState, error) {
@@ -1264,6 +1305,11 @@ func validateIntakeRecord(rec intakeRecord) error {
 		}
 		if len(field.value) > maxIntakeFieldBytes || strings.ContainsAny(field.value, "\x00\r\n\t") {
 			return fmt.Errorf("intake store: %s is invalid", field.name)
+		}
+	}
+	if scope := strings.TrimSpace(rec.Scope); scope != "" {
+		if len(scope) > maxIntakeFieldBytes || strings.ContainsAny(scope, "\x00\r\n\t") {
+			return fmt.Errorf("intake store: scope is invalid")
 		}
 	}
 	return nil

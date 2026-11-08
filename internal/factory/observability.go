@@ -423,7 +423,15 @@ func failureClass(class string) string {
 
 // ConnectorHealthInput is one connector liveness observation.
 type ConnectorHealthInput struct {
-	Connector           string         `json:"connector"`
+	Connector string `json:"connector"`
+	// SweepInterval sizes the freshness window. Zero uses the operator default.
+	SweepInterval time.Duration `json:"sweep_interval,omitempty"`
+	// Event names the attempt behind this observation: "sweep" or "delivery".
+	Event string `json:"event,omitempty"`
+	// Successful reports the outcome of that attempt.
+	Successful bool `json:"successful,omitempty"`
+	// Detail is bounded operator detail about that attempt.
+	Detail              string         `json:"detail,omitempty"`
 	LastSuccessfulSweep time.Time      `json:"last_successful_sweep,omitempty"`
 	LastDelivery        time.Time      `json:"last_delivery,omitempty"`
 	Subscription        string         `json:"subscription,omitempty"`
@@ -443,7 +451,8 @@ type ConnectorHealthOutput struct {
 }
 
 // ReportConnectorHealth computes liveness, records the health instruments,
-// writes the durable console snapshot, and raises one alert when degraded.
+// writes the durable console snapshot, and raises one alert when the connector
+// moves into degraded or its reason changes.
 //
 // It is the hook a connector loop calls after each sweep/delivery observation.
 // Alert delivery is best-effort; the durable record carries the failure.
@@ -454,6 +463,10 @@ func (a *Activities) ReportConnectorHealth(ctx context.Context, in ConnectorHeal
 	}
 	observation := forge.HealthObservation{
 		Connector:           connector,
+		SweepInterval:       in.SweepInterval,
+		Event:               forge.HealthEvent(in.Event),
+		Successful:          in.Successful,
+		Detail:              in.Detail,
 		LastSuccessfulSweep: in.LastSuccessfulSweep,
 		LastDelivery:        in.LastDelivery,
 		Subscription:        forge.ParseSubscriptionState(in.Subscription),
@@ -473,12 +486,15 @@ func (a *Activities) ReportConnectorHealth(ctx context.Context, in ConnectorHeal
 
 	out := ConnectorHealthOutput{Health: health}
 	if health.Degraded() {
-		severity := notify.SeverityWarning
-		if health.Subscription == forge.SubscriptionDisabled || health.Subscription == forge.SubscriptionProbationary {
-			severity = notify.SeverityCritical
+		previous, hasPrevious := a.previousConnectorHealth(connector)
+		if connectorDegradationChanged(previous, hasPrevious, health) {
+			severity := notify.SeverityWarning
+			if health.Subscription == forge.SubscriptionDisabled || health.Subscription == forge.SubscriptionProbationary {
+				severity = notify.SeverityCritical
+			}
+			record := a.raiseAlert(ctx, "", AlertConnectorDegraded, severity, healthAlertSummary(health), healthAlertDetail(health))
+			out.Alert = &record
 		}
-		record := a.raiseAlert(ctx, "", AlertConnectorDegraded, severity, healthAlertSummary(health), healthAlertDetail(health))
-		out.Alert = &record
 	}
 	if a.artifactFactory != nil {
 		if err := forge.SaveConnectorHealth(a.artifactFactory.Root(), health); err != nil {
@@ -493,6 +509,33 @@ func (a *Activities) ReportConnectorHealth(ctx context.Context, in ConnectorHeal
 		}
 	}
 	return out, nil
+}
+
+// previousConnectorHealth reads the last durable report for one connector so a
+// repeated degraded observation does not repeat its alert.
+func (a *Activities) previousConnectorHealth(connector string) (forge.ConnectorHealth, bool) {
+	if a.artifactFactory == nil {
+		return forge.ConnectorHealth{}, false
+	}
+	snapshot, err := forge.LoadHealthSnapshot(a.artifactFactory.Root())
+	if err != nil {
+		return forge.ConnectorHealth{}, false
+	}
+	for _, report := range snapshot.Connectors {
+		if report.Connector == connector {
+			return report, true
+		}
+	}
+	return forge.ConnectorHealth{}, false
+}
+
+// connectorDegradationChanged reports whether this observation is a new
+// degradation for the connector rather than a repeat of the previous one.
+func connectorDegradationChanged(previous forge.ConnectorHealth, hasPrevious bool, current forge.ConnectorHealth) bool {
+	if !hasPrevious {
+		return true
+	}
+	return previous.Status != forge.HealthDegraded || previous.Reason != current.Reason
 }
 
 // ConnectorHealthReporter records connector liveness for the connector
@@ -527,6 +570,22 @@ func (r *ConnectorHealthReporter) Report(ctx context.Context, in ConnectorHealth
 		return ConnectorHealthOutput{}, fmt.Errorf("connector health: reporter is not configured")
 	}
 	return r.activities.ReportConnectorHealth(ctx, in)
+}
+
+// QueueDepth counts durable intake records that have not reached a terminal
+// state, grouped by the resolved operator scope.
+func (r *ConnectorHealthReporter) QueueDepth(ctx context.Context) (map[string]int, error) {
+	if r == nil || r.activities == nil || r.activities.artifactFactory == nil {
+		return nil, fmt.Errorf("connector health: reporter is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	store, err := openIntakeStore(r.activities.artifactFactory.Root())
+	if err != nil {
+		return nil, err
+	}
+	return store.QueueDepth()
 }
 
 func healthAlertSummary(health forge.ConnectorHealth) string {

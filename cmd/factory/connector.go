@@ -128,6 +128,10 @@ func buildConnectorRuntime(cfg factory.Config, sink forge.IntakeSink, reporters 
 	if len(reporters) > 0 {
 		healthReporter = reporters[0]
 	}
+	var queueDepth connector.QueueDepthReader
+	if healthReporter != nil {
+		queueDepth = healthReporter.QueueDepth
+	}
 	names := make([]string, 0, len(cfg.Connectors))
 	for name := range cfg.Connectors {
 		names = append(names, name)
@@ -196,6 +200,7 @@ func buildConnectorRuntime(cfg factory.Config, sink forge.IntakeSink, reporters 
 			WebhookHandler: webhookHandler,
 			TLSConfig:      tlsConfig,
 			Observe:        connectorHealthObserver(healthReporter),
+			QueueDepth:     queueDepth,
 			Subscription: func(ctx context.Context) (forge.SubscriptionState, string) {
 				state, detail, err := azure.SubscriptionState(ctx)
 				if err != nil {
@@ -256,10 +261,15 @@ func connectorHealthObserver(reporter *factory.ConnectorHealthReporter) connecto
 	return func(ctx context.Context, observation connector.HealthObservation) error {
 		_, err := reporter.Report(ctx, factory.ConnectorHealthInput{
 			Connector:           observation.Connector,
+			SweepInterval:       observation.SweepInterval,
+			Event:               string(observation.Event),
+			Successful:          observation.Successful,
+			Detail:              observation.Detail,
 			LastSuccessfulSweep: observation.LastSuccessfulSweep,
 			LastDelivery:        observation.LastDelivery,
 			Subscription:        string(observation.Subscription),
 			SubscriptionDetail:  observation.SubscriptionDetail,
+			QueueDepth:          observation.QueueDepth,
 		})
 		return err
 	}

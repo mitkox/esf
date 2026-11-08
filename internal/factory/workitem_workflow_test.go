@@ -303,6 +303,35 @@ func TestWorkItemWorkflowStartsOneChildWithMappedRepository(t *testing.T) {
 		t.Fatalf("first activation has parent %q", manifest.ParentRunID)
 	}
 
+	var intakeState struct {
+		Records map[string]struct {
+			Connector  string `json:"connector"`
+			WorkItemID string `json:"work_item_id"`
+			Revision   string `json:"revision"`
+			Scope      string `json:"scope"`
+		} `json:"records"`
+	}
+	body, err := os.ReadFile(filepath.Join(harness.artifactDir, intakeDirName, intakeStateFileName))
+	if err != nil {
+		t.Fatalf("read durable intake state: %v", err)
+	}
+	if err := json.Unmarshal(body, &intakeState); err != nil {
+		t.Fatalf("decode durable intake state: %v", err)
+	}
+	recorded := false
+	for _, record := range intakeState.Records {
+		if record.Connector != "azdo" || record.WorkItemID != "42" || record.Revision != "1" {
+			continue
+		}
+		recorded = true
+		if record.Scope != "payments" {
+			t.Fatalf("intake claim scope = %q, want the resolved scope", record.Scope)
+		}
+	}
+	if !recorded {
+		t.Fatalf("the intake claim was not persisted: %s", body)
+	}
+
 	if len(harness.fake.Created()) != 1 {
 		t.Fatalf("sandboxes created = %v, want one child", harness.fake.Created())
 	}

@@ -56,7 +56,8 @@ func (s SubscriptionState) Valid() bool {
 type HealthStatus string
 
 const (
-	// HealthHealthy means a delivery arrived after the last successful sweep.
+	// HealthHealthy means the last successful sweep and a delivery are both
+	// within the freshness window.
 	HealthHealthy HealthStatus = "healthy"
 	// HealthDegraded means the connector needs operator attention.
 	HealthDegraded HealthStatus = "degraded"
@@ -64,15 +65,36 @@ const (
 	HealthUnknown HealthStatus = "unknown"
 )
 
+// HealthEvent names the connector activity behind one health observation.
+type HealthEvent string
+
+const (
+	// HealthEventSweep is a reconciliation sweep attempt.
+	HealthEventSweep HealthEvent = "sweep"
+	// HealthEventDelivery is a webhook delivery or sweep delivery attempt.
+	HealthEventDelivery HealthEvent = "delivery"
+)
+
 // HealthObservation is one connector liveness sample.
 //
 // Push timestamps are the last SUCCESSFUL sweep and the last authenticated
 // delivery. A failed sweep must not advance the sweep timestamp: an operator
 // reading a fresh timestamp would be told reconciliation is working when it is
-// not.
+// not. Event, Successful and Detail describe the attempt that produced this
+// sample.
 type HealthObservation struct {
 	// Connector is the operator-facing connector name.
 	Connector string
+	// SweepInterval is the connector's reconciliation cadence. It sizes the
+	// freshness window; zero uses the operator default.
+	SweepInterval time.Duration
+	// Event names the attempt behind this observation. Empty means the caller
+	// reports only successful timestamps.
+	Event HealthEvent
+	// Successful reports the outcome of that attempt.
+	Successful bool
+	// Detail is bounded operator detail about that attempt.
+	Detail string
 	// LastSuccessfulSweep is the last reconciliation that completed and saved
 	// its watermark.
 	LastSuccessfulSweep time.Time
@@ -103,13 +125,24 @@ type ConnectorHealth struct {
 	EvaluatedAt         time.Time         `json:"evaluated_at"`
 }
 
+const (
+	// healthStalenessIntervals is how many sweep intervals may pass without a
+	// fresh observation before health is degraded.
+	healthStalenessIntervals = 3
+	// defaultHealthSweepInterval sizes the freshness window when the caller
+	// does not report the connector's configured interval. It matches the
+	// operator default.
+	defaultHealthSweepInterval = time.Minute
+)
+
 // EvaluateHealth computes connector liveness from one observation.
 //
-// Reconciliation is primary, so a successful sweep followed by no delivery is
-// degraded: either the forge disabled the subscription or the delivery path is
-// broken, and the next sweep is the only reason work would still be recovered.
-// A delivery with no successful sweep is degraded too, because the recovery
-// path has never been proven.
+// Reconciliation is primary: a failed sweep attempt degrades immediately, and a
+// successful sweep older than the freshness window degrades even when a newer
+// delivery exists. A delivery may be older than the newest sweep and still be
+// within the same window: a quiet healthy connector is not degraded just because
+// a later sweep succeeded. A successful sweep with no delivery at all is
+// degraded because the delivery path has never been proven.
 func EvaluateHealth(now time.Time, observation HealthObservation) ConnectorHealth {
 	health := ConnectorHealth{
 		Connector:    strings.TrimSpace(observation.Connector),
@@ -143,6 +176,17 @@ func EvaluateHealth(now time.Time, observation HealthObservation) ConnectorHealt
 		return health
 	}
 
+	if observation.Event == HealthEventSweep && !observation.Successful {
+		health.Status = HealthDegraded
+		health.Reason = "sweep_failed"
+		health.Detail = boundedHealthText(observation.Detail)
+		if health.Detail == "" {
+			health.Detail = "the reconciliation sweep attempt failed"
+		}
+		return health
+	}
+
+	window := healthStalenessWindow(observation.SweepInterval)
 	switch {
 	case observation.LastSuccessfulSweep.IsZero() && observation.LastDelivery.IsZero():
 		health.Status = HealthUnknown
@@ -152,20 +196,34 @@ func EvaluateHealth(now time.Time, observation HealthObservation) ConnectorHealt
 		health.Status = HealthDegraded
 		health.Reason = "no_successful_sweep"
 		health.Detail = "a delivery was observed but no successful reconciliation sweep"
+	case now.Sub(observation.LastSuccessfulSweep.UTC()) > window:
+		health.Status = HealthDegraded
+		health.Reason = "stale_sweep"
+		health.Detail = "no successful reconciliation sweep within the freshness window"
 	case observation.LastDelivery.IsZero():
 		health.Status = HealthDegraded
 		health.Reason = "no_delivery_since_sweep"
-		health.Detail = "no delivery has arrived since the last successful sweep"
-	case !observation.LastDelivery.After(observation.LastSuccessfulSweep):
+		health.Detail = "no delivery has been authenticated since the last successful sweep"
+	case now.Sub(observation.LastDelivery.UTC()) > window:
 		health.Status = HealthDegraded
-		health.Reason = "no_delivery_since_sweep"
-		health.Detail = "no delivery has arrived since the last successful sweep"
+		health.Reason = "no_recent_delivery"
+		health.Detail = "no authenticated delivery within the freshness window"
 	default:
 		health.Status = HealthHealthy
-		health.Reason = "delivery_after_sweep"
-		health.Detail = "a delivery arrived after the last successful sweep"
+		health.Reason = "recent_delivery"
+		health.Detail = "a delivery arrived within the freshness window"
 	}
 	return health
+}
+
+// healthStalenessWindow is how old the last successful sweep or delivery may be
+// before health is degraded. It is three sweep intervals so one slow or failed
+// attempt does not degrade a connector that is otherwise working.
+func healthStalenessWindow(sweepInterval time.Duration) time.Duration {
+	if sweepInterval <= 0 {
+		sweepInterval = defaultHealthSweepInterval
+	}
+	return healthStalenessIntervals * sweepInterval
 }
 
 // Degraded reports whether the connector needs operator attention.
