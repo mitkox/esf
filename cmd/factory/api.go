@@ -97,9 +97,10 @@ type apiController struct {
 	artifacts artifacts.Factory
 	client    client.Client
 
-	// Seams for tests. Production leaves both nil and uses Temporal.
+	// Seams for tests. Production leaves all nil and uses Temporal.
 	startWorkflow func(ctx context.Context, options client.StartWorkflowOptions, run factory.RunRequest) error
 	queryStatus   func(ctx context.Context, runID string) (factory.RunStatus, error)
+	cancelRun     func(ctx context.Context, runID string) error
 }
 
 func (c *apiController) executeWorkflow(ctx context.Context, options client.StartWorkflowOptions, run factory.RunRequest) error {
@@ -108,6 +109,13 @@ func (c *apiController) executeWorkflow(ctx context.Context, options client.Star
 	}
 	_, err := c.client.ExecuteWorkflow(ctx, options, factory.SoftwareChangeWorkflow, run)
 	return err
+}
+
+func (c *apiController) cancelWorkflow(ctx context.Context, runID string) error {
+	if c.cancelRun != nil {
+		return c.cancelRun(ctx, runID)
+	}
+	return factory.CancelRun(ctx, c.client, runID)
 }
 
 func (c *apiController) lookupRunStatus(ctx context.Context, runID string) (factory.RunStatus, error) {
@@ -146,6 +154,12 @@ func (c *apiController) runRequest(request api.RunRequest) (factory.RunRequest, 
 	}
 	if err := run.Validate(); err != nil {
 		return factory.RunRequest{}, fmt.Errorf("%w: %v", api.ErrInvalidRequest, err)
+	}
+	// The run ID becomes a route segment and the artifact store's directory
+	// name. Refuse an identity the store cannot address before starting work
+	// that every later read would fail to find.
+	if err := artifacts.ValidateSegment(run.RunID); err != nil {
+		return factory.RunRequest{}, fmt.Errorf("%w: run_id %q must be one URL path segment", api.ErrInvalidRequest, run.RunID)
 	}
 	return run, nil
 }
@@ -225,7 +239,7 @@ func (c *apiController) Status(ctx context.Context, runID string) (api.RunStatus
 	if !errors.Is(err, fs.ErrNotExist) {
 		return api.RunStatus{}, err
 	}
-	status, err := factory.QueryRunStatus(ctx, c.client, factory.WorkflowIDForRun(runID), "")
+	status, err := c.lookupRunStatus(ctx, runID)
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
@@ -275,7 +289,7 @@ func (c *apiController) Evidence(_ context.Context, runID string) ([]byte, error
 }
 
 func (c *apiController) Cancel(ctx context.Context, runID string) (api.RunStatus, error) {
-	if err := factory.CancelRun(ctx, c.client, runID); err != nil {
+	if err := c.cancelWorkflow(ctx, runID); err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
 			return api.RunStatus{}, api.ErrRunNotFound

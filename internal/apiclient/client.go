@@ -129,8 +129,10 @@ func (c *Client) Status(ctx context.Context, runID string) (RunStatus, error) {
 	return status, nil
 }
 
-// Events reports a run's sequenced conditions after a cursor. Pass zero to read
-// from the beginning.
+// Events reports each condition's current snapshot with its stable sequence
+// number. Pass zero to read all conditions; the sequence number identifies a
+// condition and does not advance when its state changes in place, so callers
+// reconcile by condition type and time rather than assuming a transition stream.
 func (c *Client) Events(ctx context.Context, runID string, after int) ([]Event, error) {
 	var events []Event
 	endpoint := runPath(runID) + "/events?after=" + strconv.Itoa(after)
@@ -140,7 +142,8 @@ func (c *Client) Events(ctx context.Context, runID string, after int) ([]Event, 
 	return events, nil
 }
 
-// Evidence returns a run's durable manifest, byte for byte.
+// Evidence returns a run's durable manifest as an equivalent JSON object. The
+// bytes are re-encoded, so callers must compare parsed values, not raw bodies.
 func (c *Client) Evidence(ctx context.Context, runID string) (Evidence, error) {
 	var evidence Evidence
 	if err := c.do(ctx, http.MethodGet, runPath(runID)+"/evidence", nil, &evidence); err != nil {

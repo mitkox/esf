@@ -74,7 +74,7 @@ Bearer realm="ESF execution API"`. Tokens are never accepted in a query string.
 | --- | --- | --- | --- |
 | `POST` | `/v1/runs` | Submit a run request | `202` with run status |
 | `GET` | `/v1/runs/{run_id}` | Read run status | `200` with run status |
-| `GET` | `/v1/runs/{run_id}/events?after=N` | Read sequenced step conditions | `200` with an event array |
+| `GET` | `/v1/runs/{run_id}/events?after=N` | Read current step conditions | `200` with an event array |
 | `GET` | `/v1/runs/{run_id}/evidence` | Read the durable run manifest | `200` with evidence |
 | `POST` | `/v1/runs/{run_id}/cancel` | Request cancellation | `202` with run status |
 
@@ -100,7 +100,7 @@ rather than ignored, and the body is capped at 1 MiB.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `run_id` | yes | Caller-chosen stable identity. The workflow ID is derived from it. |
+| `run_id` | yes | Caller-chosen stable identity. The workflow ID is derived from it; it must be one URL path segment. |
 | `repository` | yes | A repository the operator has approved. |
 | `revision` | yes | The exact base revision to run against. |
 | `task` | yes | The task text shown to the agent. |
@@ -118,6 +118,11 @@ Submission is idempotent for one `run_id`: a repeated submission reuses the
 running workflow and a closed workflow is not restarted. Reusing a run identity
 with a different repository, revision, or task returns `409` with code
 `run_conflict`; resubmitting a closed run returns `409` with code `run_terminal`.
+
+A `run_id` must be addressable as one URL path segment: it cannot contain `/` or
+`\`, and `.` or `..` is rejected. Such a submission returns `400` with code
+`invalid_request` before any workflow starts.
+
 The `202` response acknowledges the activation and reports the existing run's
 state; poll status for execution state.
 
@@ -159,7 +164,8 @@ An unknown run is a `404` with `code: "run_not_found"`, never an empty success.
 
 ## Events
 
-`GET /v1/runs/{run_id}/events?after=N` returns events with `seq > N`:
+`GET /v1/runs/{run_id}/events?after=N` returns current condition snapshots with
+`seq > N`:
 
 ```json
 [
@@ -174,9 +180,18 @@ An unknown run is a `404` with `code: "run_not_found"`, never an empty success.
 ]
 ```
 
-`after` is a non-negative integer and defaults to `0`. Events are derived from
-the run's conditions, so a cursor is stable across polls: store the last `seq`
-you processed and pass it as `after` on the next request.
+Events are current-state snapshots, not a transition stream. `seq` identifies a
+condition; it is not a transition counter. A condition that changes in place
+keeps its `seq` and reports its new state with a later `time`, which is the
+condition's `last_transition_time`. The same index does not advance on such a
+transition.
+
+`after` is a non-negative integer and defaults to `0`. Because it filters by
+`seq`, a condition that changes after you have already processed its `seq` is not
+returned again when you pass that `seq` as `after`. A client that needs to
+observe state changes must poll without a cursor and reconcile by condition
+`type`, comparing each event's `time` with the value it last saw. Do not assume
+that every condition transition is delivered.
 
 ## Evidence
 
@@ -189,10 +204,14 @@ you processed and pass it as `after` on the next request.
 }
 ```
 
-`manifest` is the run's durable `run.json`, returned byte for byte as a JSON
-object. It is the authoritative record of a finished run and stays readable after
-Temporal history retention. It is not the signed change-evidence bundle; that
-bundle is verified offline with `factory verify` as described in
+`manifest` is the run's durable `run.json`, represented as a JSON object. The
+server nests the stored file and re-encodes the whole response, so the returned
+bytes are not the file's bytes: insignificant whitespace is removed and
+HTML-sensitive characters in strings are escaped. The guarantee is semantic JSON
+equality, not byte-for-byte equality; parse the manifest and compare values. It
+is the authoritative record of a finished run and stays readable after Temporal
+history retention. It is not the signed change-evidence bundle; that bundle is
+verified offline with `factory verify` as described in
 [evidence-contract.md](evidence-contract.md).
 
 ## Cancel

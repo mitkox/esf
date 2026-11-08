@@ -64,8 +64,12 @@ type RunStatus struct {
 	Error               string      `json:"error,omitempty"`
 }
 
-// Event is one sequenced observation from a run. Events are derived from the
-// run's conditions, so a cursor is stable across polls.
+// Event is a current-state snapshot of one condition.
+//
+// Seq identifies the condition, not a transition: a condition updated in place
+// keeps its Seq and reports a later Time. Clients reconcile by Type and Time and
+// must not assume every transition is delivered; the after cursor only filters
+// snapshots by Seq.
 type Event struct {
 	Seq     int       `json:"seq"`
 	Type    string    `json:"type"`
@@ -75,7 +79,9 @@ type Event struct {
 	Time    time.Time `json:"time"`
 }
 
-// Evidence is a run's durable manifest, returned byte for byte.
+// Evidence is a run's durable manifest re-encoded as JSON. The server nests it
+// in the response, so whitespace and HTML-sensitive escaping can differ from
+// the stored file; it is semantically equal to the manifest, not byte for byte.
 type Evidence struct {
 	RunID    string          `json:"run_id"`
 	Manifest json.RawMessage `json:"manifest"`

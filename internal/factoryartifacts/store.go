@@ -95,7 +95,7 @@ func (l *Local) Root() string { return l.root }
 
 // ForRun returns the store for runID.
 func (l *Local) ForRun(runID string) (Store, error) {
-	if err := validateSegment(runID); err != nil {
+	if err := ValidateSegment(runID); err != nil {
 		return nil, fmt.Errorf("artifacts: invalid run id %q: %w", runID, err)
 	}
 	dir := filepath.Join(l.root, "runs", runID)
@@ -313,8 +313,10 @@ func (s *RunStore) resolve(relPath string) (string, error) {
 	return full, nil
 }
 
-// validateSegment rejects a path segment that could escape its parent.
-func validateSegment(segment string) error {
+// ValidateSegment reports whether a value can be used as one path segment,
+// such as a run ID. Callers use it before creating a run so an identity the
+// store cannot address is refused up front.
+func ValidateSegment(segment string) error {
 	if strings.TrimSpace(segment) == "" {
 		return fmt.Errorf("%w: empty segment", ErrInvalidPath)
 	}

@@ -16,9 +16,9 @@ type Controller interface {
 	Submit(ctx context.Context, request RunRequest) (RunStatus, error)
 	// Status reports a run's current state.
 	Status(ctx context.Context, runID string) (RunStatus, error)
-	// Events reports a run's sequenced conditions after a cursor.
+	// Events reports the run's current condition snapshots after a cursor.
 	Events(ctx context.Context, runID string, after int) ([]Event, error)
-	// Evidence returns the run's durable manifest.
+	// Evidence returns the run's durable manifest as stored.
 	Evidence(ctx context.Context, runID string) ([]byte, error)
 	// Cancel requests cancellation and reports the run's current state.
 	Cancel(ctx context.Context, runID string) (RunStatus, error)
