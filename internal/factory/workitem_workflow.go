@@ -36,6 +36,14 @@ const (
 	// poll timers it never scheduled.
 	workItemAcceptancePollVersion = "workitem-acceptance-poll-v1"
 
+	// workItemSignalDuringPublicationVersion gates the revision-signal receive
+	// points that stay live through publication and the acceptance wait, and
+	// the loop-top drain that follows a completed activation. A history
+	// recorded before those receive points must replay on the direct
+	// publication path: the signals it buffered were never consumed, so
+	// consuming one would queue an activation the history does not contain.
+	workItemSignalDuringPublicationVersion = "workitem-signal-during-publication-v1"
+
 	// workItemAcceptancePollInterval is the workflow timer between forge reads.
 	// The poll uses workflow time so replay re-creates the same timers.
 	workItemAcceptancePollInterval = 15 * time.Minute
@@ -207,6 +215,11 @@ func WorkItemChangeID(connector, repository, workItemID string) string {
 func WorkItemWorkflow(ctx workflow.Context, in WorkItemWorkflowInput) (WorkItemOutcome, error) {
 	acts := &Activities{}
 	version := workflow.GetVersion(ctx, workItemPipelineVersion, workflow.DefaultVersion, 1)
+	// This marker is called before any of the receive points it gates so a
+	// pre-marker history replays its original command order from the start and
+	// can never reach a signal select it never recorded.
+	signalDuringPublication := workflow.GetVersion(ctx, workItemSignalDuringPublicationVersion,
+		workflow.DefaultVersion, 1) != workflow.DefaultVersion
 	signals := workflow.GetSignalChannel(ctx, WorkItemRevisionSignalName)
 
 	outcome := WorkItemOutcome{
@@ -219,10 +232,11 @@ func WorkItemWorkflow(ctx workflow.Context, in WorkItemWorkflowInput) (WorkItemO
 	for {
 		// A signal that arrived after the last receive point stays buffered
 		// until the workflow ends; take it now instead of finishing with an
-		// unread revision. A history recorded before the pipeline marker has
-		// no signal path and must keep its original behavior.
+		// unread revision. A history recorded before the signal-during-
+		// publication marker never had this receive point and must keep its
+		// original loop exit.
 		if len(pending) == 0 {
-			if version != workflow.DefaultVersion {
+			if signalDuringPublication {
 				drainWorkItemSignals(signals, &pending, outcome.Revision)
 			}
 			if len(pending) == 0 {
@@ -293,8 +307,19 @@ func WorkItemWorkflow(ctx workflow.Context, in WorkItemWorkflowInput) (WorkItemO
 		if manifest.FactoryResult == StateSucceeded {
 			recordStatus = intakeRecordSucceeded
 			if workflow.GetVersion(ctx, workItemPublicationVersion, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
-				publication, acceptance, publicationErr := publishAndReadAcceptanceKeepingSignals(
-					ctx, acts, manifest, &outcome, proposal.WorkItem.Revision, version, signals, &pending)
+				var (
+					publication    PublishChangeOutput
+					acceptance     *ReadPublicationAcceptanceOutput
+					publicationErr error
+				)
+				if signalDuringPublication {
+					publication, acceptance, publicationErr = publishAndReadAcceptanceKeepingSignals(
+						ctx, acts, manifest, &outcome, proposal.WorkItem.Revision, signals, &pending)
+				} else {
+					// A history recorded before the marker had no receive point
+					// here; keep its direct publication path.
+					publication, acceptance, publicationErr = publishAndReadAcceptance(ctx, acts, manifest, &outcome)
+				}
 				if publicationErr != nil {
 					workflow.GetLogger(ctx).Warn("publication step failed",
 						"run_id", resolved.RunID, "error", publicationErr)
@@ -572,22 +597,18 @@ func publishAndReadAcceptance(
 // the child selector. A newer revision delivered during publication or the
 // acceptance wait is therefore queued for another activation instead of being
 // discarded when the workflow ends. Signals delivered in the same workflow
-// task as the phase result are drained before returning.
+// task as the phase result are drained before returning. The caller reaches
+// this path only when the workItemSignalDuringPublicationVersion marker is
+// present.
 func publishAndReadAcceptanceKeepingSignals(
 	ctx workflow.Context,
 	acts *Activities,
 	manifest RunManifest,
 	outcome *WorkItemOutcome,
 	currentRevision string,
-	version workflow.Version,
 	signals workflow.ReceiveChannel,
 	pending *[]forge.Proposal,
 ) (PublishChangeOutput, *ReadPublicationAcceptanceOutput, error) {
-	if version == workflow.DefaultVersion {
-		// A history recorded before the pipeline marker has no signal path.
-		return publishAndReadAcceptance(ctx, acts, manifest, outcome)
-	}
-
 	type phaseResult struct {
 		publication PublishChangeOutput
 		acceptance  *ReadPublicationAcceptanceOutput

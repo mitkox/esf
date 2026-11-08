@@ -771,9 +771,81 @@ func TestWorkItemWorkflowVerificationFailureStaysOpen(t *testing.T) {
 	}
 }
 
-// TestWorkItemWorkflowVersionReplay covers the new version marker: a history
-// with the marker processes signals, while a history without it takes the
-// single-revision compatibility path.
+// TestWorkItemWorkflowSignalDuringPublicationVersionReplay proves a history
+// recorded before workItemSignalDuringPublicationVersion replays on its
+// original path. With the marker absent, publication and the acceptance wait
+// run directly and a revision signalled during either stays buffered; the loop
+// exits without a drain and the workflow records only the activation the
+// history contains. Replaying into a selector would consume that signal and
+// queue an activation the recorded history never had.
+func TestWorkItemWorkflowSignalDuringPublicationVersionReplay(t *testing.T) {
+	cases := []struct {
+		name      string
+		connector func(onSignal func()) forge.Connector
+	}{
+		{
+			name: "publication",
+			connector: func(onSignal func()) forge.Connector {
+				c := &publicationSignalConnector{Fake: publicationFake()}
+				c.onReadItem = onSignal
+				return c
+			},
+		},
+		{
+			name: "acceptance",
+			connector: func(onSignal func()) forge.Connector {
+				c := &acceptanceSignalConnector{Fake: publicationFake()}
+				c.onRead = onSignal
+				return c
+			},
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			signalled := false
+			var harness *workItemTestEnvironment
+			connector := tc.connector(func() {
+				signalled = true
+				harness.env.SignalWorkflow(WorkItemRevisionSignalName, WorkItemRevisionSignal{
+					Proposal: workItemProposal("2", "Clarified bug", "Reproduction two"),
+				})
+			})
+			harness = publicationHarness(t, connector)
+			// A history recorded before the marker has no version marker, so
+			// the workflow reads the default and keeps its pre-marker path.
+			harness.env.OnGetVersion(workItemSignalDuringPublicationVersion,
+				workflow.DefaultVersion, workflow.Version(1)).
+				Return(workflow.DefaultVersion).Once()
+
+			outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+				Proposal: workItemProposal("1", "Original bug", "Reproduction one"),
+			})
+			if err != nil {
+				t.Fatalf("work item workflow: %v", err)
+			}
+			if !signalled {
+				t.Fatal("the publication or acceptance read never ran")
+			}
+			if len(outcome.Runs) != 1 || outcome.Runs[0].Revision != "1" {
+				t.Fatalf("runs = %#v, want only the recorded revision", outcome.Runs)
+			}
+			if outcome.Status != string(StateSucceeded) {
+				t.Fatalf("status = %q", outcome.Status)
+			}
+			if created := harness.fake.Created(); len(created) != 1 {
+				t.Fatalf("sandboxes created = %v, want one", created)
+			}
+			if live := harness.fake.Live(); len(live) != 0 {
+				t.Fatalf("sandbox leaked: %v", live)
+			}
+		})
+	}
+}
+
+// TestWorkItemWorkflowVersionReplay covers the pipeline version marker: a
+// history with the marker processes signals, while a history without it takes
+// the single-revision compatibility path.
 func TestWorkItemWorkflowVersionReplay(t *testing.T) {
 	cases := []struct {
 		name    string
