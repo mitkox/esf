@@ -254,7 +254,7 @@ func TestFixtureBundleVerifiesWithCheckedInPublicKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture bundle: %v", err)
 	}
-	keyBody, err := os.ReadFile(filepath.Join("testdata", "fixture-public.pem"))
+	keyBody, err := os.ReadFile(filepath.Join("testdata", "fixture-public.txt"))
 	if err != nil {
 		t.Fatalf("read fixture public key: %v", err)
 	}
