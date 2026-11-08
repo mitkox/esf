@@ -332,7 +332,8 @@ func (c ConnectorConfig) problems() []string {
 
 // webhookAuthProblems checks the dedicated inbound credential. A connector
 // without a listener and without an inbound credential is sweep-only and does
-// not need one.
+// not need one. The inbound secret must not also be the outbound token file:
+// the write-capable token must never authorize an inbound delivery.
 func (c ConnectorConfig) webhookAuthProblems() []string {
 	username := strings.TrimSpace(c.WebhookUsername)
 	secretFile := strings.TrimSpace(c.WebhookSecretFile)
@@ -353,6 +354,16 @@ func (c ConnectorConfig) webhookAuthProblems() []string {
 		}
 		if !filepath.IsAbs(secretFile) {
 			problems = append(problems, "webhook_secret_file must be an absolute path")
+		}
+		// Both references need not exist yet, so compare their cleaned absolute
+		// forms. The credential reader rejects a symlink when it opens either
+		// file, so a symlink cannot alias the two past this check.
+		if tokenFile := strings.TrimSpace(c.TokenFile); filepath.IsAbs(secretFile) && filepath.IsAbs(tokenFile) {
+			secretPath, secretErr := filepath.Abs(secretFile)
+			tokenPath, tokenErr := filepath.Abs(tokenFile)
+			if secretErr == nil && tokenErr == nil && secretPath == tokenPath {
+				problems = append(problems, "webhook_secret_file must not name the same file as token_file")
+			}
 		}
 	}
 	return problems

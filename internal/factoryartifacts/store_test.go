@@ -139,6 +139,33 @@ func TestRunIDTraversalIsRejected(t *testing.T) {
 	}
 }
 
+// TestValidateSegmentRejectsNamesTheFilesystemCannotCreate covers identifiers
+// that pass the traversal checks and then fail at the first artifact write: an
+// embedded NUL byte and a name longer than NAME_MAX.
+func TestValidateSegmentRejectsNamesTheFilesystemCannotCreate(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		segment string
+	}{
+		{name: "NUL byte", segment: "run\x00id"},
+		{name: "longer than NAME_MAX", segment: strings.Repeat("a", 256)},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if err := ValidateSegment(tc.segment); !errors.Is(err, ErrInvalidPath) {
+				t.Fatalf("ValidateSegment(%q) = %v, want ErrInvalidPath", tc.segment, err)
+			}
+		})
+	}
+	if err := ValidateSegment(strings.Repeat("a", 255)); err != nil {
+		t.Fatalf("a 255-byte segment must remain valid: %v", err)
+	}
+}
+
 // TestArtifactsSurviveSandboxDestruction documents the property that makes the
 // store useful: evidence lives on the factory host, never only in a microVM.
 func TestArtifactsSurviveSandboxDestruction(t *testing.T) {

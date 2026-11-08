@@ -233,6 +233,8 @@ func (s *intakeStore) RecordOutcome(ctx context.Context, in WorkItemOutcomeInput
 // QueueDepth counts intake records that have not reached a terminal state,
 // grouped by the resolved operator scope.
 //
+// Every scope observed in the records is present, including one with no pending
+// records at zero, so a gauge can return to zero. The result is never nil.
 // Records written before the scope was persisted carry none and contribute no
 // series rather than a wrong one.
 func (s *intakeStore) QueueDepth() (map[string]int, error) {
@@ -242,17 +244,17 @@ func (s *intakeStore) QueueDepth() (map[string]int, error) {
 	}
 	depths := make(map[string]int)
 	for _, record := range state.Records {
-		if intakeRecordTerminal(record.Status) {
-			continue
-		}
 		scope := strings.TrimSpace(record.Scope)
 		if scope == "" {
 			continue
 		}
+		if _, ok := depths[scope]; !ok {
+			depths[scope] = 0
+		}
+		if intakeRecordTerminal(record.Status) {
+			continue
+		}
 		depths[scope]++
-	}
-	if len(depths) == 0 {
-		return nil, nil
 	}
 	return depths, nil
 }
@@ -261,7 +263,7 @@ func (s *intakeStore) QueueDepth() (map[string]int, error) {
 // work has none yet and is still queued.
 func intakeRecordTerminal(status string) bool {
 	switch status {
-	case intakeRecordSucceeded, intakeRecordFailed, intakeRecordWithdrawn, intakeRecordError:
+	case intakeRecordSucceeded, intakeRecordFailed, intakeRecordWithdrawn, intakeRecordError, intakeStatusDuplicate:
 		return true
 	default:
 		return false

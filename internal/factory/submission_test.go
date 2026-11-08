@@ -3,6 +3,7 @@ package factory
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -94,6 +95,8 @@ func TestSubmissionValidationIsIdenticalForBothEntryPoints(t *testing.T) {
 		{name: "missing harness", mutate: func(s *Submission) { s.AgentHarness = "" }},
 		{name: "missing verification profile", mutate: func(s *Submission) { s.VerificationProfile = "" }},
 		{name: "run id outside one path segment", mutate: func(s *Submission) { s.RunID = "a/b" }},
+		{name: "run id with a NUL byte", mutate: func(s *Submission) { s.RunID = "run\x00id" }},
+		{name: "run id longer than a filesystem name", mutate: func(s *Submission) { s.RunID = strings.Repeat("a", 256) }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

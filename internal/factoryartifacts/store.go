@@ -29,6 +29,9 @@ var ErrArtifactTooLarge = errors.New("artifacts: artifact exceeds configured siz
 
 const DefaultMaxArtifactBytes int64 = 32 << 20
 
+// maxPathSegmentBytes is NAME_MAX on the local filesystem backing a run store.
+const maxPathSegmentBytes = 255
+
 // Store is a durable, per-run artifact store.
 //
 // Write satisfies verification.Sink structurally, so the verification runner
@@ -316,9 +319,18 @@ func (s *RunStore) resolve(relPath string) (string, error) {
 // ValidateSegment reports whether a value can be used as one path segment,
 // such as a run ID. Callers use it before creating a run so an identity the
 // store cannot address is refused up front.
+//
+// The segment must also be representable on the local artifact filesystem: no
+// NUL byte and no more than 255 bytes, the Linux NAME_MAX the store assumes.
 func ValidateSegment(segment string) error {
 	if strings.TrimSpace(segment) == "" {
 		return fmt.Errorf("%w: empty segment", ErrInvalidPath)
+	}
+	if strings.ContainsRune(segment, 0) {
+		return fmt.Errorf("%w: segment contains a NUL byte", ErrInvalidPath)
+	}
+	if len(segment) > maxPathSegmentBytes {
+		return fmt.Errorf("%w: segment is %d bytes, over the %d-byte filesystem name limit", ErrInvalidPath, len(segment), maxPathSegmentBytes)
 	}
 	if strings.ContainsAny(segment, `/\`) || segment == "." || segment == ".." {
 		return fmt.Errorf("%w: %q is not a plain path segment", ErrInvalidPath, segment)

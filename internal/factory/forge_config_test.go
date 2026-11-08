@@ -257,6 +257,24 @@ func TestConnectorConfigValidation(t *testing.T) {
 			want: "webhook_username must not contain",
 		},
 		{
+			name: "webhook secret is the outbound token",
+			connector: ConnectorConfig{
+				Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme",
+				TokenFile: "/run/secrets/azdo.token", WebhookListen: "127.0.0.1:9091",
+				WebhookUsername: "esf-hooks", WebhookSecretFile: "/run/secrets/azdo.token",
+			},
+			want: "webhook_secret_file must not name the same file as token_file",
+		},
+		{
+			name: "webhook secret cleans to the outbound token",
+			connector: ConnectorConfig{
+				Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme",
+				TokenFile: "/run/secrets/azdo.token", WebhookListen: "127.0.0.1:9091",
+				WebhookUsername: "esf-hooks", WebhookSecretFile: "/run/secrets/../secrets/./azdo.token",
+			},
+			want: "webhook_secret_file must not name the same file as token_file",
+		},
+		{
 			name: "negative sweep interval",
 			connector: ConnectorConfig{
 				Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme",
