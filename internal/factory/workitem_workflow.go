@@ -566,25 +566,19 @@ func readAcceptanceBounded(
 			ReadPublicationAcceptanceInput{RunID: runID}).Get(ctx, &out)
 		return out, err
 	}
-	first, err := read()
+	out, readErr := read()
 	if !poll {
-		return first, err
+		return out, readErr
 	}
 	deadline := workflow.Now(ctx).Add(workItemAcceptanceMaxWait)
-	out := first
-	readFailed := err != nil
-	var lastReadErr error
-	if readFailed {
-		lastReadErr = err
-	}
 	for {
-		if !readFailed && (acceptanceTerminal(out) || out.TimedOut) {
+		if readErr == nil && (acceptanceTerminal(out) || out.TimedOut) {
 			return out, nil
 		}
 		if !workflow.Now(ctx).Before(deadline) {
 			out.TimedOut = true
-			if readFailed {
-				out.Note = fmt.Sprintf("the acceptance state could not be read before the deadline: %v", lastReadErr)
+			if readErr != nil {
+				out.Note = fmt.Sprintf("the acceptance state could not be read before the deadline: %v", readErr)
 			}
 			return out, nil
 		}
@@ -595,13 +589,11 @@ func readAcceptanceBounded(
 		if err != nil {
 			// A transient forge read must not end the wait: keep the last
 			// successful output and poll again until the deadline.
-			readFailed = true
-			lastReadErr = err
+			readErr = err
 			continue
 		}
 		out = next
-		readFailed = false
-		lastReadErr = nil
+		readErr = nil
 	}
 }
 

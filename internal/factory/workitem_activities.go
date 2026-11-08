@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mitkox/esf/internal/forge"
 	"github.com/mitkox/esf/internal/repository"
@@ -49,35 +50,17 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 	fields := workItem.MappingFields()
 	scope, err := a.resolveScope(connector, in.Pipeline, fields)
 	if err != nil {
-		status := intakeStatusNoMapping
-		var ambiguous *AmbiguousScopeError
-		if errors.As(err, &ambiguous) {
-			status = intakeStatusScopeAmbiguous
-		}
-		resolution := WorkItemResolution{Status: status, Reason: err.Error(), Connector: connector}
-		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
-		return resolution, nil
+		return rejectWorkItemIntake(ctx, a, proposal, WorkItemResolution{Connector: connector}, intakeMappingFailureStatus(err), err.Error())
 	}
 
 	resolved, err := a.resolvePipeline(connector, in.Pipeline, fields)
 	if err != nil {
-		status := intakeStatusNoMapping
-		var ambiguous *AmbiguousScopeError
-		if errors.As(err, &ambiguous) {
-			status = intakeStatusScopeAmbiguous
-		}
-		resolution := WorkItemResolution{Status: status, Reason: err.Error(), Connector: connector}
-		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
-		return resolution, nil
+		return rejectWorkItemIntake(ctx, a, proposal, WorkItemResolution{Connector: connector}, intakeMappingFailureStatus(err), err.Error())
 	}
 	if resolved.Scope != scope {
-		resolution := WorkItemResolution{
-			Status: intakeStatusRejected, Connector: connector,
-			Reason: fmt.Sprintf("scope resolution disagreed: %q resolved from the work item, %q from the pipeline",
-				scope, resolved.Scope),
-		}
-		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
-		return resolution, nil
+		return rejectWorkItemIntake(ctx, a, proposal, WorkItemResolution{Connector: connector}, intakeStatusRejected,
+			fmt.Sprintf("scope resolution disagreed: %q resolved from the work item, %q from the pipeline",
+				scope, resolved.Scope))
 	}
 
 	resolution := WorkItemResolution{
@@ -91,17 +74,11 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 	}
 	task := workItemTask(workItem)
 	if task == "" {
-		resolution.Status = intakeStatusRejected
-		resolution.Reason = "the work item snapshot is empty"
-		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
-		return resolution, nil
+		return rejectWorkItemIntake(ctx, a, proposal, resolution, intakeStatusRejected, "the work item snapshot is empty")
 	}
 	harness, err := a.defaultHarness(scope)
 	if err != nil {
-		resolution.Status = intakeStatusRejected
-		resolution.Reason = err.Error()
-		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
-		return resolution, nil
+		return rejectWorkItemIntake(ctx, a, proposal, resolution, intakeStatusRejected, err.Error())
 	}
 	// The run identity is derived before submission so the shared constructor
 	// validates the exact identifier the workflow will use.
@@ -137,32 +114,21 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 		Actor:        actorEvidenceFor(actor, proposal.RepositoryPermission),
 	}, connector, false)
 	if err != nil {
-		resolution.Status = intakeStatusRejected
-		resolution.Reason = err.Error()
-		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
-		return resolution, nil
+		return rejectWorkItemIntake(ctx, a, proposal, resolution, intakeStatusRejected, err.Error())
 	}
 
 	resources, err := a.cfg.ResolveResources(request)
 	if err != nil {
-		resolution.Status = intakeStatusRejected
-		resolution.Reason = err.Error()
-		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
-		return resolution, nil
+		return rejectWorkItemIntake(ctx, a, proposal, resolution, intakeStatusRejected, err.Error())
 	}
 	if err := a.repos.Validate(repository.Request{
 		Kind: repository.SourceRemote, URL: resolved.Repository, Revision: resolved.BaseBranch,
 	}); err != nil {
-		resolution.Status = intakeStatusRejected
-		resolution.Reason = err.Error()
-		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
-		return resolution, nil
+		return rejectWorkItemIntake(ctx, a, proposal, resolution, intakeStatusRejected, err.Error())
 	}
 	if !matchesAnyPrefix(resolved.Repository, resources.RepositoriesAllowed) {
-		resolution.Status = intakeStatusRejected
-		resolution.Reason = fmt.Sprintf("repository %q is not allowed in scope %q", resolved.Repository, resources.Scope)
-		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
-		return resolution, nil
+		return rejectWorkItemIntake(ctx, a, proposal, resolution, intakeStatusRejected,
+			fmt.Sprintf("repository %q is not allowed in scope %q", resolved.Repository, resources.Scope))
 	}
 	request.SandboxTemplate = resources.WorkspaceConfig.Template
 	request.AgentHarness = harness
@@ -214,6 +180,25 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
 	}
 	return resolution, nil
+}
+
+// rejectWorkItemIntake records the rejection status and reason, audits the
+// decision, and returns the resolution to the workflow.
+func rejectWorkItemIntake(ctx context.Context, a *Activities, proposal forge.Proposal, resolution WorkItemResolution, status, reason string) (WorkItemResolution, error) {
+	resolution.Status = status
+	resolution.Reason = reason
+	auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
+	return resolution, nil
+}
+
+// intakeMappingFailureStatus names the mapping failure: an ambiguous match is
+// distinguishable from a missing one so the workflow condition states the cause.
+func intakeMappingFailureStatus(err error) string {
+	var ambiguous *AmbiguousScopeError
+	if errors.As(err, &ambiguous) {
+		return intakeStatusScopeAmbiguous
+	}
+	return intakeStatusNoMapping
 }
 
 func (a *Activities) resolvePipeline(connector, pipeline string, fields forge.WorkItemFields) (ResolvedPipeline, error) {
@@ -272,7 +257,7 @@ func truncateUTF8Bytes(value string, limit int) string {
 		return value
 	}
 	cut := limit
-	for cut > 0 && (value[cut]&0xC0) == 0x80 {
+	for cut > 0 && !utf8.RuneStart(value[cut]) {
 		cut--
 	}
 	return strings.TrimSpace(value[:cut])

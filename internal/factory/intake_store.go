@@ -31,8 +31,6 @@ const (
 	intakeStatusRunning        = "running"
 )
 
-// ── Durable intake records ───────────────────────────────────────────────────
-
 // intakeRecord is one durable intake decision. Its identity is the mapped
 // repository plus work-item revision, so a webhook and a sweep converge.
 type intakeRecord struct {
@@ -156,7 +154,6 @@ func (s *intakeStore) Claim(ctx context.Context, rec intakeRecord) (intakeClaim,
 				existing.ActivationID == rec.ActivationID {
 				claim.Accepted = true
 				claim.Status = intakeRecordAccepted
-				claim.Record = existing
 				return nil
 			}
 			claim.Status = intakeStatusDuplicate

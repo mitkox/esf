@@ -48,14 +48,16 @@ type Sweeper interface {
 // the order the sweeper returned them.
 type Deliverer func(ctx context.Context, candidate forge.Candidate) error
 
-// HealthEvent names the connector activity behind one health observation.
-type HealthEvent string
+// HealthEvent names the connector activity behind one health observation. It
+// is forge's event type, so the runtime and the durable health model name the
+// same attempts.
+type HealthEvent = forge.HealthEvent
 
 const (
 	// HealthEventSweep is a reconciliation sweep attempt.
-	HealthEventSweep HealthEvent = "sweep"
+	HealthEventSweep = forge.HealthEventSweep
 	// HealthEventDelivery is a webhook delivery or sweep delivery attempt.
-	HealthEventDelivery HealthEvent = "delivery"
+	HealthEventDelivery = forge.HealthEventDelivery
 )
 
 // HealthObservation is one connector liveness update.

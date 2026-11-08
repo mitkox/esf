@@ -264,7 +264,7 @@ func (s *publicationStore) RecordAcceptance(ctx context.Context, event publicati
 				rec.Acceptance.Note = "merged pull request did not report a merge commit"
 				state.Records[key] = rec
 				outcome = publicationAcceptanceOutcome{Decision: publicationDecisionDrift, Record: rec, Note: rec.Acceptance.Note}
-			case sourceMatches:
+			case sourceMatches || (treeFallback && treeMatches):
 				applyAcceptance(&rec, event, now)
 				rec.Acceptance.Note = ""
 				rec.LastMergeCommit = mergeCommit
@@ -275,12 +275,6 @@ func (s *publicationStore) RecordAcceptance(ctx context.Context, event publicati
 				rec.Acceptance.Note = "merged pull request did not report a merge tree"
 				state.Records[key] = rec
 				outcome = publicationAcceptanceOutcome{Decision: publicationDecisionDrift, Record: rec, Note: rec.Acceptance.Note}
-			case treeFallback && treeMatches:
-				applyAcceptance(&rec, event, now)
-				rec.Acceptance.Note = ""
-				rec.LastMergeCommit = mergeCommit
-				state.Records[key] = rec
-				outcome = publicationAcceptanceOutcome{Decision: publicationDecisionAccepted, Record: rec}
 			case observedSource != "" && storedCommit != "":
 				applyAcceptance(&rec, event, now)
 				rec.Acceptance.Note = fmt.Sprintf("merged source commit %s does not match the published commit %s", observedSource, storedCommit)

@@ -455,7 +455,6 @@ func productionConnectorHealth(cfg factory.Config, now time.Time) doctorCheck {
 	return doctorCheck{Name: name, Status: "ok", Detail: strings.Join(summaries, "; ")}
 }
 
-// healthTime dereferences an optional snapshot timestamp for EvaluateHealth.
 func healthTime(value *time.Time) time.Time {
 	if value == nil {
 		return time.Time{}

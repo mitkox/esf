@@ -56,8 +56,8 @@ func (s SubscriptionState) Valid() bool {
 type HealthStatus string
 
 const (
-	// HealthHealthy means the last successful sweep and a delivery are both
-	// within the freshness window.
+	// HealthHealthy means reconciliation is current and no observed delivery is
+	// stale.
 	HealthHealthy HealthStatus = "healthy"
 	// HealthDegraded means the connector needs operator attention.
 	HealthDegraded HealthStatus = "degraded"

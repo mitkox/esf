@@ -62,10 +62,10 @@ func PrepareChangeRun(cfg Config, sub Submission) (RunRequest, error) {
 		TotalTimeout:        cfg.Limits.TotalTimeout.Std(),
 	}
 	if run.AgentHarness == "" {
-		run.AgentHarness = firstConfiguredHarness(cfg)
+		run.AgentHarness = firstConfiguredName(cfg.Harnesses)
 	}
 	if run.VerificationProfile == "" {
-		run.VerificationProfile = firstConfiguredVerificationProfile(cfg)
+		run.VerificationProfile = firstConfiguredName(cfg.Verification)
 	}
 	if err := run.Validate(); err != nil {
 		return RunRequest{}, err
@@ -79,25 +79,11 @@ func PrepareChangeRun(cfg Config, sub Submission) (RunRequest, error) {
 	return run, nil
 }
 
-// firstConfiguredHarness is the operator's default harness: the first
-// configured name in stable order.
-func firstConfiguredHarness(cfg Config) string {
-	names := make([]string, 0, len(cfg.Harnesses))
-	for name := range cfg.Harnesses {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	if len(names) == 0 {
-		return ""
-	}
-	return names[0]
-}
-
-// firstConfiguredVerificationProfile is the operator's default verification
-// profile: the first configured name in stable order.
-func firstConfiguredVerificationProfile(cfg Config) string {
-	names := make([]string, 0, len(cfg.Verification))
-	for name := range cfg.Verification {
+// firstConfiguredName is the operator's default for a configured resource set:
+// the first name in stable order.
+func firstConfiguredName[T any](configured map[string]T) string {
+	names := make([]string, 0, len(configured))
+	for name := range configured {
 		names = append(names, name)
 	}
 	sort.Strings(names)

@@ -123,11 +123,7 @@ read from private files and never enter a Cube sandbox.
 // It reads every credential through Config.Connector and builds the adapter
 // through the same path the worker uses, so a connector cannot be configured
 // differently in the two workloads.
-func buildConnectorRuntime(cfg factory.Config, sink forge.IntakeSink, reporters ...*factory.ConnectorHealthReporter) ([]connector.Spec, error) {
-	var healthReporter *factory.ConnectorHealthReporter
-	if len(reporters) > 0 {
-		healthReporter = reporters[0]
-	}
+func buildConnectorRuntime(cfg factory.Config, sink forge.IntakeSink, healthReporter *factory.ConnectorHealthReporter) ([]connector.Spec, error) {
 	var queueDepth connector.QueueDepthReader
 	if healthReporter != nil {
 		queueDepth = healthReporter.QueueDepth
@@ -262,7 +258,7 @@ func connectorHealthObserver(reporter *factory.ConnectorHealthReporter) connecto
 		_, err := reporter.Report(ctx, factory.ConnectorHealthInput{
 			Connector:           observation.Connector,
 			SweepInterval:       observation.SweepInterval,
-			Event:               string(observation.Event),
+			Event:               observation.Event,
 			Successful:          observation.Successful,
 			Detail:              observation.Detail,
 			LastSuccessfulSweep: observation.LastSuccessfulSweep,

@@ -427,7 +427,7 @@ type ConnectorHealthInput struct {
 	// SweepInterval sizes the freshness window. Zero uses the operator default.
 	SweepInterval time.Duration `json:"sweep_interval,omitempty"`
 	// Event names the attempt behind this observation: "sweep" or "delivery".
-	Event string `json:"event,omitempty"`
+	Event forge.HealthEvent `json:"event,omitempty"`
 	// Successful reports the outcome of that attempt.
 	Successful bool `json:"successful,omitempty"`
 	// Detail is bounded operator detail about that attempt.
@@ -464,7 +464,7 @@ func (a *Activities) ReportConnectorHealth(ctx context.Context, in ConnectorHeal
 	observation := forge.HealthObservation{
 		Connector:           connector,
 		SweepInterval:       in.SweepInterval,
-		Event:               forge.HealthEvent(in.Event),
+		Event:               in.Event,
 		Successful:          in.Successful,
 		Detail:              in.Detail,
 		LastSuccessfulSweep: in.LastSuccessfulSweep,
