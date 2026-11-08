@@ -264,11 +264,13 @@ func connectorWatermark(dataDir, connectorName string) (*azuredevops.FileWaterma
 	return watermark, nil
 }
 
-// connectorIntake starts one deterministic work-item workflow per delivery.
+// connectorIntake starts one deterministic work-item workflow per work item.
 //
-// The workflow ID derives from connector, work item, and revision, so a
-// repeated delivery converges on the same workflow instead of starting a
-// second run.
+// The workflow ID derives from connector and work item, so a newer revision is
+// signalled to the running execution instead of starting a second run. A closed
+// execution under that ID is not a duplicate delivery: a later revision starts
+// a fresh run, and the durable intake claim rejects true duplicates before any
+// child starts.
 type connectorIntake struct {
 	client    client.Client
 	taskQueue string
@@ -283,25 +285,80 @@ func (i *connectorIntake) Propose(ctx context.Context, proposal forge.Proposal) 
 	if connectorName == "" || workItemID == "" || revision == "" {
 		return fmt.Errorf("connector intake: connector, work item id, and revision are required")
 	}
-	workflowID := factory.WorkItemWorkflowID(connectorName, workItemID, revision)
+	if running, err := i.runningWorkItemWorkflow(ctx, connectorName, workItemID, revision); err != nil {
+		return err
+	} else if running != "" {
+		return i.signalRevision(ctx, running, connectorName, workItemID, revision, proposal)
+	}
+
+	workflowID := factory.WorkItemWorkflowID(connectorName, workItemID)
 	_, err := i.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: i.taskQueue,
-		// A duplicate delivery reuses a running workflow; a closed workflow is
-		// already recorded and is not restarted.
-		WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
-		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		// A running execution wins the race; a closed one may be followed by a
+		// later revision under the same stable ID. Duplicate delivery
+		// protection lives in the durable intake claim, not in the ID.
+		WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 	}, factory.WorkItemWorkflow, factory.WorkItemWorkflowInput{Proposal: proposal})
 	if err != nil {
 		var started *serviceerror.WorkflowExecutionAlreadyStarted
 		if errors.As(err, &started) {
-			i.logger.InfoContext(ctx, "connector intake duplicate",
-				"connector", connectorName, "work_item_id", workItemID, "revision", revision)
-			return nil
+			// Another delivery started the execution after the lookup; deliver
+			// this revision to it instead of failing the intake.
+			return i.signalRevision(ctx, workflowID, connectorName, workItemID, revision, proposal)
 		}
 		return fmt.Errorf("start work-item workflow %s: %w", workflowID, err)
 	}
 	i.logger.InfoContext(ctx, "connector intake accepted",
+		"connector", connectorName, "work_item_id", workItemID, "revision", revision, "workflow_id", workflowID)
+	return nil
+}
+
+// runningWorkItemWorkflow returns the ID of a running execution for the work
+// item, or an empty string when none runs.
+//
+// The revision-keyed legacy ID is checked for the same delivery so a workflow
+// started before the identity became stable receives the signal rather than
+// being duplicated by a second execution.
+func (i *connectorIntake) runningWorkItemWorkflow(ctx context.Context, connectorName, workItemID, revision string) (string, error) {
+	for _, workflowID := range []string{
+		factory.WorkItemWorkflowID(connectorName, workItemID),
+		factory.LegacyWorkItemWorkflowID(connectorName, workItemID, revision),
+	} {
+		running, err := i.workflowRunning(ctx, workflowID)
+		if err != nil {
+			return "", err
+		}
+		if running {
+			return workflowID, nil
+		}
+	}
+	return "", nil
+}
+
+// workflowRunning reports whether an execution exists and is still running. A
+// closed execution is not an error: it is a later revision of the same work
+// item, which starts a fresh run.
+func (i *connectorIntake) workflowRunning(ctx context.Context, workflowID string) (bool, error) {
+	description, err := i.client.DescribeWorkflowExecution(ctx, workflowID, "")
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("describe work-item workflow %s: %w", workflowID, err)
+	}
+	info := description.GetWorkflowExecutionInfo()
+	return info != nil && info.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil
+}
+
+func (i *connectorIntake) signalRevision(ctx context.Context, workflowID, connectorName, workItemID, revision string, proposal forge.Proposal) error {
+	if err := i.client.SignalWorkflow(ctx, workflowID, "", factory.WorkItemRevisionSignalName,
+		factory.WorkItemRevisionSignal{Proposal: proposal}); err != nil {
+		return fmt.Errorf("signal work-item workflow %s: %w", workflowID, err)
+	}
+	i.logger.InfoContext(ctx, "connector intake revision signalled",
 		"connector", connectorName, "work_item_id", workItemID, "revision", revision, "workflow_id", workflowID)
 	return nil
 }

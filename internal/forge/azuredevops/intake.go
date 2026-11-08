@@ -24,7 +24,7 @@ type SweeperOptions struct {
 	// default; values above the connector maximum are clamped.
 	PageSize int
 	// MaxPages bounds how many pages one sweep reads. A sweep that reaches the
-	// bound saves the next token and resumes there.
+	// bound returns the next token and the caller resumes there.
 	MaxPages int
 }
 
@@ -64,14 +64,15 @@ func NewSweeper(client *Client, watermark forge.WatermarkStore, options SweeperO
 
 // Sweep reads bounded pages from the watermark, keeps the newest revision per
 // work item, re-fetches each work item to hash its authoritative bytes, and
-// saves the next watermark only after every candidate is re-fetched.
+// returns the candidates with the continuation token that follows them.
 //
-// A throttled or failed read leaves the stored watermark unchanged, so the next
-// sweep resumes from the same token.
-func (s *Sweeper) Sweep(ctx context.Context) ([]forge.Candidate, error) {
+// The cursor is not saved: the caller delivers every candidate and only then
+// calls CommitSweep. A throttled or failed read returns an error and leaves the
+// stored watermark unchanged, so the next sweep resumes from the same token.
+func (s *Sweeper) Sweep(ctx context.Context) (forge.SweepResult, error) {
 	watermark, err := s.watermark.Load(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("azuredevops: load sweep watermark: %w", err)
+		return forge.SweepResult{}, fmt.Errorf("azuredevops: load sweep watermark: %w", err)
 	}
 
 	cursor := watermark
@@ -80,7 +81,7 @@ func (s *Sweeper) Sweep(ctx context.Context) ([]forge.Candidate, error) {
 	for {
 		page, err := s.client.FetchRevisions(ctx, cursor, s.pageSize)
 		if err != nil {
-			return nil, fmt.Errorf("azuredevops: sweep work item revisions: %w", err)
+			return forge.SweepResult{}, fmt.Errorf("azuredevops: sweep work item revisions: %w", err)
 		}
 		for _, revision := range page.Revisions {
 			if previous, ok := latest[revision.WorkItemID]; !ok || revision.Revision > previous {
@@ -92,14 +93,14 @@ func (s *Sweeper) Sweep(ctx context.Context) ([]forge.Candidate, error) {
 		next := strings.TrimSpace(page.ContinuationToken)
 		if next == "" {
 			if !page.IsLastBatch {
-				return nil, fmt.Errorf("azuredevops: revisions feed returned no continuation token before the last batch")
+				return forge.SweepResult{}, fmt.Errorf("azuredevops: revisions feed returned no continuation token before the last batch")
 			}
 			// Preserve the token that produced this batch: an empty token in
 			// the response is not a request to replay from the beginning.
 			next = cursor
 		}
 		if !page.IsLastBatch && next == cursor {
-			return nil, fmt.Errorf("azuredevops: revisions feed continuation token did not advance")
+			return forge.SweepResult{}, fmt.Errorf("azuredevops: revisions feed continuation token did not advance")
 		}
 		if page.IsLastBatch || pages >= s.maxPages {
 			cursor = next
@@ -123,7 +124,7 @@ func (s *Sweeper) Sweep(ctx context.Context) ([]forge.Candidate, error) {
 	for _, id := range workItemIDs {
 		snapshot, err := s.client.FetchWorkItem(ctx, id)
 		if err != nil {
-			return nil, fmt.Errorf("azuredevops: sweep fetch work item %d: %w", id, err)
+			return forge.SweepResult{}, fmt.Errorf("azuredevops: sweep fetch work item %d: %w", id, err)
 		}
 		candidates = append(candidates, forge.Candidate{
 			Connector:    s.client.Name(),
@@ -133,10 +134,17 @@ func (s *Sweeper) Sweep(ctx context.Context) ([]forge.Candidate, error) {
 			Actor:        snapshot.Actor,
 		})
 	}
+	return forge.SweepResult{Items: candidates, NextCursor: cursor}, nil
+}
+
+// CommitSweep saves the continuation token that follows a fully delivered
+// sweep. It is separate from Sweep so a failed delivery cannot advance the
+// watermark.
+func (s *Sweeper) CommitSweep(ctx context.Context, cursor string) error {
 	if err := s.watermark.Save(ctx, cursor); err != nil {
-		return nil, fmt.Errorf("azuredevops: save sweep watermark: %w", err)
+		return fmt.Errorf("azuredevops: save sweep watermark: %w", err)
 	}
-	return candidates, nil
+	return nil
 }
 
 // FileWatermark stores a continuation-token watermark in one operator-owned

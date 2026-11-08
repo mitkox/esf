@@ -33,9 +33,15 @@ const (
 	webhookShutdownTimeout   = 10 * time.Second
 )
 
-// Sweeper reads one bounded reconciliation pass.
+// Sweeper reads one bounded reconciliation pass and commits its continuation
+// cursor once the pass's candidates have all been delivered.
 type Sweeper interface {
-	Sweep(ctx context.Context) ([]forge.Candidate, error)
+	// Sweep returns the candidates from one bounded pass and the cursor that
+	// follows them. It must not record the cursor: CommitSweep does that only
+	// after the runtime delivered every candidate.
+	Sweep(ctx context.Context) (forge.SweepResult, error)
+	// CommitSweep durably records the cursor returned by Sweep.
+	CommitSweep(ctx context.Context, cursor string) error
 }
 
 // Deliverer accepts one reconciliation candidate. Candidates are delivered in
@@ -310,7 +316,7 @@ func (r *Runtime) runSweep(ctx context.Context, spec Spec) {
 		if ctx.Err() != nil {
 			return
 		}
-		candidates, err := spec.Sweeper.Sweep(ctx)
+		result, err := spec.Sweeper.Sweep(ctx)
 		if err != nil {
 			if ctx.Err() == nil {
 				r.logger.WarnContext(ctx, "connector reconciliation sweep failed",
@@ -319,8 +325,10 @@ func (r *Runtime) runSweep(ctx context.Context, spec Spec) {
 			r.observe(ctx, spec, HealthEventSweep, false, "reconciliation sweep failed")
 		} else {
 			r.observe(ctx, spec, HealthEventSweep, true, "")
-			for _, candidate := range candidates {
+			delivered := true
+			for _, candidate := range result.Items {
 				if err := spec.Deliver(ctx, candidate); err != nil {
+					delivered = false
 					if ctx.Err() == nil {
 						r.logger.WarnContext(ctx, "connector intake delivery failed",
 							"connector", spec.Name,
@@ -333,6 +341,18 @@ func (r *Runtime) runSweep(ctx context.Context, spec Spec) {
 				// A sweep delivery is recovery, not a webhook delivery: it
 				// must not advance the last-delivery timestamp, or a dead
 				// subscription would look healthy while reconciliation works.
+			}
+			// The watermark stays unadvanced unless every candidate was
+			// delivered. The next sweep then replays the batch; the stable
+			// workflow identity and the durable intake claim make the replay
+			// idempotent.
+			if delivered && ctx.Err() == nil {
+				if err := spec.Sweeper.CommitSweep(ctx, result.NextCursor); err != nil {
+					if ctx.Err() == nil {
+						r.logger.WarnContext(ctx, "connector reconciliation watermark not saved",
+							"connector", spec.Name, "error", err)
+					}
+				}
 			}
 		}
 		select {

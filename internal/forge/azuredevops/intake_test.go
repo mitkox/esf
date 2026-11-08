@@ -115,7 +115,7 @@ func writeFixture(w http.ResponseWriter, data []byte) {
 	_, _ = w.Write(data)
 }
 
-func TestSweepAdvancesWatermarkAndKeepsNewestRevision(t *testing.T) {
+func TestSweepReturnsNextCursorAndKeepsNewestRevision(t *testing.T) {
 	t.Parallel()
 
 	server := newForgeServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -152,10 +152,14 @@ func TestSweepAdvancesWatermarkAndKeepsNewestRevision(t *testing.T) {
 		t.Fatalf("NewSweeper: %v", err)
 	}
 
-	candidates, err := sweeper.Sweep(context.Background())
+	result, err := sweeper.Sweep(context.Background())
 	if err != nil {
 		t.Fatalf("Sweep: %v", err)
 	}
+	if result.NextCursor != "watermark-2" {
+		t.Fatalf("next cursor = %q, want watermark-2", result.NextCursor)
+	}
+	candidates := result.Items
 	if len(candidates) != 2 {
 		t.Fatalf("candidates = %d, want 2", len(candidates))
 	}
@@ -179,8 +183,18 @@ func TestSweepAdvancesWatermarkAndKeepsNewestRevision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
+	if stored != "watermark-0" {
+		t.Fatalf("watermark after Sweep = %q, want the unadvanced watermark-0", stored)
+	}
+	if err := sweeper.CommitSweep(context.Background(), result.NextCursor); err != nil {
+		t.Fatalf("CommitSweep: %v", err)
+	}
+	stored, err = watermark.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
 	if stored != "watermark-2" {
-		t.Fatalf("watermark = %q, want watermark-2", stored)
+		t.Fatalf("watermark after CommitSweep = %q, want watermark-2", stored)
 	}
 
 	requests := server.Requests()
@@ -197,7 +211,74 @@ func TestSweepAdvancesWatermarkAndKeepsNewestRevision(t *testing.T) {
 	}
 }
 
-func TestSweepStopsAtPageBoundAndSavesResumeToken(t *testing.T) {
+// TestSweepDoesNotSaveWatermarkBeforeDelivery proves a sweep returns its
+// candidates without recording the continuation token. Only the caller that
+// delivered every candidate may commit the token.
+func TestSweepDoesNotSaveWatermarkBeforeDelivery(t *testing.T) {
+	t.Parallel()
+
+	server := newForgeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/acme/_apis/wit/reporting/workitemrevisions":
+			switch r.URL.Query().Get("continuationToken") {
+			case "watermark-0":
+				writeFixture(w, readFixture(t, "revisions-page1.json"))
+			case "watermark-1":
+				writeFixture(w, readFixture(t, "revisions-page2.json"))
+			default:
+				http.Error(w, "unexpected token", http.StatusBadRequest)
+			}
+		case "/acme/_apis/wit/workitems/42":
+			writeFixture(w, readFixture(t, "workitem-42.json"))
+		case "/acme/_apis/wit/workitems/43":
+			writeFixture(w, readFixture(t, "workitem-43.json"))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	watermark, err := NewFileWatermark(filepath.Join(t.TempDir(), "watermark"))
+	if err != nil {
+		t.Fatalf("NewFileWatermark: %v", err)
+	}
+	if err := watermark.Save(context.Background(), "watermark-0"); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	sweeper, err := NewSweeper(newTestClient(t, server.URL()+"/acme", RetryPolicy{MaxAttempts: 1}), watermark, SweeperOptions{PageSize: 2, MaxPages: 5})
+	if err != nil {
+		t.Fatalf("NewSweeper: %v", err)
+	}
+
+	result, err := sweeper.Sweep(context.Background())
+	if err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+	if result.NextCursor != "watermark-2" {
+		t.Fatalf("next cursor = %q, want watermark-2", result.NextCursor)
+	}
+	if len(result.Items) != 2 {
+		t.Fatalf("candidates = %d, want 2", len(result.Items))
+	}
+	stored, err := watermark.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if stored != "watermark-0" {
+		t.Fatalf("watermark after Sweep = %q, want the unadvanced watermark-0", stored)
+	}
+	if err := sweeper.CommitSweep(context.Background(), result.NextCursor); err != nil {
+		t.Fatalf("CommitSweep: %v", err)
+	}
+	stored, err = watermark.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if stored != "watermark-2" {
+		t.Fatalf("watermark after CommitSweep = %q, want watermark-2", stored)
+	}
+}
+
+func TestSweepReturnsResumeTokenAtPageBound(t *testing.T) {
 	t.Parallel()
 
 	server := newForgeServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -220,17 +301,30 @@ func TestSweepStopsAtPageBoundAndSavesResumeToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSweeper: %v", err)
 	}
-	candidates, err := sweeper.Sweep(context.Background())
+	result, err := sweeper.Sweep(context.Background())
 	if err != nil {
 		t.Fatalf("Sweep: %v", err)
 	}
-	if len(candidates) != 2 {
-		t.Fatalf("candidates = %d, want 2", len(candidates))
+	if len(result.Items) != 2 {
+		t.Fatalf("candidates = %d, want 2", len(result.Items))
 	}
 	if count := server.CountPath("/acme/_apis/wit/reporting/workitemrevisions"); count != 1 {
 		t.Fatalf("revision requests = %d, want 1 bounded page", count)
 	}
+	if result.NextCursor != "watermark-1" {
+		t.Fatalf("next cursor = %q, want the next page token", result.NextCursor)
+	}
 	stored, err := watermark.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if stored != "" {
+		t.Fatalf("watermark after Sweep = %q, want it unadvanced", stored)
+	}
+	if err := sweeper.CommitSweep(context.Background(), result.NextCursor); err != nil {
+		t.Fatalf("CommitSweep: %v", err)
+	}
+	stored, err = watermark.Load(context.Background())
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -311,12 +405,25 @@ func TestSweepBacksOffOn429WithoutLosingWatermark(t *testing.T) {
 	}
 
 	throttled.Store(false)
-	candidates, err := sweeper.Sweep(context.Background())
+	result, err := sweeper.Sweep(context.Background())
 	if err != nil {
 		t.Fatalf("resumed Sweep: %v", err)
 	}
-	if len(candidates) != 1 || candidates[0].WorkItem.ID != "43" {
-		t.Fatalf("resumed candidates = %#v", candidates)
+	if len(result.Items) != 1 || result.Items[0].WorkItem.ID != "43" {
+		t.Fatalf("resumed candidates = %#v", result.Items)
+	}
+	if result.NextCursor != "watermark-after-429" {
+		t.Fatalf("resumed next cursor = %q, want watermark-after-429", result.NextCursor)
+	}
+	stored, err = watermark.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if stored != "watermark-0" {
+		t.Fatalf("watermark after resume = %q, want it unadvanced until the cursor is committed", stored)
+	}
+	if err := sweeper.CommitSweep(context.Background(), result.NextCursor); err != nil {
+		t.Fatalf("CommitSweep: %v", err)
 	}
 	stored, err = watermark.Load(context.Background())
 	if err != nil {

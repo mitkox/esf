@@ -2,21 +2,50 @@ package connector
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/mitkox/esf/internal/forge"
+	"github.com/mitkox/esf/internal/forge/azuredevops"
 )
 
-type fakeSweeper func(context.Context) ([]forge.Candidate, error)
+type fakeSweeper struct {
+	sweep  func(context.Context) (forge.SweepResult, error)
+	commit func(context.Context, string) error
 
-func (f fakeSweeper) Sweep(ctx context.Context) ([]forge.Candidate, error) { return f(ctx) }
+	mu        sync.Mutex
+	committed []string
+}
+
+func (f *fakeSweeper) Sweep(ctx context.Context) (forge.SweepResult, error) { return f.sweep(ctx) }
+
+func (f *fakeSweeper) CommitSweep(ctx context.Context, cursor string) error {
+	f.mu.Lock()
+	f.committed = append(f.committed, cursor)
+	f.mu.Unlock()
+	if f.commit != nil {
+		return f.commit(ctx, cursor)
+	}
+	return nil
+}
+
+func (f *fakeSweeper) committedCursors() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.committed...)
+}
 
 type fakeTicker struct {
 	ch      chan time.Time
@@ -40,14 +69,14 @@ func TestRuntimeSweepsOnScheduleUntilShutdown(t *testing.T) {
 	runtime, err := New([]Spec{{
 		Name:          "azdo",
 		SweepInterval: time.Minute,
-		Sweeper: fakeSweeper(func(context.Context) ([]forge.Candidate, error) {
+		Sweeper: &fakeSweeper{sweep: func(context.Context) (forge.SweepResult, error) {
 			n := int(sweepCount.Add(1))
 			sweepStarted <- n
-			return []forge.Candidate{{
+			return forge.SweepResult{Items: []forge.Candidate{{
 				Connector: "azdo",
 				WorkItem:  forge.WorkItem{ID: "42", Revision: "1"},
-			}}, nil
-		}),
+			}}, NextCursor: "cursor-" + strconv.Itoa(n)}, nil
+		}},
 		Deliver: func(context.Context, forge.Candidate) error {
 			delivered.Add(1)
 			return nil
@@ -95,7 +124,7 @@ func TestRuntimeServesWebhookUntilShutdown(t *testing.T) {
 	runtime, err := New([]Spec{{
 		Name:          "azdo",
 		SweepInterval: time.Hour,
-		Sweeper:       fakeSweeper(func(context.Context) ([]forge.Candidate, error) { return nil, nil }),
+		Sweeper:       &fakeSweeper{sweep: func(context.Context) (forge.SweepResult, error) { return forge.SweepResult{}, nil }},
 		Deliver:       func(context.Context, forge.Candidate) error { return nil },
 		WebhookListen: "127.0.0.1:0",
 		WebhookHandler: http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
@@ -153,7 +182,7 @@ func TestRuntimeRejectsInvalidSpecs(t *testing.T) {
 	valid := Spec{
 		Name:           "azdo",
 		SweepInterval:  time.Minute,
-		Sweeper:        fakeSweeper(func(context.Context) ([]forge.Candidate, error) { return nil, nil }),
+		Sweeper:        &fakeSweeper{sweep: func(context.Context) (forge.SweepResult, error) { return forge.SweepResult{}, nil }},
 		Deliver:        func(context.Context, forge.Candidate) error { return nil },
 		WebhookListen:  "127.0.0.1:8091",
 		WebhookHandler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
@@ -191,9 +220,9 @@ func TestRuntimeReportsSweepAndFailedDeliveryHealth(t *testing.T) {
 	runtime, err := New([]Spec{{
 		Name:          "azdo",
 		SweepInterval: time.Minute,
-		Sweeper: fakeSweeper(func(context.Context) ([]forge.Candidate, error) {
-			return []forge.Candidate{{Connector: "azdo", WorkItem: forge.WorkItem{ID: "42", Revision: "1"}}}, nil
-		}),
+		Sweeper: &fakeSweeper{sweep: func(context.Context) (forge.SweepResult, error) {
+			return forge.SweepResult{Items: []forge.Candidate{{Connector: "azdo", WorkItem: forge.WorkItem{ID: "42", Revision: "1"}}}, NextCursor: "cursor-1"}, nil
+		}},
 		Deliver: func(context.Context, forge.Candidate) error {
 			return context.DeadlineExceeded
 		},
@@ -255,7 +284,7 @@ func TestRuntimeReportsFailedWebhookDeliveryHealth(t *testing.T) {
 	runtime, err := New([]Spec{{
 		Name:          "azdo",
 		SweepInterval: time.Hour,
-		Sweeper:       fakeSweeper(func(context.Context) ([]forge.Candidate, error) { return nil, nil }),
+		Sweeper:       &fakeSweeper{sweep: func(context.Context) (forge.SweepResult, error) { return forge.SweepResult{}, nil }},
 		Deliver:       func(context.Context, forge.Candidate) error { return nil },
 		WebhookListen: "127.0.0.1:0",
 		WebhookHandler: http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
@@ -304,5 +333,246 @@ func TestRuntimeReportsFailedWebhookDeliveryHealth(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("runtime did not stop after cancellation")
+	}
+}
+
+// TestRuntimeDoesNotCommitWatermarkAfterPartialDelivery proves a failure part
+// way through a batch leaves the cursor unadvanced even though the earlier
+// candidates were delivered.
+func TestRuntimeDoesNotCommitWatermarkAfterPartialDelivery(t *testing.T) {
+	t.Parallel()
+
+	var sweepCalls atomic.Int32
+	sweeper := &fakeSweeper{}
+	sweeper.sweep = func(context.Context) (forge.SweepResult, error) {
+		if sweepCalls.Add(1) == 1 {
+			return forge.SweepResult{Items: []forge.Candidate{
+				{WorkItem: forge.WorkItem{ID: "42", Revision: "1"}},
+				{WorkItem: forge.WorkItem{ID: "43", Revision: "2"}},
+			}, NextCursor: "cursor-1"}, nil
+		}
+		if cursors := sweeper.committedCursors(); len(cursors) != 0 {
+			t.Errorf("committed cursors before the failed batch was replayed: %v", cursors)
+		}
+		return forge.SweepResult{NextCursor: "cursor-2"}, nil
+	}
+	attempted := make(chan string, 4)
+	runtime, fakeClock := newSweepRuntime(t, sweeper, func(_ context.Context, candidate forge.Candidate) error {
+		attempted <- candidate.WorkItem.ID
+		if candidate.WorkItem.ID == "43" {
+			return errors.New("delivery failed")
+		}
+		return nil
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+
+	if id := <-attempted; id != "42" {
+		t.Fatalf("first delivery = %s, want 42", id)
+	}
+	if id := <-attempted; id != "43" {
+		t.Fatalf("second delivery = %s, want 43", id)
+	}
+	fakeClock.ch <- time.Now()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for len(sweeper.committedCursors()) == 0 {
+		if time.Now().After(deadline) {
+			cancel()
+			waitRuntimeStop(t, done)
+			t.Fatal("the fully delivered second batch did not commit its cursor")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if cursors := sweeper.committedCursors(); len(cursors) != 1 || cursors[0] != "cursor-2" {
+		t.Fatalf("committed cursors = %v, want only the fully delivered batch", cursors)
+	}
+
+	cancel()
+	waitRuntimeStop(t, done)
+}
+
+// newSweepFixture builds the real Azure DevOps sweeper over a real file
+// watermark, so a runtime test exercises the actual reconciliation loop rather
+// than a stub. The feed returns one revision and then the last batch.
+func newSweepFixture(t *testing.T) (*azuredevops.Sweeper, *azuredevops.FileWatermark) {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/acme/_apis/wit/reporting/workitemrevisions":
+			if token := r.URL.Query().Get("continuationToken"); token == "" || token == "before" {
+				_, _ = io.WriteString(w, `{"values":[{"id":42,"rev":5}],"continuationToken":"after-1","isLastBatch":false}`)
+				return
+			}
+			_, _ = io.WriteString(w, `{"values":[],"continuationToken":"","isLastBatch":true}`)
+		case "/acme/_apis/wit/workitems/42":
+			_, _ = io.WriteString(w, `{"id":42,"rev":5,"fields":{"System.TeamProject":"Payments","System.WorkItemType":"Bug","System.State":"Active","System.Title":"Payment retry loop spins forever","System.ChangedBy":{"id":"aad-1","descriptor":"aad.ada-lovelace"}}}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	credentialPath := filepath.Join(t.TempDir(), "azdo.token")
+	if err := os.WriteFile(credentialPath, []byte("esf:pat"), 0o600); err != nil {
+		t.Fatalf("write credential: %v", err)
+	}
+	credential, err := forge.ReadCredential(credentialPath)
+	if err != nil {
+		t.Fatalf("ReadCredential: %v", err)
+	}
+	client, err := azuredevops.NewClient(azuredevops.Config{
+		Name:       "azdo",
+		BaseURL:    server.URL + "/acme",
+		Credential: credential,
+		Retry:      azuredevops.RetryPolicy{MaxAttempts: 1},
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	watermark, err := azuredevops.NewFileWatermark(filepath.Join(t.TempDir(), "watermark"))
+	if err != nil {
+		t.Fatalf("NewFileWatermark: %v", err)
+	}
+	if err := watermark.Save(context.Background(), "before"); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	sweeper, err := azuredevops.NewSweeper(client, watermark, azuredevops.SweeperOptions{})
+	if err != nil {
+		t.Fatalf("NewSweeper: %v", err)
+	}
+	return sweeper, watermark
+}
+
+func newSweepRuntime(t *testing.T, sweeper Sweeper, deliver Deliverer) (*Runtime, *fakeTicker) {
+	t.Helper()
+	clock := &fakeTicker{ch: make(chan time.Time, 1)}
+	runtime, err := New([]Spec{{
+		Name:           "azdo",
+		SweepInterval:  time.Minute,
+		Sweeper:        sweeper,
+		Deliver:        deliver,
+		WebhookListen:  "127.0.0.1:0",
+		WebhookHandler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+	}}, Options{Logger: quietLogger()})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	runtime.newTicker = func(time.Duration) ticker { return clock }
+	return runtime, clock
+}
+
+func waitRuntimeStop(t *testing.T, done <-chan error) {
+	t.Helper()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runtime did not stop after cancellation")
+	}
+}
+
+// TestRuntimeReplaysFailedSweepDelivery proves a failed delivery leaves the
+// stored watermark unadvanced, so the next tick re-emits the same revision, and
+// only a fully delivered batch commits the cursor.
+func TestRuntimeReplaysFailedSweepDelivery(t *testing.T) {
+	t.Parallel()
+
+	sweeper, watermark := newSweepFixture(t)
+	var deliveries atomic.Int32
+	attempted := make(chan int, 4)
+	runtime, fakeClock := newSweepRuntime(t, sweeper, func(_ context.Context, candidate forge.Candidate) error {
+		if candidate.WorkItem.ID != "42" || candidate.WorkItem.Revision != "5" {
+			t.Errorf("candidate = %s rev %s, want work item 42 rev 5", candidate.WorkItem.ID, candidate.WorkItem.Revision)
+		}
+		n := int(deliveries.Add(1))
+		attempted <- n
+		if n == 1 {
+			return errors.New("intake unavailable")
+		}
+		return nil
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+
+	if n := <-attempted; n != 1 {
+		t.Fatalf("first delivery attempt = %d", n)
+	}
+	stored, err := watermark.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if stored != "before" {
+		t.Fatalf("watermark after a failed delivery = %q, want the unadvanced before", stored)
+	}
+
+	fakeClock.ch <- time.Now()
+	select {
+	case n := <-attempted:
+		if n != 2 {
+			t.Fatalf("replayed delivery attempt = %d, want 2", n)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the failed sweep batch was not re-emitted on the next tick")
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		stored, err = watermark.Load(context.Background())
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if stored == "after-1" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("watermark after the replayed delivery = %q, want after-1", stored)
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	cancel()
+	waitRuntimeStop(t, done)
+}
+
+// TestRuntimeCancelledDeliveryLeavesWatermarkUnadvanced proves a delivery
+// interrupted by shutdown does not commit the batch cursor.
+func TestRuntimeCancelledDeliveryLeavesWatermarkUnadvanced(t *testing.T) {
+	t.Parallel()
+
+	sweeper, watermark := newSweepFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	attempted := make(chan struct{}, 1)
+	runtime, _ := newSweepRuntime(t, sweeper, func(deliveryCtx context.Context, _ forge.Candidate) error {
+		attempted <- struct{}{}
+		cancel()
+		return deliveryCtx.Err()
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+
+	select {
+	case <-attempted:
+	case <-time.After(5 * time.Second):
+		cancel()
+		waitRuntimeStop(t, done)
+		t.Fatal("delivery was not attempted")
+	}
+	waitRuntimeStop(t, done)
+
+	stored, err := watermark.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if stored != "before" {
+		t.Fatalf("watermark after a cancelled delivery = %q, want the unadvanced before", stored)
 	}
 }

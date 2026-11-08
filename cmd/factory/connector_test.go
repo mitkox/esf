@@ -13,6 +13,13 @@ import (
 	"testing"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
+
 	"github.com/mitkox/esf/internal/connector"
 	"github.com/mitkox/esf/internal/factory"
 	artifacts "github.com/mitkox/esf/internal/factoryartifacts"
@@ -170,9 +177,11 @@ func TestConnectorWebhookAuthenticatesAndBoundsOverListener(t *testing.T) {
 	}
 }
 
-type connectorSweeperFunc func(context.Context) ([]forge.Candidate, error)
+type connectorSweeperFunc func(context.Context) (forge.SweepResult, error)
 
-func (f connectorSweeperFunc) Sweep(ctx context.Context) ([]forge.Candidate, error) { return f(ctx) }
+func (f connectorSweeperFunc) Sweep(ctx context.Context) (forge.SweepResult, error) { return f(ctx) }
+
+func (connectorSweeperFunc) CommitSweep(context.Context, string) error { return nil }
 
 // TestConnectorHealthObserverWritesSweepSnapshot runs the real connector
 // runtime and the production health adapter, then reads the durable snapshot
@@ -199,8 +208,8 @@ func TestConnectorHealthObserverWritesSweepSnapshot(t *testing.T) {
 	runtime, err := connector.New([]connector.Spec{{
 		Name:          "azdo",
 		SweepInterval: time.Hour,
-		Sweeper: connectorSweeperFunc(func(context.Context) ([]forge.Candidate, error) {
-			return nil, nil
+		Sweeper: connectorSweeperFunc(func(context.Context) (forge.SweepResult, error) {
+			return forge.SweepResult{}, nil
 		}),
 		Deliver:       func(context.Context, forge.Candidate) error { return nil },
 		WebhookListen: "127.0.0.1:0",
@@ -261,5 +270,237 @@ func TestConnectorHealthObserverWritesSweepSnapshot(t *testing.T) {
 	}
 	if health.Status != forge.HealthDegraded || health.Reason != "no_delivery_since_sweep" {
 		t.Fatalf("health = %#v, want the degraded no-delivery state", health)
+	}
+}
+
+// connectorIntakeSignal records one signal the intake path sent.
+type connectorIntakeSignal struct {
+	WorkflowID string
+	Name       string
+	Arg        any
+}
+
+// fakeIntakeClient models the Temporal client surface intake uses. The embedded
+// interface is never called, so a nil value is safe.
+type fakeIntakeClient struct {
+	client.Client
+	mu            sync.Mutex
+	executions    map[string]enumspb.WorkflowExecutionStatus
+	starts        []client.StartWorkflowOptions
+	signals       []connectorIntakeSignal
+	hideExecution bool
+}
+
+func newFakeIntakeClient() *fakeIntakeClient {
+	return &fakeIntakeClient{executions: map[string]enumspb.WorkflowExecutionStatus{}}
+}
+
+func (c *fakeIntakeClient) DescribeWorkflowExecution(_ context.Context, workflowID, _ string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	status, ok := c.executions[workflowID]
+	if !ok || c.hideExecution {
+		return nil, serviceerror.NewNotFound("workflow execution not found")
+	}
+	return &workflowservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+			Status:    status,
+		},
+	}, nil
+}
+
+func (c *fakeIntakeClient) ExecuteWorkflow(_ context.Context, options client.StartWorkflowOptions, _ any, _ ...any) (client.WorkflowRun, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if status, ok := c.executions[options.ID]; ok && status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return nil, serviceerror.NewWorkflowExecutionAlreadyStarted("workflow execution already started", options.ID, "run-existing")
+	}
+	c.executions[options.ID] = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	c.starts = append(c.starts, options)
+	return fakeIntakeRun{id: options.ID, runID: "run-1"}, nil
+}
+
+func (c *fakeIntakeClient) SignalWorkflow(_ context.Context, workflowID, _ string, signalName string, arg any) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if status, ok := c.executions[workflowID]; !ok || status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return serviceerror.NewNotFound("workflow execution not found")
+	}
+	c.signals = append(c.signals, connectorIntakeSignal{WorkflowID: workflowID, Name: signalName, Arg: arg})
+	return nil
+}
+
+func (c *fakeIntakeClient) running(workflowID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.executions[workflowID] = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+}
+
+func (c *fakeIntakeClient) complete(workflowID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.executions[workflowID] = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+}
+
+func (c *fakeIntakeClient) recorded() ([]client.StartWorkflowOptions, []connectorIntakeSignal) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	starts := append([]client.StartWorkflowOptions(nil), c.starts...)
+	return starts, append([]connectorIntakeSignal(nil), c.signals...)
+}
+
+type fakeIntakeRun struct {
+	id    string
+	runID string
+}
+
+func (r fakeIntakeRun) GetID() string                  { return r.id }
+func (r fakeIntakeRun) GetRunID() string               { return r.runID }
+func (r fakeIntakeRun) GetFirstExecutionRunID() string { return r.runID }
+func (r fakeIntakeRun) Get(context.Context, any) error { return nil }
+func (r fakeIntakeRun) GetWithOptions(context.Context, any, client.WorkflowRunGetOptions) error {
+	return nil
+}
+
+func newConnectorIntakeForTest(t *testing.T, temporal *fakeIntakeClient) *connectorIntake {
+	t.Helper()
+	return &connectorIntake{
+		client:    temporal,
+		taskQueue: "factory",
+		dataDir:   t.TempDir(),
+		logger:    slog.New(slog.DiscardHandler),
+	}
+}
+
+func connectorIntakeProposal(revision string) forge.Proposal {
+	return forge.Proposal{
+		Candidate: forge.Candidate{
+			Connector: "azdo",
+			Source:    forge.SourceSweep,
+			WorkItem: forge.WorkItem{
+				ID:             "42",
+				Revision:       revision,
+				WorkItemFields: forge.WorkItemFields{Project: "Payments", Type: "Bug"},
+			},
+			WorkItemHash: "sha256:" + strings.Repeat("a", 64),
+		},
+		DeliveryID: "sweep:" + revision,
+	}
+}
+
+// TestConnectorIntakeConvergesRevisionsOnOneWorkflow proves a newer revision
+// signals the running execution instead of starting a second workflow.
+func TestConnectorIntakeConvergesRevisionsOnOneWorkflow(t *testing.T) {
+	t.Parallel()
+
+	temporal := newFakeIntakeClient()
+	intake := newConnectorIntakeForTest(t, temporal)
+	if err := intake.Propose(context.Background(), connectorIntakeProposal("1")); err != nil {
+		t.Fatalf("first revision: %v", err)
+	}
+	if err := intake.Propose(context.Background(), connectorIntakeProposal("2")); err != nil {
+		t.Fatalf("second revision: %v", err)
+	}
+
+	starts, signals := temporal.recorded()
+	if len(starts) != 1 {
+		t.Fatalf("workflow starts = %d, want one execution for the work item", len(starts))
+	}
+	if len(signals) != 1 {
+		t.Fatalf("revision signals = %d, want one for the newer revision", len(signals))
+	}
+	if signals[0].WorkflowID != starts[0].ID {
+		t.Fatalf("signal went to %q, want the running execution %q", signals[0].WorkflowID, starts[0].ID)
+	}
+	if signals[0].Name != factory.WorkItemRevisionSignalName {
+		t.Fatalf("signal name = %q, want %q", signals[0].Name, factory.WorkItemRevisionSignalName)
+	}
+	signal, ok := signals[0].Arg.(factory.WorkItemRevisionSignal)
+	if !ok || signal.Proposal.WorkItem.Revision != "2" {
+		t.Fatalf("signal payload = %#v, want the newer revision", signals[0].Arg)
+	}
+}
+
+// TestConnectorIntakeStartsFreshRunAfterCompletedExecution proves a closed
+// execution under the stable ID is not mistaken for a duplicate delivery.
+func TestConnectorIntakeStartsFreshRunAfterCompletedExecution(t *testing.T) {
+	t.Parallel()
+
+	temporal := newFakeIntakeClient()
+	intake := newConnectorIntakeForTest(t, temporal)
+	if err := intake.Propose(context.Background(), connectorIntakeProposal("1")); err != nil {
+		t.Fatalf("first revision: %v", err)
+	}
+	starts, _ := temporal.recorded()
+	temporal.complete(starts[0].ID)
+
+	if err := intake.Propose(context.Background(), connectorIntakeProposal("2")); err != nil {
+		t.Fatalf("later revision: %v", err)
+	}
+	starts, signals := temporal.recorded()
+	if len(starts) != 2 {
+		t.Fatalf("workflow starts = %d, want a fresh run for the later revision", len(starts))
+	}
+	if starts[1].ID != starts[0].ID {
+		t.Fatalf("workflow IDs = %q then %q, want one stable work-item identity", starts[0].ID, starts[1].ID)
+	}
+	if starts[1].WorkflowIDReusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE {
+		t.Fatalf("reuse policy = %v, want ALLOW_DUPLICATE for a closed execution", starts[1].WorkflowIDReusePolicy)
+	}
+	if len(signals) != 0 {
+		t.Fatalf("revision signals = %d, want none for a fresh run", len(signals))
+	}
+}
+
+// TestConnectorIntakeSignalsLegacyRevisionWorkflow proves a delivery that
+// arrives while a revision-keyed execution is still running is signalled to it
+// instead of starting a second workflow.
+func TestConnectorIntakeSignalsLegacyRevisionWorkflow(t *testing.T) {
+	t.Parallel()
+
+	temporal := newFakeIntakeClient()
+	legacyID := factory.LegacyWorkItemWorkflowID("azdo", "42", "2")
+	temporal.running(legacyID)
+	intake := newConnectorIntakeForTest(t, temporal)
+	if err := intake.Propose(context.Background(), connectorIntakeProposal("2")); err != nil {
+		t.Fatalf("legacy revision: %v", err)
+	}
+
+	starts, signals := temporal.recorded()
+	if len(starts) != 0 {
+		t.Fatalf("workflow starts = %d, want none while the legacy execution runs", len(starts))
+	}
+	if len(signals) != 1 || signals[0].WorkflowID != legacyID {
+		t.Fatalf("signals = %#v, want one to the legacy execution %q", signals, legacyID)
+	}
+}
+
+// TestConnectorIntakeSignalsWhenStartRacesWithRunningWorkflow proves a start
+// that loses a race to another delivery signals the winner instead of failing.
+func TestConnectorIntakeSignalsWhenStartRacesWithRunningWorkflow(t *testing.T) {
+	t.Parallel()
+
+	temporal := newFakeIntakeClient()
+	intake := newConnectorIntakeForTest(t, temporal)
+	if err := intake.Propose(context.Background(), connectorIntakeProposal("1")); err != nil {
+		t.Fatalf("first revision: %v", err)
+	}
+	// The lookup misses the running execution; the start reports it.
+	temporal.hideExecution = true
+	if err := intake.Propose(context.Background(), connectorIntakeProposal("2")); err != nil {
+		t.Fatalf("racing revision: %v", err)
+	}
+
+	starts, signals := temporal.recorded()
+	if len(starts) != 1 {
+		t.Fatalf("workflow starts = %d, want the one race winner", len(starts))
+	}
+	if len(signals) != 1 {
+		t.Fatalf("revision signals = %d, want the racing revision delivered", len(signals))
+	}
+	signal, ok := signals[0].Arg.(factory.WorkItemRevisionSignal)
+	if !ok || signal.Proposal.WorkItem.Revision != "2" {
+		t.Fatalf("signal payload = %#v, want the racing revision", signals[0].Arg)
 	}
 }

@@ -441,6 +441,73 @@ func TestWorkItemWorkflowSignalsRunningRevision(t *testing.T) {
 	}
 }
 
+// TestWorkItemWorkflowSignalsWithdrawnRevision proves a newer revision that
+// withdraws the work item still reaches the workflow: it is not dropped as a
+// duplicate delivery, and publication stops before any forge write.
+func TestWorkItemWorkflowSignalsWithdrawnRevision(t *testing.T) {
+	connector := publicationFake()
+	harness := publicationHarness(t, connector)
+	withdrawn := workItemProposal("2", "Bug", "Reproduction")
+	withdrawn.WorkItem.State = "Closed"
+	harness.env.RegisterDelayedCallback(func() {
+		harness.env.SignalWorkflow(WorkItemRevisionSignalName, WorkItemRevisionSignal{Proposal: withdrawn})
+	}, time.Millisecond)
+
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Bug", "Reproduction"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != workItemStatusWithdrawn {
+		t.Fatalf("status = %q, want %s", outcome.Status, workItemStatusWithdrawn)
+	}
+	if len(outcome.Runs) != 2 {
+		t.Fatalf("runs = %#v, want the original and the withdrawn revision", outcome.Runs)
+	}
+	if outcome.Runs[1].Revision != "2" {
+		t.Fatalf("second revision = %q, want the signalled revision", outcome.Runs[1].Revision)
+	}
+	if len(connector.Branches) != 1 || len(connector.Publications) != 1 {
+		t.Fatalf("branches/publications = %d/%d, want only the first revision",
+			len(connector.Branches), len(connector.Publications))
+	}
+	publication := conditionByType(t, outcome.Conditions, ConditionPublication)
+	if publication.Status != ConditionFalse || publication.Reason != "Withdrawn" {
+		t.Fatalf("publication condition = %#v", publication)
+	}
+}
+
+// TestWorkItemWorkflowIgnoresReplayedRevisionSignal proves a reconciliation
+// replay of an already-delivered revision does not re-enter the workflow. The
+// replay would re-resolve the durable intake record as a duplicate and replace
+// a successful outcome with a duplicate decision.
+func TestWorkItemWorkflowIgnoresReplayedRevisionSignal(t *testing.T) {
+	harness := newWorkItemTestEnvironment(t, "")
+	proposal := workItemProposal("1", "Payment retry loop spins forever", "Reproduction")
+	harness.env.RegisterDelayedCallback(func() {
+		harness.env.SignalWorkflow(WorkItemRevisionSignalName, WorkItemRevisionSignal{Proposal: proposal})
+	}, time.Millisecond)
+
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{Proposal: proposal})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != string(StateSucceeded) {
+		t.Fatalf("status = %q, want SUCCEEDED (conditions: %#v)", outcome.Status, outcome.Conditions)
+	}
+	if len(outcome.Runs) != 1 {
+		t.Fatalf("runs = %#v, want the one delivered revision", outcome.Runs)
+	}
+	intakeCondition := conditionByType(t, outcome.Conditions, ConditionIntake)
+	if intakeCondition.Status != ConditionTrue || intakeCondition.Reason != "Accepted" {
+		t.Fatalf("intake condition = %#v, want the accepted revision", intakeCondition)
+	}
+	if len(harness.fake.Created()) != 1 {
+		t.Fatalf("sandboxes created = %v, want one", harness.fake.Created())
+	}
+}
+
 // TestWorkItemWorkflowSkipsOlderRevision proves a late, older delivery does not
 // run once a newer revision completed.
 func TestWorkItemWorkflowSkipsOlderRevision(t *testing.T) {

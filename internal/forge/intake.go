@@ -45,6 +45,17 @@ type Candidate struct {
 	Actor Actor
 }
 
+// SweepResult is one bounded reconciliation pass.
+//
+// NextCursor is the continuation token that follows Items. It is not durable
+// until the caller delivered every item and recorded it: a failed or cancelled
+// delivery leaves the previous cursor in place, so the next sweep returns the
+// same items and the workflow identity makes the replay idempotent.
+type SweepResult struct {
+	Items      []Candidate
+	NextCursor string
+}
+
 // Proposal is an authorized intake event that may start or signal a run.
 //
 // It carries the operator-mapped work item, the API-resolved actor, and the
@@ -99,8 +110,8 @@ func (f RepositoryResolverFunc) ResolveRepository(fields WorkItemFields) (string
 
 // WatermarkStore durably stores a forge continuation token.
 //
-// Sweep saves a token only after every work item in the fetched pages has been
-// re-fetched, so a failed or throttled sweep resumes from the same watermark.
+// A sweep records a token only after every work item it returned has been
+// delivered, so a failed delivery resumes from the same watermark.
 type WatermarkStore interface {
 	Load(ctx context.Context) (string, error)
 	Save(ctx context.Context, watermark string) error

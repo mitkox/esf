@@ -175,11 +175,20 @@ type WorkItemOutcomeInput struct {
 	Error         string `json:"error,omitempty"`
 }
 
-// WorkItemWorkflowID derives the top-level workflow ID from the delivery
-// identity that is known before operator mapping: connector, work item and
-// revision. Mapped repository and work item are part of the durable change
-// activation ID below, which is created once the mapping activity returns.
-func WorkItemWorkflowID(connector, workItemID, revision string) string {
+// WorkItemWorkflowID derives the top-level workflow ID from the work item
+// identity that is known before operator mapping: connector and work item.
+//
+// The revision is deliberately not part of the identity: one work item owns one
+// running workflow, and a newer revision is signalled to it. Duplicate
+// deliveries converge on the durable intake claim instead.
+func WorkItemWorkflowID(connector, workItemID string) string {
+	return workItemWorkflowPrefix + digestText(connector+"\x00"+workItemID, 32)
+}
+
+// LegacyWorkItemWorkflowID derives the revision-keyed workflow ID used before
+// the work-item identity became stable. It remains for finding and cleaning up
+// executions started under the old scheme.
+func LegacyWorkItemWorkflowID(connector, workItemID, revision string) string {
 	return workItemWorkflowPrefix + digestText(connector+"\x00"+workItemID+"\x00"+revision, 32)
 }
 
@@ -259,7 +268,7 @@ func WorkItemWorkflow(ctx workflow.Context, in WorkItemWorkflowInput) (WorkItemO
 			"pipeline="+resolved.Pipeline+" repository="+resolved.Repository)
 		outcome.Status = intakeStatusRunning
 
-		manifest, childErr := runWorkItemChild(ctx, resolved, version, signals, &pending)
+		manifest, childErr := runWorkItemChild(ctx, resolved, proposal.WorkItem.Revision, version, signals, &pending)
 		if childErr != nil {
 			if temporal.IsWorkflowExecutionAlreadyStartedError(childErr) {
 				setWorkItemCondition(ctx, &outcome.Conditions, ConditionIntake, ConditionFalse, "DuplicateStart",
@@ -369,6 +378,7 @@ func resolveWorkItemIntake(
 func runWorkItemChild(
 	ctx workflow.Context,
 	resolved WorkItemResolution,
+	currentRevision string,
 	version workflow.Version,
 	signals workflow.ReceiveChannel,
 	pending *[]forge.Proposal,
@@ -401,34 +411,48 @@ func runWorkItemChild(
 		selector.AddReceive(signals, func(ch workflow.ReceiveChannel, _ bool) {
 			var signal WorkItemRevisionSignal
 			ch.Receive(ctx, &signal)
-			queueWorkItemSignal(pending, signal)
+			queueWorkItemSignal(pending, currentRevision, signal)
 		})
 		selector.Select(ctx)
 	}
 	// A signal that arrived in the same workflow task as the child completion
 	// must not be lost between the selector and the loop.
-	drainWorkItemSignals(signals, pending)
+	drainWorkItemSignals(signals, pending, currentRevision)
 	return manifest, childErr
 }
 
-// queueWorkItemSignal appends a well-formed newer delivery to the pending
-// queue. Malformed signals are ignored rather than failing the running change.
-func queueWorkItemSignal(pending *[]forge.Proposal, signal WorkItemRevisionSignal) {
-	if strings.TrimSpace(signal.Proposal.WorkItem.ID) == "" ||
-		strings.TrimSpace(signal.Proposal.WorkItem.Revision) == "" {
+// queueWorkItemSignal appends a well-formed proposal that is newer than every
+// revision already accepted or pending.
+//
+// At-least-once reconciliation replays a delivered revision. Queueing that
+// replay would re-resolve the durable intake record as a duplicate and could
+// replace a completed outcome with it, so a revision that is not newer than the
+// current or pending one is ignored.
+func queueWorkItemSignal(pending *[]forge.Proposal, currentRevision string, signal WorkItemRevisionSignal) {
+	revision := strings.TrimSpace(signal.Proposal.WorkItem.Revision)
+	if strings.TrimSpace(signal.Proposal.WorkItem.ID) == "" || revision == "" {
+		return
+	}
+	latest := strings.TrimSpace(currentRevision)
+	for _, queued := range *pending {
+		if compareWorkItemRevisions(queued.WorkItem.Revision, latest) > 0 {
+			latest = queued.WorkItem.Revision
+		}
+	}
+	if compareWorkItemRevisions(revision, latest) <= 0 {
 		return
 	}
 	*pending = append(*pending, signal.Proposal)
 }
 
 // drainWorkItemSignals consumes buffered revision signals without blocking.
-func drainWorkItemSignals(signals workflow.ReceiveChannel, pending *[]forge.Proposal) {
+func drainWorkItemSignals(signals workflow.ReceiveChannel, pending *[]forge.Proposal, currentRevision string) {
 	for {
 		var signal WorkItemRevisionSignal
 		if !signals.ReceiveAsync(&signal) {
 			return
 		}
-		queueWorkItemSignal(pending, signal)
+		queueWorkItemSignal(pending, currentRevision, signal)
 	}
 }
 
