@@ -217,6 +217,7 @@ func TestRuntimeReportsSweepAndFailedDeliveryHealth(t *testing.T) {
 	t.Parallel()
 
 	observations := make(chan HealthObservation, 8)
+	var deliveryAttempts atomic.Int32
 	runtime, err := New([]Spec{{
 		Name:          "azdo",
 		SweepInterval: time.Minute,
@@ -224,7 +225,10 @@ func TestRuntimeReportsSweepAndFailedDeliveryHealth(t *testing.T) {
 			return forge.SweepResult{Items: []forge.Candidate{{Connector: "azdo", WorkItem: forge.WorkItem{ID: "42", Revision: "1"}}}, NextCursor: "cursor-1"}, nil
 		}},
 		Deliver: func(context.Context, forge.Candidate) error {
-			return context.DeadlineExceeded
+			if deliveryAttempts.Add(1) == 1 {
+				return context.DeadlineExceeded
+			}
+			return nil
 		},
 		WebhookListen:  "127.0.0.1:0",
 		WebhookHandler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
@@ -239,14 +243,34 @@ func TestRuntimeReportsSweepAndFailedDeliveryHealth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	runtime.newTicker = func(time.Duration) ticker { return &fakeTicker{ch: make(chan time.Time, 1)} }
+	clock := &fakeTicker{ch: make(chan time.Time, 1)}
+	runtime.newTicker = func(time.Duration) ticker { return clock }
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- runtime.Run(ctx) }()
+	stopRuntimeOnCleanup(t, cancel, done)
 
-	sweep := <-observations
+	failedDelivery := nextObservation(t, observations)
+	if failedDelivery.Event != HealthEventDelivery || failedDelivery.Successful {
+		t.Fatalf("first observation = %#v, want the failed delivery before any sweep success", failedDelivery)
+	}
+	if !failedDelivery.LastSuccessfulSweep.IsZero() {
+		t.Fatalf("a failed delivery advanced the sweep timestamp to %s", failedDelivery.LastSuccessfulSweep)
+	}
+	if !failedDelivery.LastDelivery.IsZero() {
+		t.Fatal("a failed delivery advanced the delivery timestamp")
+	}
+	if failedDelivery.Detail == "" {
+		t.Fatal("a failed delivery carried no detail")
+	}
+	if health := evaluateObservedHealth(time.Now().UTC(), failedDelivery); health.Status != forge.HealthDegraded || health.Reason != "delivery_failed" {
+		t.Fatalf("failed delivery health = %s/%s, want degraded/delivery_failed", health.Status, health.Reason)
+	}
+
+	clock.ch <- time.Now()
+	sweep := nextObservation(t, observations)
 	if sweep.Event != HealthEventSweep || !sweep.Successful {
-		t.Fatalf("first observation = %#v, want a successful sweep", sweep)
+		t.Fatalf("second observation = %#v, want a successful sweep after the replayed delivery", sweep)
 	}
 	if sweep.LastSuccessfulSweep.IsZero() {
 		t.Fatal("a successful sweep did not advance the sweep timestamp")
@@ -254,25 +278,8 @@ func TestRuntimeReportsSweepAndFailedDeliveryHealth(t *testing.T) {
 	if sweep.Subscription != forge.SubscriptionActive || sweep.SubscriptionDetail == "" {
 		t.Fatalf("sweep subscription = %q/%q", sweep.Subscription, sweep.SubscriptionDetail)
 	}
-	delivery := <-observations
-	if delivery.Event != HealthEventDelivery || delivery.Successful {
-		t.Fatalf("second observation = %#v, want a failed delivery", delivery)
-	}
-	if !delivery.LastDelivery.IsZero() {
-		t.Fatal("a failed delivery advanced the delivery timestamp")
-	}
-	if delivery.Detail == "" {
-		t.Fatal("a failed delivery carried no detail")
-	}
-
-	cancel()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("runtime did not stop after cancellation")
+	if !sweep.LastDelivery.IsZero() {
+		t.Fatal("a sweep delivery advanced the delivery timestamp")
 	}
 }
 
@@ -500,6 +507,11 @@ func newSweepFixture(t *testing.T) (*azuredevops.Sweeper, *azuredevops.FileWater
 
 func newSweepRuntime(t *testing.T, sweeper Sweeper, deliver Deliverer) (*Runtime, *fakeTicker) {
 	t.Helper()
+	return newSweepRuntimeObserved(t, sweeper, deliver, nil)
+}
+
+func newSweepRuntimeObserved(t *testing.T, sweeper Sweeper, deliver Deliverer, observe HealthObserver) (*Runtime, *fakeTicker) {
+	t.Helper()
 	clock := &fakeTicker{ch: make(chan time.Time, 1)}
 	runtime, err := New([]Spec{{
 		Name:           "azdo",
@@ -508,12 +520,41 @@ func newSweepRuntime(t *testing.T, sweeper Sweeper, deliver Deliverer) (*Runtime
 		Deliver:        deliver,
 		WebhookListen:  "127.0.0.1:0",
 		WebhookHandler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		Observe:        observe,
 	}}, Options{Logger: quietLogger()})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 	runtime.newTicker = func(time.Duration) ticker { return clock }
 	return runtime, clock
+}
+
+func nextObservation(t *testing.T, observations <-chan HealthObservation) HealthObservation {
+	t.Helper()
+	select {
+	case observation := <-observations:
+		return observation
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for a health observation")
+		return HealthObservation{}
+	}
+}
+
+// evaluateObservedHealth projects a runtime observation into the health
+// evaluation the connector workload performs on the same data.
+func evaluateObservedHealth(now time.Time, observation HealthObservation) forge.ConnectorHealth {
+	return forge.EvaluateHealth(now, forge.HealthObservation{
+		Connector:           observation.Connector,
+		SweepInterval:       observation.SweepInterval,
+		Event:               observation.Event,
+		Successful:          observation.Successful,
+		Detail:              observation.Detail,
+		LastSuccessfulSweep: observation.LastSuccessfulSweep,
+		LastDelivery:        observation.LastDelivery,
+		Subscription:        observation.Subscription,
+		SubscriptionDetail:  observation.SubscriptionDetail,
+		QueueDepth:          observation.QueueDepth,
+	})
 }
 
 func waitRuntimeStop(t *testing.T, done <-chan error) {
@@ -526,6 +567,23 @@ func waitRuntimeStop(t *testing.T, done <-chan error) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("runtime did not stop after cancellation")
 	}
+}
+
+// stopRuntimeOnCleanup cancels the runtime and waits for it when the test ends,
+// including assertion-failure paths that would otherwise leave it running.
+func stopRuntimeOnCleanup(t *testing.T, cancel context.CancelFunc, done <-chan error) {
+	t.Helper()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("Run: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Error("runtime did not stop after cancellation")
+		}
+	})
 }
 
 // TestRuntimeReplaysFailedSweepDelivery proves a failed delivery leaves the
@@ -591,6 +649,97 @@ func TestRuntimeReplaysFailedSweepDelivery(t *testing.T) {
 
 	cancel()
 	waitRuntimeStop(t, done)
+}
+
+// TestRuntimeFailedDeliveryKeepsWatermarkAndDegradesHealth proves a failed
+// candidate delivery leaves the durable watermark unadvanced and records a
+// failed delivery observation that health evaluates as degraded, instead of
+// recording a successful sweep for the same pass.
+func TestRuntimeFailedDeliveryKeepsWatermarkAndDegradesHealth(t *testing.T) {
+	t.Parallel()
+
+	sweeper, watermark := newSweepFixture(t)
+	observations := make(chan HealthObservation, 4)
+	attempted := make(chan struct{}, 1)
+	runtime, _ := newSweepRuntimeObserved(t, sweeper, func(context.Context, forge.Candidate) error {
+		attempted <- struct{}{}
+		return errors.New("intake unavailable")
+	}, func(_ context.Context, observation HealthObservation) error {
+		observations <- observation
+		return nil
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+	stopRuntimeOnCleanup(t, cancel, done)
+
+	select {
+	case <-attempted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("delivery was not attempted")
+	}
+	observation := nextObservation(t, observations)
+	if observation.Event != HealthEventDelivery || observation.Successful {
+		t.Fatalf("observation = %#v, want a failed delivery", observation)
+	}
+	if !observation.LastSuccessfulSweep.IsZero() {
+		t.Fatalf("a failed delivery batch recorded a successful sweep at %s", observation.LastSuccessfulSweep)
+	}
+	if observation.Detail == "" {
+		t.Fatal("a failed delivery carried no detail")
+	}
+	if health := evaluateObservedHealth(time.Now().UTC(), observation); health.Status != forge.HealthDegraded || health.Reason != "delivery_failed" {
+		t.Fatalf("failed delivery health = %s/%s, want degraded/delivery_failed", health.Status, health.Reason)
+	}
+
+	stored, err := watermark.Load(context.Background())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if stored != "before" {
+		t.Fatalf("watermark after a failed delivery = %q, want the unadvanced before", stored)
+	}
+}
+
+// TestRuntimeCommitSweepFailureDegradesHealth proves a watermark commit failure
+// is recorded as a failed sweep with its bounded detail instead of advancing
+// the successful-sweep timestamp.
+func TestRuntimeCommitSweepFailureDegradesHealth(t *testing.T) {
+	t.Parallel()
+
+	observations := make(chan HealthObservation, 4)
+	sweeper := &fakeSweeper{
+		sweep: func(context.Context) (forge.SweepResult, error) {
+			return forge.SweepResult{NextCursor: "cursor-1"}, nil
+		},
+		commit: func(context.Context, string) error { return errors.New("watermark store unavailable") },
+	}
+	runtime, _ := newSweepRuntimeObserved(t, sweeper, func(context.Context, forge.Candidate) error { return nil }, func(_ context.Context, observation HealthObservation) error {
+		observations <- observation
+		return nil
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+	stopRuntimeOnCleanup(t, cancel, done)
+
+	observation := nextObservation(t, observations)
+	if observation.Event != HealthEventSweep || observation.Successful {
+		t.Fatalf("observation = %#v, want a failed sweep for the commit error", observation)
+	}
+	if !observation.LastSuccessfulSweep.IsZero() {
+		t.Fatalf("a failed commit advanced the sweep timestamp to %s", observation.LastSuccessfulSweep)
+	}
+	if !strings.Contains(observation.Detail, "sweep commit failed") {
+		t.Fatalf("commit failure detail = %q, want it to name the commit failure", observation.Detail)
+	}
+	health := evaluateObservedHealth(time.Now().UTC(), observation)
+	if health.Status != forge.HealthDegraded || health.Reason != "sweep_failed" {
+		t.Fatalf("commit failure health = %s/%s, want degraded/sweep_failed", health.Status, health.Reason)
+	}
+	if cursors := sweeper.committedCursors(); len(cursors) != 1 || cursors[0] != "cursor-1" {
+		t.Fatalf("commit attempts = %v, want the failed cursor attempt", cursors)
+	}
 }
 
 // TestRuntimeCancelledDeliveryLeavesWatermarkUnadvanced proves a delivery

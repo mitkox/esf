@@ -234,6 +234,123 @@ func TestReportConnectorHealthAlertsOnceWhileDegraded(t *testing.T) {
 	}
 }
 
+// TestReportConnectorHealthDegradesOnFailedDeliveryAttempt proves a failed
+// delivery attempt degrades health, writes the degraded state to the durable
+// snapshot, and raises exactly one alert even while the last successful sweep is
+// fresh and no delivery has ever been observed.
+func TestReportConnectorHealthDegradesOnFailedDeliveryAttempt(t *testing.T) {
+	var mu sync.Mutex
+	var received []notify.Event
+	webhook := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		var event notify.Event
+		if err := json.NewDecoder(request.Body).Decode(&event); err != nil {
+			t.Errorf("decode alert: %v", err)
+		}
+		mu.Lock()
+		received = append(received, event)
+		mu.Unlock()
+		response.WriteHeader(http.StatusNoContent)
+	}))
+	defer webhook.Close()
+
+	artifactFactory, err := artifacts.NewLocal(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewLocal: %v", err)
+	}
+	metrics, _ := newManualMetrics(t)
+	acts := &Activities{
+		artifactFactory: artifactFactory,
+		redactor:        NewRedactor(),
+		telemetry:       &Telemetry{metrics: metrics},
+		cfg:             Config{Hardening: HardeningConfig{AlertWebhookURL: webhook.URL}},
+		log:             slog.New(slog.DiscardHandler),
+	}
+	now := time.Now().UTC()
+	healthy := ConnectorHealthInput{
+		Connector:           "azdo",
+		SweepInterval:       time.Minute,
+		Event:               "sweep",
+		Successful:          true,
+		LastSuccessfulSweep: now,
+		Subscription:        "active",
+	}
+	first, err := acts.ReportConnectorHealth(context.Background(), healthy)
+	if err != nil {
+		t.Fatalf("healthy ReportConnectorHealth: %v", err)
+	}
+	if first.Health.Status != forge.HealthHealthy || first.Alert != nil {
+		t.Fatalf("healthy observation = %+v, want healthy without an alert", first)
+	}
+
+	failedDelivery := ConnectorHealthInput{
+		Connector:           "azdo",
+		SweepInterval:       time.Minute,
+		Event:               "delivery",
+		Successful:          false,
+		Detail:              "intake delivery failed",
+		LastSuccessfulSweep: now,
+		Subscription:        "active",
+	}
+	degraded, err := acts.ReportConnectorHealth(context.Background(), failedDelivery)
+	if err != nil {
+		t.Fatalf("failed-delivery ReportConnectorHealth: %v", err)
+	}
+	if degraded.Health.Status != forge.HealthDegraded || degraded.Health.Reason != "delivery_failed" {
+		t.Fatalf("failed delivery health = %s/%s, want degraded/delivery_failed",
+			degraded.Health.Status, degraded.Health.Reason)
+	}
+	if degraded.Health.Detail != "intake delivery failed" {
+		t.Fatalf("failed delivery detail = %q, want the bounded attempt detail", degraded.Health.Detail)
+	}
+	if degraded.Alert == nil || !degraded.Alert.Delivered {
+		t.Fatalf("failed delivery alert = %+v, want one delivered alert", degraded.Alert)
+	}
+	if degraded.SnapshotError != "" {
+		t.Fatalf("snapshot error: %s", degraded.SnapshotError)
+	}
+
+	repeated, err := acts.ReportConnectorHealth(context.Background(), failedDelivery)
+	if err != nil {
+		t.Fatalf("repeated ReportConnectorHealth: %v", err)
+	}
+	if repeated.Health.Status != forge.HealthDegraded || repeated.Health.Reason != "delivery_failed" {
+		t.Fatalf("repeated failed delivery health = %s/%s", repeated.Health.Status, repeated.Health.Reason)
+	}
+	if repeated.Alert != nil {
+		t.Fatalf("an unchanged failed delivery raised another alert: %+v", repeated.Alert)
+	}
+
+	snapshot, err := forge.LoadHealthSnapshot(artifactFactory.Root())
+	if err != nil {
+		t.Fatalf("LoadHealthSnapshot: %v", err)
+	}
+	if len(snapshot.Connectors) != 1 || snapshot.Connectors[0].Connector != "azdo" {
+		t.Fatalf("snapshot = %+v, want one azdo connector", snapshot)
+	}
+	stored := snapshot.Connectors[0]
+	if stored.Status != forge.HealthDegraded || stored.Reason != "delivery_failed" {
+		t.Fatalf("snapshot health = %s/%s, want the degraded delivery state", stored.Status, stored.Reason)
+	}
+	if stored.LastSuccessfulSweep == nil {
+		t.Fatal("the snapshot lost the last successful sweep timestamp")
+	}
+	if stored.Detail != "intake delivery failed" {
+		t.Fatalf("snapshot detail = %q", stored.Detail)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(received) != 1 {
+		t.Fatalf("alerts delivered = %d, want exactly one for the delivery failure", len(received))
+	}
+	if received[0].Kind != AlertConnectorDegraded || received[0].Severity != notify.SeverityWarning {
+		t.Fatalf("alert = %+v, want a warning connector-degraded alert", received[0])
+	}
+	if received[0].Detail["reason"] != "delivery_failed" {
+		t.Fatalf("alert reason = %q, want delivery_failed", received[0].Detail["reason"])
+	}
+}
+
 // TestReportConnectorHealthEmitsQueueDepthFromIntakeRecords proves the
 // documented queue-depth gauge is produced from durable intake records, grouped
 // by their resolved scope, and that legacy records without a scope contribute no

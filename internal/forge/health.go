@@ -139,11 +139,13 @@ const (
 //
 // Reconciliation is primary: a failed sweep attempt degrades immediately, and a
 // successful sweep older than the freshness window degrades even when a newer
-// delivery exists. A delivery may be older than the newest sweep and still be
-// within the same window: a quiet healthy connector is not degraded just because
-// a later sweep succeeded. A fresh successful sweep with no delivery ever
-// observed is healthy: a sweep-only connector, or one that has simply seen no
-// work yet, proves reconciliation without a webhook delivery.
+// delivery exists. A failed delivery attempt also degrades immediately, because
+// a stalled delivery path would otherwise be hidden behind a fresh successful
+// sweep. A delivery may be older than the newest sweep and still be within the
+// same window: a quiet healthy connector is not degraded just because a later
+// sweep succeeded. A fresh successful sweep with no delivery ever observed is
+// healthy: a sweep-only connector, or one that has simply seen no work yet,
+// proves reconciliation without a webhook delivery.
 func EvaluateHealth(now time.Time, observation HealthObservation) ConnectorHealth {
 	health := ConnectorHealth{
 		Connector:    strings.TrimSpace(observation.Connector),
@@ -177,14 +179,27 @@ func EvaluateHealth(now time.Time, observation HealthObservation) ConnectorHealt
 		return health
 	}
 
-	if observation.Event == HealthEventSweep && !observation.Successful {
-		health.Status = HealthDegraded
-		health.Reason = "sweep_failed"
-		health.Detail = boundedHealthText(observation.Detail)
-		if health.Detail == "" {
-			health.Detail = "the reconciliation sweep attempt failed"
+	if !observation.Successful {
+		switch observation.Event {
+		case HealthEventSweep:
+			health.Status = HealthDegraded
+			health.Reason = "sweep_failed"
+			health.Detail = boundedHealthText(observation.Detail)
+			if health.Detail == "" {
+				health.Detail = "the reconciliation sweep attempt failed"
+			}
+			return health
+		case HealthEventDelivery:
+			// A failed delivery is a stalled intake, not a quiet connector: the
+			// last successful timestamps may all be fresh while nothing flows.
+			health.Status = HealthDegraded
+			health.Reason = "delivery_failed"
+			health.Detail = boundedHealthText(observation.Detail)
+			if health.Detail == "" {
+				health.Detail = "the delivery attempt failed"
+			}
+			return health
 		}
-		return health
 	}
 
 	window := healthStalenessWindow(observation.SweepInterval)

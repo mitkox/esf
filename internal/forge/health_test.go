@@ -131,7 +131,7 @@ func TestEvaluateHealth(t *testing.T) {
 			wantReason: "sweep_failed",
 		},
 		{
-			name: "failed delivery attempt does not degrade a fresh connector",
+			name: "failed delivery attempt after a recent delivery",
 			now:  sweep.Add(2 * time.Minute),
 			observation: HealthObservation{
 				Connector: "azdo", Event: HealthEventDelivery, Successful: false,
@@ -139,8 +139,36 @@ func TestEvaluateHealth(t *testing.T) {
 				LastSuccessfulSweep: sweep, LastDelivery: sweep.Add(time.Minute),
 				Subscription: SubscriptionActive,
 			},
-			wantStatus: HealthHealthy,
-			wantReason: "recent_delivery",
+			wantStatus: HealthDegraded,
+			wantReason: "delivery_failed",
+			wantDetail: "webhook delivery failed with status 502",
+		},
+		{
+			// A failed delivery with no prior delivery is the case a stalled
+			// intake reaches: the fresh sweep alone must not report healthy.
+			name: "failed delivery attempt with no prior delivery",
+			now:  sweep.Add(time.Minute),
+			observation: HealthObservation{
+				Connector: "azdo", Event: HealthEventDelivery, Successful: false,
+				Detail:              "intake delivery failed",
+				LastSuccessfulSweep: sweep,
+				Subscription:        SubscriptionActive,
+			},
+			wantStatus: HealthDegraded,
+			wantReason: "delivery_failed",
+			wantDetail: "intake delivery failed",
+		},
+		{
+			name: "failed delivery attempt without detail",
+			now:  sweep.Add(time.Minute),
+			observation: HealthObservation{
+				Connector: "azdo", Event: HealthEventDelivery, Successful: false,
+				LastSuccessfulSweep: sweep,
+				Subscription:        SubscriptionActive,
+			},
+			wantStatus: HealthDegraded,
+			wantReason: "delivery_failed",
+			wantDetail: "delivery attempt failed",
 		},
 		{
 			name: "disabled subscription",

@@ -346,7 +346,6 @@ func (r *Runtime) runSweep(ctx context.Context, spec Spec) {
 			}
 			r.observe(ctx, spec, HealthEventSweep, false, "reconciliation sweep failed")
 		} else {
-			r.observe(ctx, spec, HealthEventSweep, true, "")
 			delivered := true
 			for _, candidate := range result.Items {
 				if err := spec.Deliver(ctx, candidate); err != nil {
@@ -374,6 +373,15 @@ func (r *Runtime) runSweep(ctx context.Context, spec Spec) {
 						r.logger.WarnContext(ctx, "connector reconciliation watermark not saved",
 							"connector", spec.Name, "error", err)
 					}
+					// The pass did not complete, so it must not advance the
+					// successful-sweep timestamp. A fresh timestamp with the
+					// cursor unadvanced would report healthy intake that is
+					// stalled on the same failed commit.
+					r.observe(ctx, spec, HealthEventSweep, false, "sweep commit failed")
+				} else {
+					// Record success only after the whole pass completed: every
+					// candidate delivered and the watermark saved.
+					r.observe(ctx, spec, HealthEventSweep, true, "")
 				}
 			}
 		}
