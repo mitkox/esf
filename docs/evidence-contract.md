@@ -3,8 +3,8 @@
 A change-evidence bundle is a signed record of one completed factory run. It
 answers, without trusting the agent, the forge or a network service: which
 inputs ran, against which base and resulting commits, under which agent and
-image, which deterministic gates ran with which commands and results, and what
-the evidence explicitly does not claim.
+sandbox template, which deterministic gates ran with which commands and results,
+and what the evidence explicitly does not claim.
 
 The bundle is a [DSSE](https://github.com/secure-systems-lab/dsse) envelope
 around an [in-toto Statement](https://in-toto.io/Statement/v1). It verifies
@@ -72,7 +72,7 @@ or predicate type is not the versioned type below.
 | `input.task_sha256` | Digest of the exact task bytes shown to the agent |
 | `agent.harness`, `agent.version` | Agent harness identity |
 | `agent.model` | Model identity |
-| `agent.sandbox_provider`, `agent.image` | Sandbox provider and image identity |
+| `agent.sandbox_provider`, `agent.image` | Sandbox provider and Cube sandbox template identity (the template ID, not a container image) |
 | `verification.profile` | Verification profile name |
 | `verification.passed` | Whether every mandatory gate passed |
 | `verification.gates[].name` | Gate name |

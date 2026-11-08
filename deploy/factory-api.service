@@ -14,7 +14,9 @@ StateDirectory=factory
 StateDirectoryMode=0750
 # The bearer token named by [api].token_file is owned by this user with mode
 # 0600. The private-file reader refuses group- or other-readable files.
-EnvironmentFile=-/etc/factory/api.env
+# This is the same environment file the worker and connector read, including
+# TEMPORAL_API_KEY for Temporal API-key authentication.
+EnvironmentFile=/etc/factory/worker.env
 ExecStart=/usr/local/bin/factory api --config /etc/factory/factory.toml
 Restart=on-failure
 RestartSec=10

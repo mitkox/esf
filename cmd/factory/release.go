@@ -374,6 +374,119 @@ func productionConnectorConfiguration(cfg factory.Config) doctorCheck {
 	return passedCheck(name)
 }
 
+// productionConnectorHealth reads the durable connector-health snapshot the
+// connector writes after every sweep and delivery. The stored status is the
+// last observation, so a connector that stopped after a healthy report would
+// otherwise keep reading as healthy: freshness is re-evaluated at read time
+// against the configured sweep interval, and a configured connector with no
+// snapshot entry fails because nothing has proven its intake path.
+func productionConnectorHealth(cfg factory.Config, now time.Time) doctorCheck {
+	const name = "connector_health"
+	if len(cfg.Connectors) == 0 {
+		return skippedCheck(name, "no connectors configured")
+	}
+	snapshot, err := forge.LoadHealthSnapshot(cfg.Storage.DataDir)
+	if err != nil {
+		return failedCheck(name, err)
+	}
+	observed := make(map[string]forge.ConnectorHealth, len(snapshot.Connectors))
+	for _, report := range snapshot.Connectors {
+		if connector := strings.TrimSpace(report.Connector); connector != "" {
+			observed[connector] = report
+		}
+	}
+	names := make([]string, 0, len(cfg.Connectors))
+	for connectorName := range cfg.Connectors {
+		names = append(names, connectorName)
+	}
+	sort.Strings(names)
+	unexpected := make([]string, 0)
+	for connectorName := range observed {
+		if _, configured := cfg.Connectors[connectorName]; !configured {
+			unexpected = append(unexpected, connectorName)
+		}
+	}
+	sort.Strings(unexpected)
+	var problems, summaries []string
+	for _, connectorName := range names {
+		report, ok := observed[connectorName]
+		if !ok {
+			problems = append(problems, fmt.Sprintf("connector %q: no durable health snapshot (the connector has not reported)", connectorName))
+			continue
+		}
+		status, reason := report.Status, report.Reason
+		if status == forge.HealthHealthy {
+			// Recompute liveness from the recorded timestamps. The snapshot's
+			// status was evaluated when it was written; a dead connector leaves
+			// it frozen at healthy.
+			fresh := forge.EvaluateHealth(now, forge.HealthObservation{
+				Connector:           connectorName,
+				SweepInterval:       cfg.Connectors[connectorName].SweepIntervalOrDefault(),
+				LastSuccessfulSweep: healthTime(report.LastSuccessfulSweep),
+				LastDelivery:        healthTime(report.LastDelivery),
+				Subscription:        report.Subscription,
+				SubscriptionDetail:  report.SubscriptionDetail,
+				QueueDepth:          report.QueueDepth,
+			})
+			if fresh.Status != forge.HealthHealthy {
+				status, reason = fresh.Status, fresh.Reason
+			} else {
+				reason = fresh.Reason
+			}
+		}
+		summary := fmt.Sprintf("connector %q: %s", connectorName, status)
+		if reason != "" {
+			summary += " (" + reason + ")"
+		}
+		if staleness := healthStaleness(now, report); staleness != "" {
+			summary += "; " + staleness
+		}
+		summaries = append(summaries, summary)
+		if status != forge.HealthHealthy {
+			problems = append(problems, summary)
+		}
+	}
+	if len(problems) > 0 {
+		return failedCheck(name, errors.New(strings.Join(problems, "; ")))
+	}
+	if len(unexpected) > 0 {
+		summaries = append(summaries, "health snapshot also contains unconfigured connectors: "+strings.Join(unexpected, ", "))
+	}
+	return doctorCheck{Name: name, Status: "ok", Detail: strings.Join(summaries, "; ")}
+}
+
+// healthTime dereferences an optional snapshot timestamp for EvaluateHealth.
+func healthTime(value *time.Time) time.Time {
+	if value == nil {
+		return time.Time{}
+	}
+	return *value
+}
+
+// healthStaleness describes how long ago a connector last proved its sweep and
+// delivery paths. A never-observed connector has no staleness to report.
+func healthStaleness(now time.Time, report forge.ConnectorHealth) string {
+	var parts []string
+	if report.LastSuccessfulSweep != nil {
+		parts = append(parts, "last successful sweep "+healthAge(now, *report.LastSuccessfulSweep))
+	}
+	if report.LastDelivery != nil {
+		parts = append(parts, "last authenticated delivery "+healthAge(now, *report.LastDelivery))
+	}
+	if len(parts) == 0 {
+		return "no successful sweep or delivery recorded"
+	}
+	return strings.Join(parts, ", ")
+}
+
+func healthAge(now, at time.Time) string {
+	age := now.Sub(at)
+	if age < 0 {
+		age = 0
+	}
+	return age.Round(time.Second).String() + " ago"
+}
+
 // productionTokenFiles checks every bearer token the appliance reads: the API
 // token and each connector token. Reading through the shared private-file
 // rules rejects symlinks, special files, and group/other access.
@@ -450,6 +563,7 @@ func runStructuredDoctor(ctx context.Context, configPath, profile, output string
 		checks = append(checks,
 			productionAPIListener(cfg),
 			productionConnectorConfiguration(cfg),
+			productionConnectorHealth(cfg, time.Now().UTC()),
 			productionTokenFiles(cfg),
 			productionEvidenceSigningKey(cfg),
 		)

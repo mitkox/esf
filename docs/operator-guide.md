@@ -399,6 +399,9 @@ Symptom: no new runs, and the console or alert reports `degraded` with reason
 `no_recent_delivery`.
 
 1. Confirm the connector process is running and can reach the forge base URL.
+   `factory doctor --profile production` reads the durable connector-health
+   snapshot and reports each connector's status, reason and last-success age;
+   add `--offline` to skip the Cube and Temporal probes.
 2. Check the connector log for HTTP 401, 403, 429, and DNS/TLS errors. A failed
    sweep deliberately does not advance
    `factory_connector_last_successful_sweep_timestamp_seconds`, and once the last
@@ -407,7 +410,7 @@ Symptom: no new runs, and the console or alert reports `degraded` with reason
 3. Do not re-register the webhook first. Reconciliation is the primary intake
    path: the next successful sweep reads the durable watermark and recovers every
    missed revision.
-4. After the forge is reachable, restart the connector worker if needed and
+4. After the forge is reachable, restart the connector if needed and
    confirm the sweep timestamp advances. A webhook is an accelerator, not the
    source of truth.
 
@@ -440,7 +443,7 @@ Symptom: the forge returns 401/403, sweeps stop, publication fails with
    symlink, owner-only permissions, non-empty bounded content. A path with a
    missing or group-readable file fails closed at connector construction.
 2. Rotate the token with the forge, write the new value to the private file
-   atomically, and restart the connector worker. Never paste the value into
+   atomically, and restart the connector. Never paste the value into
    configuration, a command line, or a sandbox.
 3. Confirm one successful sweep and one delivery before considering the
    rotation complete. Publication uses the same operator connector, so a stale

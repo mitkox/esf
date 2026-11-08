@@ -317,8 +317,8 @@ func TestConnectorHealthObserverWritesSweepSnapshot(t *testing.T) {
 	if len(health.QueueDepth) != 1 {
 		t.Fatalf("queue depth = %v, want only scoped, non-terminal records", health.QueueDepth)
 	}
-	if health.Status != forge.HealthDegraded || health.Reason != "no_delivery_since_sweep" {
-		t.Fatalf("health = %#v, want the degraded no-delivery state", health)
+	if health.Status != forge.HealthHealthy || health.Reason != "sweep_only" {
+		t.Fatalf("health = %#v, want a healthy sweep-only state before any delivery", health)
 	}
 }
 

@@ -28,14 +28,14 @@ func TestEvaluateHealth(t *testing.T) {
 			wantReason:  "no_observations",
 		},
 		{
-			name: "no delivery after a sweep",
+			name: "fresh sweep with no delivery ever is healthy",
 			now:  sweep.Add(time.Minute),
 			observation: HealthObservation{
 				Connector: "azdo", LastSuccessfulSweep: sweep,
 				Subscription: SubscriptionActive,
 			},
-			wantStatus: HealthDegraded,
-			wantReason: "no_delivery_since_sweep",
+			wantStatus: HealthHealthy,
+			wantReason: "sweep_only",
 		},
 		{
 			name: "delivery within the idle grace",

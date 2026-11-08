@@ -141,8 +141,9 @@ const (
 // successful sweep older than the freshness window degrades even when a newer
 // delivery exists. A delivery may be older than the newest sweep and still be
 // within the same window: a quiet healthy connector is not degraded just because
-// a later sweep succeeded. A successful sweep with no delivery at all is
-// degraded because the delivery path has never been proven.
+// a later sweep succeeded. A fresh successful sweep with no delivery ever
+// observed is healthy: a sweep-only connector, or one that has simply seen no
+// work yet, proves reconciliation without a webhook delivery.
 func EvaluateHealth(now time.Time, observation HealthObservation) ConnectorHealth {
 	health := ConnectorHealth{
 		Connector:    strings.TrimSpace(observation.Connector),
@@ -201,9 +202,9 @@ func EvaluateHealth(now time.Time, observation HealthObservation) ConnectorHealt
 		health.Reason = "stale_sweep"
 		health.Detail = "no successful reconciliation sweep within the freshness window"
 	case observation.LastDelivery.IsZero():
-		health.Status = HealthDegraded
-		health.Reason = "no_delivery_since_sweep"
-		health.Detail = "no delivery has been authenticated since the last successful sweep"
+		health.Status = HealthHealthy
+		health.Reason = "sweep_only"
+		health.Detail = "the reconciliation sweep is current and no delivery has been observed yet"
 	case now.Sub(observation.LastDelivery.UTC()) > window:
 		health.Status = HealthDegraded
 		health.Reason = "no_recent_delivery"

@@ -18,15 +18,19 @@ optional CPU/memory/disk fields in the factory configuration.
 
 The appliance runs one `factory` binary in three service roles:
 
-- the Temporal worker, which executes runs and forge publication activities;
+- the Temporal worker, which is the only Temporal poller: it executes runs and
+  forge publication activities;
 - the execution API, which accepts the versioned `/v1` contract over an
   authenticated listener; and
-- the connector host, which is a worker process hosting the host-side forge
-  adapters. Run it only when you want a dedicated connector worker; the normal
-  worker already hosts connector activities.
+- the connector host, which serves the authenticated forge webhook receivers
+  and reconciles intake. It is not a Temporal worker: it runs no workflows or
+  activities, and signals the work-item workflow when a revision arrives.
 
-All three share `/var/lib/factory`, `/etc/factory/factory.toml`, and the
-operator-owned credential files. Keep one authoritative deployment.
+Run the worker and the API for every deployment. Run the connector whenever
+`[connectors.*]` is configured; without it, no intake runs and work items never
+enter the factory. All three share `/var/lib/factory`,
+`/etc/factory/factory.toml`, and the operator-owned credential files. Keep one
+authoritative deployment.
 
 ## Configuration and credentials
 
@@ -156,8 +160,9 @@ payload_keyring = "/etc/factory/payload-keys.json"
 Omit `ca_file` to use system certificate roots. Client certificate and key are
 optional if the server uses another authentication mechanism. For API-key
 authentication set `api_key_env = "TEMPORAL_API_KEY"` and supply its value in
-`/etc/factory/worker.env`. Plaintext connections are accepted only on loopback,
-and cannot carry API-key authentication. Certificate verification is mandatory.
+`/etc/factory/worker.env`, the shared environment file every service unit reads.
+Plaintext connections are accepted only on loopback, and cannot carry API-key
+authentication. Certificate verification is mandatory.
 
 Use the same payload keyring on **every submitting CLI and worker**. Generate the
 keyring once, outside Git, and distribute it through your secret-management
@@ -304,11 +309,33 @@ recorded run manifests identify its SHA-256 digest.
 
 ## Install the appliance
 
-1. Build with the version in `go.mod`: `go build -trimpath -o bin/factory ./cmd/factory`.
-   The release installer accepts `ESF_COMPONENT=factory`, `api`, `connector`, or
-   `appliance` and installs the same binary for every role.
-2. Create a dedicated `factory` system user/group. Install the binary at
-   `/usr/local/bin/factory` and configuration at `/etc/factory/factory.toml`.
+1. Install the attested release with the installer, not a source build:
+
+   ```sh
+   sudo ESF_VERSION=v1.0.0-rc.1 ESF_COMPONENT=appliance ./install.sh
+   ```
+
+   The installer downloads the archive and `checksums.txt`, verifies the
+   archive digest, verifies the GitHub artifact attestation against the release
+   workflow and tag with `gh attestation verify`, and only then installs the
+   binary. `ESF_COMPONENT` is `factory`, `api`, `connector`, or `appliance`;
+   every role installs the same binary. Verify the installed identity with
+   `factory version --json` (release, commit, Go version, config schema), and
+   record `sha256sum /usr/local/bin/factory` with the deployment inventory.
+   A source build is a development action only and must reproduce the release
+   profile, including its version and commit stamps:
+
+   ```sh
+   CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+     -ldflags="-s -w -X github.com/mitkox/esf/internal/factory.Version=<version> -X main.buildCommit=<commit>" \
+     -o bin/factory ./cmd/factory
+   ```
+
+   A plain `go build` produces an unstamped development binary, omits the
+   release flags, and bypasses the checksum and attestation chain.
+2. Create a dedicated `factory` system user/group. The installer places the
+   binary at `/usr/local/bin/factory` (run it as root for an appliance), and the
+   configuration belongs at `/etc/factory/factory.toml`.
 3. Configuration may be `root:factory` mode `0640`. Payload keyrings, API token
    files, connector token files, TLS private keys and the evidence signing key
    must instead be regular files with no group/other access (mode `0600`),
@@ -317,13 +344,24 @@ recorded run manifests identify its SHA-256 digest.
    oversized secret files are refused. Before upgrading an existing
    installation, migrate any `0640` keyrings to this ownership/permission model
    on every submitting CLI and service, then run doctor as that identity before
-   restarting. Create `/etc/factory/worker.env` even without environment secrets;
-   `factory-api.service` and `factory-connector.service` read the same file.
+   restarting. Create `/etc/factory/worker.env` even without environment
+   secrets; `factory-worker.service`, `factory-api.service`, and
+   `factory-connector.service` all read that same file, including
+   `TEMPORAL_API_KEY` when Temporal API-key authentication is configured. An
+   installation that previously created `/etc/factory/api.env` must merge its
+   values into `worker.env` before upgrading; the API unit no longer reads
+   `api.env`.
 4. Run `factory doctor --profile production --config /etc/factory/factory.toml`
    as the service user with the same environment. Resolve every reported
-   failure, including the API listener, connector configuration, token-file
-   permissions, and evidence signing key checks. Use `--offline` when Cube and
-   Temporal are intentionally unreachable.
+   failure, including the API listener, connector configuration, durable
+   connector health, token-file permissions, and evidence signing key checks.
+   The connector-health check reads the snapshot the connector writes after
+   each sweep and delivery. Before the connector has reported once, every
+   configured connector is missing from that snapshot and the check fails:
+   run doctor before installing the units for the configuration checks, then
+   re-run it after the connector's first sweep for the health check. Use
+   `--offline` when Cube and Temporal are intentionally unreachable; the
+   connector-health check still runs.
 5. Install the units for the roles you run:
 
    ```sh
@@ -334,9 +372,12 @@ recorded run manifests identify its SHA-256 digest.
    sudo systemctl enable --now factory-worker factory-api
    ```
 
-   `factory-worker` and `factory-connector` both run the Temporal worker and
-   host forge adapter activities. Start one, or both when you intend to scale
-   worker concurrency; they use the same task queue and configuration.
+   Only `factory-worker` polls Temporal and registers workflows and activities.
+   `factory-connector` serves the authenticated webhook receivers and runs the
+   reconciliation sweeps; it signals the work-item workflow and executes no run
+   steps. Start the worker and API for every deployment, and start the
+   connector whenever `[connectors.*]` is configured. All units share
+   `factory.toml` and `/etc/factory/worker.env`; keep one worker.
 
    The release installer can copy the selected units when run from a checkout:
    `sudo ESF_COMPONENT=appliance ESF_SYSTEMD_DIR=/etc/systemd/system ./install.sh`.
@@ -352,19 +393,22 @@ acknowledgement can be lost after the agent finishes.
 
 Drain active runs before upgrading from earlier workflow code. Stop the API and
 connector units with the worker, promote the new binary, configuration, and
-credentials, run `factory config migrate --dry-run` and
-`factory doctor --profile production`, then start the units again. Validate
-replay against retained histories before attempting a rolling upgrade across
-versions.
+credentials, and run `factory config migrate --dry-run`. Start the units, then
+run `factory doctor --profile production` once each configured connector has
+recorded its first sweep; a snapshot written before the drain is stale by
+design. Validate replay against retained histories before attempting a rolling
+upgrade across versions.
 
 ## Kubernetes appliance
 
 `deploy/helm/esf` renders the same appliance: one factory worker Deployment, an
-execution API Deployment and Service, and one connector worker Deployment.
-Every workload uses the digest-pinned image, the restricted non-root security
-context, a single replica with the `Recreate` strategy, and
-`automountServiceAccountToken: false`. Both worker Deployments use the same task
-queue and configuration, so disable one when a single worker is sufficient. The
+execution API Deployment and Service, and one connector intake Deployment. The
+worker is the only Temporal poller; the connector serves webhooks and
+reconciliation. Every workload uses the digest-pinned image, the restricted
+non-root security context, a single replica with the `Recreate` strategy, and
+`automountServiceAccountToken: false`. The chart requires `factory.enabled=true`
+while the API or connector workload is enabled; disable the connector only when
+no `[connectors.*]` intake is configured. The
 NetworkPolicy denies all ingress except the API Service port and keeps egress
 limited to DNS plus the CIDRs and ports you list.
 
@@ -395,10 +439,10 @@ the matching PVC and key material before trusting a rollback.
 
 ## Operations and recovery
 
-- Alert on failed runs, unverified cleanup, disk exhaustion, missing worker or
-  connector pollers, API listener failures, and Temporal queue latency. Export
-  the existing OTLP metrics to the deployment's collector and retain service
-  logs.
+- Alert on failed runs, unverified cleanup, disk exhaustion, a missing worker
+  poller or connector intake, API listener failures, and Temporal queue
+  latency. Export the existing OTLP metrics to the deployment's collector and
+  retain service logs.
 - Sandbox ownership includes the Temporal execution ID. Creation recovers an
   existing matching sandbox after a lost response; retries do not create another
   VM when the first create is unresolved. Cleanup searches ownership metadata
@@ -463,8 +507,11 @@ sha256sum pre-upgrade.tar.gz > pre-upgrade.tar.gz.sha256
 
 Back up Temporal with the operator's supported database procedure at the same
 drained point. Keep the payload keyring with the matching application backup.
-Run `factory config migrate --dry-run` and `factory doctor --profile production
---output json` before starting the new worker. Install and verify the pinned agents with `factory agents verify`.
+Run `factory config migrate --dry-run` before starting the new worker. Start the
+units, then run `factory doctor --profile production --output json` and resolve
+every failure; the connector-health check passes after each configured
+connector records its first sweep. Install and verify the pinned agents with
+`factory agents verify`.
 Machinist state is not part of the factory: 0.6.2 neither reads nor migrates
 it. On a host install it lives under the Machinist service user's home,
 normally `/home/machinist/.machinist`; on Kubernetes it lived on the console

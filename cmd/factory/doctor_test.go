@@ -9,8 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mitkox/esf/internal/factory"
+	"github.com/mitkox/esf/internal/forge"
 )
 
 func writeDoctorToken(t *testing.T, mode os.FileMode) string {
@@ -203,6 +205,157 @@ func TestProductionTokenFilePermissionsCheck(t *testing.T) {
 			t.Fatalf("check = %#v, want skipped", check)
 		}
 	})
+}
+
+func writeDoctorHealthSnapshot(t *testing.T, dataDir string, reports ...forge.ConnectorHealth) {
+	t.Helper()
+	for _, report := range reports {
+		if err := forge.SaveConnectorHealth(dataDir, report); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestProductionConnectorHealthCheck(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
+	connectors := func(names ...string) map[string]factory.ConnectorConfig {
+		configured := make(map[string]factory.ConnectorConfig, len(names))
+		for _, name := range names {
+			configured[name] = factory.ConnectorConfig{Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme"}
+		}
+		return configured
+	}
+	healthy := func(name string, sweep, delivery time.Time) forge.ConnectorHealth {
+		return forge.ConnectorHealth{
+			Connector:           name,
+			Status:              forge.HealthHealthy,
+			Reason:              "recent_delivery",
+			LastSuccessfulSweep: &sweep,
+			LastDelivery:        &delivery,
+			Subscription:        forge.SubscriptionActive,
+		}
+	}
+	sweep := now.Add(-10 * time.Second)
+	delivery := now.Add(-5 * time.Second)
+
+	cases := []struct {
+		name       string
+		configured []string
+		seed       func(t *testing.T, dataDir string)
+		status     string
+		want       string
+	}{
+		{
+			name:   "no connectors configured",
+			status: "skipped",
+			want:   "no connectors configured",
+		},
+		{
+			name:       "healthy snapshot",
+			configured: []string{"azdo"},
+			seed: func(t *testing.T, dataDir string) {
+				writeDoctorHealthSnapshot(t, dataDir, healthy("azdo", sweep, delivery))
+			},
+			status: "ok",
+			want:   `connector "azdo": healthy (recent_delivery); last successful sweep 10s ago`,
+		},
+		{
+			name:       "snapshot entry for an unconfigured connector is reported",
+			configured: []string{"azdo"},
+			seed: func(t *testing.T, dataDir string) {
+				writeDoctorHealthSnapshot(t, dataDir, healthy("azdo", sweep, delivery), healthy("github", sweep, delivery))
+			},
+			status: "ok",
+			want:   "unconfigured connectors: github",
+		},
+		{
+			name:       "degraded snapshot",
+			configured: []string{"azdo"},
+			seed: func(t *testing.T, dataDir string) {
+				report := healthy("azdo", sweep, delivery)
+				report.Status = forge.HealthDegraded
+				report.Reason = "sweep_failed"
+				report.Detail = "reconciliation sweep failed: upstream 503"
+				writeDoctorHealthSnapshot(t, dataDir, report)
+			},
+			status: "fail",
+			want:   `connector "azdo": degraded (sweep_failed)`,
+		},
+		{
+			name:       "healthy status frozen before the connector stopped",
+			configured: []string{"azdo"},
+			seed: func(t *testing.T, dataDir string) {
+				stale := now.Add(-5 * time.Minute)
+				writeDoctorHealthSnapshot(t, dataDir, healthy("azdo", stale, stale.Add(time.Second)))
+			},
+			status: "fail",
+			want:   `connector "azdo": degraded (stale_sweep)`,
+		},
+		{
+			name:       "unknown snapshot",
+			configured: []string{"azdo"},
+			seed: func(t *testing.T, dataDir string) {
+				writeDoctorHealthSnapshot(t, dataDir, forge.ConnectorHealth{
+					Connector: "azdo", Status: forge.HealthUnknown, Reason: "no_observations",
+				})
+			},
+			status: "fail",
+			want:   `connector "azdo": unknown (no_observations)`,
+		},
+		{
+			name:       "configured connector not in the snapshot",
+			configured: []string{"azdo", "github"},
+			seed: func(t *testing.T, dataDir string) {
+				writeDoctorHealthSnapshot(t, dataDir, healthy("azdo", sweep, delivery))
+			},
+			status: "fail",
+			want:   `connector "github": no durable health snapshot`,
+		},
+		{
+			name:       "no snapshot file",
+			configured: []string{"azdo"},
+			status:     "fail",
+			want:       `connector "azdo": no durable health snapshot`,
+		},
+		{
+			name:       "unreadable snapshot",
+			configured: []string{"azdo"},
+			seed: func(t *testing.T, dataDir string) {
+				dir := filepath.Join(dataDir, forge.HealthDirName)
+				if err := os.MkdirAll(dir, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, "health.json"), []byte("{not json"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+			status: "fail",
+			want:   "decode snapshot",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dataDir := t.TempDir()
+			if tc.seed != nil {
+				tc.seed(t, dataDir)
+			}
+			cfg := factory.Config{
+				Storage:    factory.StorageConfig{DataDir: dataDir},
+				Connectors: connectors(tc.configured...),
+			}
+			check := productionConnectorHealth(cfg, now)
+			if check.Status != tc.status {
+				t.Fatalf("status = %q, want %q (%s)", check.Status, tc.status, check.Detail)
+			}
+			if tc.want != "" && !strings.Contains(check.Detail, tc.want) {
+				t.Fatalf("detail = %q, want %q", check.Detail, tc.want)
+			}
+		})
+	}
 }
 
 func TestProductionEvidenceSigningKeyCheck(t *testing.T) {

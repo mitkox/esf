@@ -1,14 +1,13 @@
 # ESF v1.0.0-rc.1 Helm chart
 
 This chart runs the factory appliance: one factory worker Deployment, one
-execution API Deployment and Service, and one connector worker Deployment.
-Both worker Deployments use the same task queue and configuration, so disable
-one (`factory.enabled=false` or `connector.enabled=false`) when you do not want
-two workers. CubeSandbox 0.7.3, Temporal 1.32.2, and
-PostgreSQL 18.6 are operator-managed dependencies. The factory CLI remains the
-operator control plane; the API is the versioned `/v1` integration surface. If
-the operator runs Temporal's UI, it provides workflow-state visibility; it does
-not replace the console's evidence view.
+execution API Deployment and Service, and one connector intake Deployment. The
+worker is the only Temporal poller; the connector serves authenticated forge
+webhooks and reconciliation and executes no run steps. CubeSandbox 0.7.3,
+Temporal 1.32.2, and PostgreSQL 18.6 are operator-managed dependencies. The
+factory CLI remains the operator control plane; the API is the versioned `/v1`
+integration surface. If the operator runs Temporal's UI, it provides
+workflow-state visibility; it does not replace the console's evidence view.
 
 Supply existing configuration Secrets and qualified image digests in
 `values.yaml`. Set `factory.storage.existingClaim` to a local or block-backed
@@ -17,9 +16,12 @@ RWX-backed storage are unsupported. All workloads mount that claim, so the chart
 pods with the factory worker and requires `factory.enabled=true`; use storage
 that permits the co-located mounts. The startup and
 readiness probes run `factory doctor --profile production --offline`, which
-checks the API listener when enabled, configured connectors, token-file
-permissions, and the evidence signing key. Install the pinned agents on the
-optional agent claim before starting the worker. Each
+checks the API listener when enabled, configured connectors, the durable
+connector-health snapshot (each connector's status, reason and freshness),
+token-file permissions, and the evidence signing key. Because the health check
+fails until every configured connector has reported, worker and API pods become
+ready only after the connector has completed its first sweep. Install the
+pinned agents on the optional agent claim before starting the worker. Each
 Deployment uses one replica, the `Recreate` strategy, the restricted non-root
 security context, a read-only root filesystem, no added capabilities, and
 `automountServiceAccountToken: false`. The NetworkPolicy denies all ingress
@@ -35,8 +37,11 @@ listener requires native TLS: create a Secret with `tls.crt` and `tls.key`, set
 Service and needs a TLS-terminating proxy. The API token must be at least 32
 bearer-alphabet characters.
 
-Both worker Deployments host all workflow and activity types, including forge
-adapter activities. Disable one if a single worker is sufficient. Set
+The worker Deployment hosts all workflow and activity types, including forge
+adapter publication activities. The connector Deployment is not a second
+Temporal worker: enable it whenever `[connectors.*]` is configured. Keep
+`factory.enabled=true`; the chart requires the worker when the API or connector
+is enabled because all workloads share its ReadWriteOnce claim. Set
 `[connectors.*]` and `[pipelines.*]` in the configuration and place each
 connector token in `factory.credentialSecret`.
 
@@ -66,8 +71,8 @@ credentials; running pods retain their staged credential snapshot.
    run `helm upgrade`. Recreate strategy keeps a single authoritative pod per
    workload; do not use rolling or multiple replicas. Check probes,
    `factory doctor --profile production`, the API health path, connector
-   configuration, representative historical runs, and a disposable new run
-   before resuming submissions.
+   configuration and health, representative historical runs, and a disposable
+   new run before resuming submissions.
 
 ### Upgrading from a Machinist deployment
 
