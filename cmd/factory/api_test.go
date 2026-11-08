@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/mitkox/esf/internal/factory"
 	artifacts "github.com/mitkox/esf/internal/factoryartifacts"
 	"github.com/mitkox/esf/internal/repository"
+	"github.com/mitkox/esf/internal/verification"
 )
 
 func apiRequest() api.RunRequest {
@@ -106,6 +108,69 @@ func TestAPISubmitReusedRunReturnsRecordedStatus(t *testing.T) {
 	}
 	if got.Repository != recorded.Repository || got.Revision != recorded.Revision {
 		t.Fatalf("status = %#v, want the recorded request identity", got)
+	}
+}
+
+// TestAPISubmitMapsSharedRequestFields anchors the API side of the submission
+// contract to production code: it drives a valid Submit and inspects the
+// factory.RunRequest the workflow start seam receives. A literal built in the
+// test would not catch drift in the API's own mapping.
+func TestAPISubmitMapsSharedRequestFields(t *testing.T) {
+	t.Parallel()
+
+	cfg := factory.Default()
+	cfg.Cube.TemplateID = "tpl-api-test"
+	cfg.Harnesses = map[string]factory.HarnessConfig{"api-default-harness": {}}
+	cfg.Verification = map[string]verification.Profile{"api-default-profile": {}}
+
+	controller, _ := newAPITestController(t)
+	controller.config = cfg
+	var started factory.RunRequest
+	controller.startWorkflow = func(_ context.Context, _ client.StartWorkflowOptions, run factory.RunRequest) error {
+		started = run
+		return nil
+	}
+
+	request := apiRequest()
+	request.Scope = "payments"
+	request.ChangeID = "change-42"
+	request.AgentModel = "agent-model"
+	request.Workspace = "warm-workspace"
+	request.Model = "model-resource"
+	request.EgressPolicy = "egress-strict"
+	request.ParentRunID = "run-parent"
+	if _, err := controller.Submit(context.Background(), request); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	checks := []struct {
+		name string
+		got  any
+		want any
+	}{
+		{name: "run id", got: started.RunID, want: request.RunID},
+		{name: "repository", got: started.Repository, want: request.Repository},
+		{name: "revision", got: started.Revision, want: request.Revision},
+		{name: "task", got: started.Task, want: request.Task},
+		{name: "repository kind", got: started.RepositoryKind, want: "remote"},
+		{name: "default harness", got: started.AgentHarness, want: "api-default-harness"},
+		{name: "default verification profile", got: started.VerificationProfile, want: "api-default-profile"},
+		{name: "sandbox template", got: started.SandboxTemplate, want: "tpl-api-test"},
+		{name: "agent timeout", got: started.AgentTimeout, want: cfg.Limits.AgentTimeout.Std()},
+		{name: "verification timeout", got: started.VerificationTimeout, want: cfg.Limits.VerificationTimeout.Std()},
+		{name: "total timeout", got: started.TotalTimeout, want: cfg.Limits.TotalTimeout.Std()},
+		{name: "scope", got: started.Scope, want: request.Scope},
+		{name: "change id", got: started.ChangeID, want: request.ChangeID},
+		{name: "agent model", got: started.AgentModel, want: request.AgentModel},
+		{name: "workspace", got: started.Workspace, want: request.Workspace},
+		{name: "model", got: started.Model, want: request.Model},
+		{name: "egress policy", got: started.EgressPolicy, want: request.EgressPolicy},
+		{name: "parent run id", got: started.ParentRunID, want: request.ParentRunID},
+	}
+	for _, check := range checks {
+		if check.got != check.want {
+			t.Errorf("%s = %v, want %v", check.name, check.got, check.want)
+		}
 	}
 }
 
@@ -209,7 +274,7 @@ func doAPIRequest(t *testing.T, method, url string, body io.Reader) (*http.Respo
 	return response, data
 }
 
-func TestAPISubmitRejectsRunIDOutsideOnePathSegment(t *testing.T) {
+func TestAPISubmitRejectsRunIDTheStoreCannotAddress(t *testing.T) {
 	t.Parallel()
 
 	controller, _ := newAPITestController(t)
@@ -229,6 +294,8 @@ func TestAPISubmitRejectsRunIDOutsideOnePathSegment(t *testing.T) {
 		{name: "dotdot", runID: ".."},
 		{name: "slash", runID: "a/b"},
 		{name: "backslash", runID: `a\b`},
+		{name: "nul byte", runID: "run\x00id"},
+		{name: "longer than 255 bytes", runID: strings.Repeat("a", 256)},
 	}
 	for _, tc := range cases {
 		tc := tc

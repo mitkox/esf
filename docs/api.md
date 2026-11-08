@@ -144,7 +144,7 @@ started run that is not yet queryable is reported as `REQUESTED`.
 | `agent_harness`, `verification_profile` | The resolved operator resources. |
 | `agent_result`, `verification_result` | Separate agent and deterministic-gate outcomes. A successful agent result never implies a successful verification. |
 | `started_at`, `completed_at` | RFC 3339 timestamps. `completed_at` is the zero timestamp until the run finishes. |
-| `conditions` | Step transitions; omitted when no condition has been recorded. |
+| `conditions` | Current step-condition snapshots; omitted when no condition has been recorded. |
 | `error` | The recorded failure text, when present. |
 
 Fields that are empty may be omitted. A client must not treat an omitted field as
@@ -193,6 +193,12 @@ observe state changes must poll without a cursor and reconcile by condition
 `type`, comparing each event's `time` with the value it last saw. Do not assume
 that every condition transition is delivered.
 
+These corrected snapshot semantics do not change wire behavior: the event
+fields, their JSON types and the response shape are unchanged, so the
+clarification is compatible within `/v1` under the versioning rule above. What
+is replaced is the earlier cursor guidance: do not treat `after` as a transition
+cursor.
+
 ## Evidence
 
 `GET /v1/runs/{run_id}/evidence` returns:
@@ -213,6 +219,12 @@ is the authoritative record of a finished run and stays readable after Temporal
 history retention. It is not the signed change-evidence bundle; that bundle is
 verified offline with `factory verify` as described in
 [evidence-contract.md](evidence-contract.md).
+
+Until the run has finished and its durable `run.json` exists, the endpoint
+returns `404` with code `run_not_found`, the same response as an unknown run.
+Poll `GET /v1/runs/{run_id}` first and request evidence only after the run
+reaches a terminal state. A distinct not-ready code would change the meaning of
+this response and requires a new major version.
 
 ## Cancel
 

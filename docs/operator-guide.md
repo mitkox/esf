@@ -376,12 +376,24 @@ The factory exports these instruments through the configured OTLP endpoint
 
 Connector health is evaluated from the latest attempt, not from the newest
 successful timestamps alone. A failed sweep attempt degrades the connector
-immediately. A successful sweep and an authenticated delivery each stay fresh for
-three sweep intervals, so with the default one-minute cadence a healthy
-connector is not degraded just because a later sweep succeeded after its last
-delivery. A delivery may therefore be older than the newest successful sweep and
-still count as current. A connector with a successful sweep but no delivery at
-all is degraded because the delivery path has never been proven.
+immediately with reason `sweep_failed`, including a sweep whose reconciliation
+finished but whose watermark could not be committed: reconciliation is only
+successful once its cursor is durable. A failed delivery attempt also degrades
+immediately with reason `delivery_failed`, because fresh successful timestamps
+can otherwise hide a stalled delivery path. A successful sweep and an
+authenticated delivery each stay fresh for three sweep intervals, so with the
+default one-minute cadence a healthy connector is not degraded just because a
+later sweep succeeded after its last delivery. A delivery may therefore be older
+than the newest successful sweep and still count as current. A fresh successful
+sweep with no delivery ever observed is healthy, with reason `sweep_only`: a
+sweep-only connector, or one that has seen no work, proves reconciliation
+without a webhook delivery.
+
+The degraded reasons are `sweep_failed`, `delivery_failed`, `stale_sweep`,
+`no_successful_sweep` (a delivery was observed but no successful sweep),
+`no_recent_delivery`, `subscription_disabled` and `subscription_probationary`.
+A connector with no successful sweep, no delivery, and no failed attempt is
+`unknown` with reason `no_observations`, not degraded.
 
 A connector raises `connector.degraded` when it enters the degraded state or its
 reason changes; a connector that stays degraded with the same reason does not
@@ -395,7 +407,7 @@ console shows the same connector state at `/api/v1/console/connectors`.
 ### Connector outage or missed deliveries
 
 Symptom: no new runs, and the console or alert reports `degraded` with reason
-`sweep_failed`, `stale_sweep`, `no_delivery_since_sweep`, or
+`sweep_failed`, `delivery_failed`, `stale_sweep`, `no_successful_sweep`, or
 `no_recent_delivery`.
 
 1. Confirm the connector process is running and can reach the forge base URL.

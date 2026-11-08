@@ -254,7 +254,7 @@ func summarizeChange(change factory.Change) ChangeSummary {
 // ── Actions (copyable CLI commands) ─────────────────────────────────────────
 
 func runActions(runID string, state factory.RunState) RunActions {
-	arg := shellArg(runID)
+	arg := ShellArg(runID)
 	actions := RunActions{
 		Describe: fmt.Sprintf("factory describe runs %s", arg),
 		Logs:     fmt.Sprintf("factory logs %s", arg),
@@ -269,10 +269,10 @@ func runActions(runID string, state factory.RunState) RunActions {
 	return actions
 }
 
-// shellArg renders a value as one literal shell argument. Run IDs are normally
+// ShellArg renders a value as one literal shell argument. Run IDs are normally
 // safe, but the factory accepts broader identifiers; quoting here keeps a
 // copy-pasted operator command from executing metacharacters.
-func shellArg(value string) string {
+func ShellArg(value string) string {
 	if value != "" && strings.IndexFunc(value, func(r rune) bool {
 		return !(r == '-' || r == '_' || r == '.' || r == '/' || r == ':' || r == '+' || r == '=' ||
 			(r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'))
@@ -281,6 +281,9 @@ func shellArg(value string) string {
 	}
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
+
+// shellArg is the package-local name the console handlers use.
+func shellArg(value string) string { return ShellArg(value) }
 
 // ── Facets ──────────────────────────────────────────────────────────────────
 

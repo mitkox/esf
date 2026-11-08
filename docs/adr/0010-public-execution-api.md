@@ -65,7 +65,7 @@ version:
 | --- | --- | --- |
 | `POST` | `/v1/runs` | Submit a run request |
 | `GET` | `/v1/runs/{run_id}` | Read run status |
-| `GET` | `/v1/runs/{run_id}/events?after=N` | Read sequenced step conditions |
+| `GET` | `/v1/runs/{run_id}/events?after=N` | Read current step-condition snapshots |
 | `GET` | `/v1/runs/{run_id}/evidence` | Read the durable run manifest |
 | `POST` | `/v1/runs/{run_id}/cancel` | Request cancellation |
 
