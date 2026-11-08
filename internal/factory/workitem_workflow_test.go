@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -467,6 +468,133 @@ func TestWorkItemWorkflowSignalsRunningRevision(t *testing.T) {
 	secondManifest := readWorkItemRunManifest(t, harness.artifactDir, outcome.Runs[1].RunID)
 	if secondManifest.ParentRunID != outcome.Runs[0].RunID {
 		t.Fatalf("second parent = %q, want %q", secondManifest.ParentRunID, outcome.Runs[0].RunID)
+	}
+}
+
+// acceptanceSignalConnector posts one revision signal from inside the first
+// acceptance read, the window where publication and the acceptance wait run
+// after the child-workflow selector has returned.
+type acceptanceSignalConnector struct {
+	*forge.Fake
+	once   sync.Once
+	onRead func()
+}
+
+func (c *acceptanceSignalConnector) ReadAcceptance(ctx context.Context, req forge.AcceptanceRequest) (forge.AcceptanceResult, error) {
+	c.once.Do(func() {
+		if c.onRead != nil {
+			c.onRead()
+		}
+	})
+	return c.Fake.ReadAcceptance(ctx, req)
+}
+
+// TestWorkItemWorkflowSignalsRevisionDuringAcceptance proves a newer revision
+// signalled while the acceptance read is pending still runs. The connector has
+// already committed its sweep watermark for the accepted revision, so dropping
+// the buffered signal would leave the newer edit unrun.
+func TestWorkItemWorkflowSignalsRevisionDuringAcceptance(t *testing.T) {
+	connector := &acceptanceSignalConnector{Fake: publicationFake()}
+	signalled := false
+	var harness *workItemTestEnvironment
+	connector.onRead = func() {
+		signalled = true
+		harness.env.SignalWorkflow(WorkItemRevisionSignalName, WorkItemRevisionSignal{
+			Proposal: workItemProposal("2", "Clarified bug", "Reproduction two"),
+		})
+	}
+	harness = publicationHarness(t, connector)
+
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Original bug", "Reproduction one"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if !signalled {
+		t.Fatal("the acceptance read never ran")
+	}
+	// One top-level execution reports both activations: the newer revision is
+	// signalled to the running workflow rather than starting a second one.
+	if len(outcome.Runs) != 2 {
+		t.Fatalf("runs = %#v, want the accepted revision and the signalled revision", outcome.Runs)
+	}
+	if outcome.Runs[0].Revision != "1" || outcome.Runs[1].Revision != "2" {
+		t.Fatalf("revision order = %q, %q", outcome.Runs[0].Revision, outcome.Runs[1].Revision)
+	}
+	if outcome.Runs[0].WorkflowID == outcome.Runs[1].WorkflowID {
+		t.Fatalf("both runs used activation %q", outcome.Runs[0].WorkflowID)
+	}
+	secondManifest := readWorkItemRunManifest(t, harness.artifactDir, outcome.Runs[1].RunID)
+	if secondManifest.ParentRunID != outcome.Runs[0].RunID {
+		t.Fatalf("second parent = %q, want %q", secondManifest.ParentRunID, outcome.Runs[0].RunID)
+	}
+	if len(harness.fake.Created()) != 2 {
+		t.Fatalf("sandboxes created = %v, want one per revision", harness.fake.Created())
+	}
+	if live := harness.fake.Live(); len(live) != 0 {
+		t.Fatalf("sandbox leaked: %v", live)
+	}
+}
+
+// publicationSignalConnector posts one revision signal from inside the
+// publication activity's authoritative work-item read.
+type publicationSignalConnector struct {
+	*forge.Fake
+	once       sync.Once
+	onReadItem func()
+}
+
+func (c *publicationSignalConnector) ReadWorkItem(ctx context.Context, id string) (forge.WorkItem, error) {
+	c.once.Do(func() {
+		if c.onReadItem != nil {
+			c.onReadItem()
+		}
+	})
+	return c.Fake.ReadWorkItem(ctx, id)
+}
+
+// TestWorkItemWorkflowSignalsRevisionDuringPublication proves a newer revision
+// signalled while the publication activity is running is not dropped before
+// the acceptance read starts.
+func TestWorkItemWorkflowSignalsRevisionDuringPublication(t *testing.T) {
+	connector := &publicationSignalConnector{Fake: publicationFake()}
+	signalled := false
+	var harness *workItemTestEnvironment
+	connector.onReadItem = func() {
+		signalled = true
+		harness.env.SignalWorkflow(WorkItemRevisionSignalName, WorkItemRevisionSignal{
+			Proposal: workItemProposal("2", "Clarified bug", "Reproduction two"),
+		})
+	}
+	harness = publicationHarness(t, connector)
+
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Original bug", "Reproduction one"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if !signalled {
+		t.Fatal("the publication activity never read the work item")
+	}
+	if len(outcome.Runs) != 2 {
+		t.Fatalf("runs = %#v, want the published revision and the signalled revision", outcome.Runs)
+	}
+	if outcome.Runs[0].Revision != "1" || outcome.Runs[1].Revision != "2" {
+		t.Fatalf("revision order = %q, %q", outcome.Runs[0].Revision, outcome.Runs[1].Revision)
+	}
+	// Each revision published its own branch and pull request under the one
+	// top-level execution.
+	if len(connector.Branches) != 2 || len(connector.Publications) != 2 {
+		t.Fatalf("branches/publications = %d/%d, want one per revision",
+			len(connector.Branches), len(connector.Publications))
+	}
+	if len(harness.fake.Created()) != 2 {
+		t.Fatalf("sandboxes created = %v, want one per revision", harness.fake.Created())
+	}
+	if live := harness.fake.Live(); len(live) != 0 {
+		t.Fatalf("sandbox leaked: %v", live)
 	}
 }
 

@@ -216,7 +216,20 @@ func WorkItemWorkflow(ctx workflow.Context, in WorkItemWorkflowInput) (WorkItemO
 	}
 	pending := []forge.Proposal{in.Proposal}
 
-	for len(pending) > 0 {
+	for {
+		// A signal that arrived after the last receive point stays buffered
+		// until the workflow ends; take it now instead of finishing with an
+		// unread revision. A history recorded before the pipeline marker has
+		// no signal path and must keep its original behavior.
+		if len(pending) == 0 {
+			if version != workflow.DefaultVersion {
+				drainWorkItemSignals(signals, &pending, outcome.Revision)
+			}
+			if len(pending) == 0 {
+				break
+			}
+		}
+
 		proposal := pending[0]
 		pending = pending[1:]
 
@@ -280,7 +293,8 @@ func WorkItemWorkflow(ctx workflow.Context, in WorkItemWorkflowInput) (WorkItemO
 		if manifest.FactoryResult == StateSucceeded {
 			recordStatus = intakeRecordSucceeded
 			if workflow.GetVersion(ctx, workItemPublicationVersion, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
-				publication, acceptance, publicationErr := publishAndReadAcceptance(ctx, acts, manifest, &outcome)
+				publication, acceptance, publicationErr := publishAndReadAcceptanceKeepingSignals(
+					ctx, acts, manifest, &outcome, proposal.WorkItem.Revision, version, signals, &pending)
 				if publicationErr != nil {
 					workflow.GetLogger(ctx).Warn("publication step failed",
 						"run_id", resolved.RunID, "error", publicationErr)
@@ -548,6 +562,61 @@ func publishAndReadAcceptance(
 			"the pull request is still open")
 	}
 	return publication, &acceptance, nil
+}
+
+// publishAndReadAcceptanceKeepingSignals runs publication and the acceptance
+// wait while the revision signal channel stays selectable.
+//
+// The phase runs in a workflow goroutine and this coroutine selects over its
+// result and the signal channel, applying the same revision-ordering filter as
+// the child selector. A newer revision delivered during publication or the
+// acceptance wait is therefore queued for another activation instead of being
+// discarded when the workflow ends. Signals delivered in the same workflow
+// task as the phase result are drained before returning.
+func publishAndReadAcceptanceKeepingSignals(
+	ctx workflow.Context,
+	acts *Activities,
+	manifest RunManifest,
+	outcome *WorkItemOutcome,
+	currentRevision string,
+	version workflow.Version,
+	signals workflow.ReceiveChannel,
+	pending *[]forge.Proposal,
+) (PublishChangeOutput, *ReadPublicationAcceptanceOutput, error) {
+	if version == workflow.DefaultVersion {
+		// A history recorded before the pipeline marker has no signal path.
+		return publishAndReadAcceptance(ctx, acts, manifest, outcome)
+	}
+
+	type phaseResult struct {
+		publication PublishChangeOutput
+		acceptance  *ReadPublicationAcceptanceOutput
+		err         error
+	}
+	done := workflow.NewChannel(ctx)
+	workflow.Go(ctx, func(ctx workflow.Context) {
+		publication, acceptance, err := publishAndReadAcceptance(ctx, acts, manifest, outcome)
+		done.Send(ctx, phaseResult{publication: publication, acceptance: acceptance, err: err})
+	})
+
+	var result phaseResult
+	for received := false; !received; {
+		selector := workflow.NewSelector(ctx)
+		selector.AddReceive(done, func(ch workflow.ReceiveChannel, _ bool) {
+			ch.Receive(ctx, &result)
+			received = true
+		})
+		selector.AddReceive(signals, func(ch workflow.ReceiveChannel, _ bool) {
+			var signal WorkItemRevisionSignal
+			ch.Receive(ctx, &signal)
+			queueWorkItemSignal(pending, currentRevision, signal)
+		})
+		selector.Select(ctx)
+	}
+	// A signal buffered in the same workflow task as the phase result must not
+	// be lost between the selector and the caller's next decision.
+	drainWorkItemSignals(signals, pending, currentRevision)
+	return result.publication, result.acceptance, result.err
 }
 
 // readAcceptanceBounded polls the forge merge state on workflow timers until a
