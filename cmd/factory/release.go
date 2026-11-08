@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,10 +17,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mitkox/esf/internal/evidence"
 	"github.com/mitkox/esf/internal/factory"
+	"github.com/mitkox/esf/internal/forge"
+	"github.com/mitkox/esf/internal/httpsecurity"
 	"github.com/mitkox/esf/internal/releaseinfo"
 	"github.com/mitkox/esf/internal/sandbox"
 	"github.com/mitkox/esf/internal/sandbox/cube"
+	"github.com/mitkox/esf/internal/secretfile"
 	"github.com/spf13/cobra"
 )
 
@@ -278,6 +283,125 @@ type doctorCheck struct {
 	Detail string `json:"detail,omitempty"`
 }
 
+const (
+	doctorMaxAPITokenBytes   = 4096
+	doctorMaxSigningKeyBytes = 16 << 10
+)
+
+func passedCheck(name string) doctorCheck {
+	return doctorCheck{Name: name, Status: "ok"}
+}
+
+func failedCheck(name string, err error) doctorCheck {
+	return doctorCheck{Name: name, Status: "fail", Detail: err.Error()}
+}
+
+func skippedCheck(name, detail string) doctorCheck {
+	return doctorCheck{Name: name, Status: "skipped", Detail: detail}
+}
+
+// productionAPIListener checks the execution API posture without opening a
+// socket. It reads the bearer token through the private-file rules so a
+// group-readable or malformed token is reported before the API pod starts.
+func productionAPIListener(cfg factory.Config) doctorCheck {
+	const name = "api_listener"
+	if !cfg.API.Enabled {
+		return skippedCheck(name, "api.enabled is false")
+	}
+	tlsConfig, err := httpsecurity.LoadTLSConfig(cfg.API.TLSCertFile, cfg.API.TLSKeyFile)
+	if err != nil {
+		return failedCheck(name, fmt.Errorf("api: %w", err))
+	}
+	if err := httpsecurity.ValidateListen(cfg.API.Listen, tlsConfig != nil); err != nil {
+		return failedCheck(name, fmt.Errorf("api: %w", err))
+	}
+	body, err := secretfile.Read(cfg.API.TokenFile, doctorMaxAPITokenBytes)
+	if err != nil {
+		return failedCheck(name, fmt.Errorf("api.token_file: %w", err))
+	}
+	token := strings.TrimSpace(string(body))
+	if len(token) < 32 || !httpsecurity.ValidBearerToken(token) {
+		return failedCheck(name, fmt.Errorf("api.token_file: the bearer token must contain at least 32 characters from the ASCII bearer token alphabet"))
+	}
+	return passedCheck(name)
+}
+
+// productionConnectorConfiguration reads each connector through the same path
+// the worker uses, so an invalid kind, base URL, or private token file fails
+// the production posture check.
+func productionConnectorConfiguration(cfg factory.Config) doctorCheck {
+	const name = "connector_configuration"
+	if len(cfg.Connectors) == 0 {
+		return skippedCheck(name, "no connectors configured")
+	}
+	names := make([]string, 0, len(cfg.Connectors))
+	for connectorName := range cfg.Connectors {
+		names = append(names, connectorName)
+	}
+	sort.Strings(names)
+	var problems []string
+	for _, connectorName := range names {
+		if _, err := cfg.Connector(connectorName); err != nil {
+			problems = append(problems, err.Error())
+		}
+	}
+	if len(problems) > 0 {
+		return failedCheck(name, errors.New(strings.Join(problems, "; ")))
+	}
+	return passedCheck(name)
+}
+
+// productionTokenFiles checks every bearer token the appliance reads: the API
+// token and each connector token. Reading through the shared private-file
+// rules rejects symlinks, special files, and group/other access.
+func productionTokenFiles(cfg factory.Config) doctorCheck {
+	const name = "token_file_permissions"
+	var problems []string
+	checked := 0
+	if cfg.API.Enabled {
+		checked++
+		if _, err := secretfile.Read(cfg.API.TokenFile, doctorMaxAPITokenBytes); err != nil {
+			problems = append(problems, fmt.Sprintf("api.token_file: %v", err))
+		}
+	}
+	names := make([]string, 0, len(cfg.Connectors))
+	for connectorName := range cfg.Connectors {
+		names = append(names, connectorName)
+	}
+	sort.Strings(names)
+	for _, connectorName := range names {
+		checked++
+		if _, err := forge.ReadCredential(cfg.Connectors[connectorName].TokenFile); err != nil {
+			problems = append(problems, fmt.Sprintf("connector %q token_file: %v", connectorName, err))
+		}
+	}
+	if checked == 0 {
+		return skippedCheck(name, "no token files configured")
+	}
+	if len(problems) > 0 {
+		return failedCheck(name, errors.New(strings.Join(problems, "; ")))
+	}
+	return passedCheck(name)
+}
+
+// productionEvidenceSigningKey requires the host-held signing key publication
+// depends on and verifies it is a readable, private, PKCS#8 ed25519 key.
+func productionEvidenceSigningKey(cfg factory.Config) doctorCheck {
+	const name = "evidence_signing_key"
+	path := strings.TrimSpace(cfg.Evidence.SigningKeyFile)
+	if path == "" {
+		return failedCheck(name, fmt.Errorf("evidence.signing_key_file is required for production publication; mount a 0600 PKCS#8 ed25519 key outside every Cube sandbox"))
+	}
+	body, err := secretfile.Read(path, doctorMaxSigningKeyBytes)
+	if err != nil {
+		return failedCheck(name, fmt.Errorf("evidence.signing_key_file: %w", err))
+	}
+	if _, err := evidence.ParsePrivateKey(body); err != nil {
+		return failedCheck(name, fmt.Errorf("evidence.signing_key_file: %w", err))
+	}
+	return passedCheck(name)
+}
+
 func runStructuredDoctor(ctx context.Context, configPath, profile, output string, offline bool) error {
 	if profile != "" && profile != "production" {
 		return fmt.Errorf("unsupported doctor profile %q", profile)
@@ -300,6 +424,12 @@ func runStructuredDoctor(ctx context.Context, configPath, profile, output string
 	}
 	add("configuration", cfg.Validate())
 	if profile == "production" {
+		checks = append(checks,
+			productionAPIListener(cfg),
+			productionConnectorConfiguration(cfg),
+			productionTokenFiles(cfg),
+			productionEvidenceSigningKey(cfg),
+		)
 		add("storage_local", checkSQLiteFilesystem(cfg.Storage.DataDir))
 		if len(cfg.Sandbox.BasePackages) != 0 {
 			add("sandbox_template_tools", fmt.Errorf("versioned Cube templates must provide prerequisites without sandbox.base_packages"))

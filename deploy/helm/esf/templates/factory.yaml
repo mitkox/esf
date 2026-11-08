@@ -78,7 +78,7 @@ spec:
           secret: {secretName: {{ $config | quote }}, defaultMode: 0440}
         - name: data
           persistentVolumeClaim:
-            claimName: {{ default (printf "%s-factory" $name) .Values.factory.storage.existingClaim | quote }}
+            claimName: {{ include "esf.claim" . | quote }}
         - name: tmp
           emptyDir: {sizeLimit: 512Mi}
         {{- if .Values.factory.credentialSecret }}

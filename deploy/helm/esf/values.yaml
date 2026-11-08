@@ -15,8 +15,30 @@ factory:
     limits: {cpu: "2", memory: 2Gi}
   nodeSelector: {kubernetes.io/os: linux}
 
+api:
+  enabled: true
+  # The listener in [api].listen must bind this port. A Service cannot reach a
+  # loopback-only listener and a non-loopback listener requires native TLS.
+  port: 8090
+  tlsSecret: "" # optional Secret with tls.crt and tls.key, mounted at /etc/esf/tls
+  serviceType: ClusterIP
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  nodeSelector: {kubernetes.io/os: linux}
+
+connector:
+  # The connector host is a second worker Deployment. Both worker workloads use
+  # the same task queue and configuration, so disable one when you do not want
+  # to scale worker concurrency.
+  enabled: true
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 1Gi}
+  nodeSelector: {kubernetes.io/os: linux}
+
 networkPolicy:
   enabled: true
-  # Explicit control/data/Temporal/OTLP CIDRs and ports are required for a
-  # working deployment. Empty keeps runtime egress closed except DNS.
+  # Explicit control/data/Temporal/OTLP/forge CIDRs and ports are required for
+  # a working deployment. Empty keeps runtime egress closed except DNS.
   egress: []

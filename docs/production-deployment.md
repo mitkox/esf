@@ -1,4 +1,4 @@
-# Deploying the factory worker
+# Deploying the factory appliance
 
 The 1.0.0-rc.1 candidate requires an attested companion qualification manifest
 for the exact source and built assets before production use. It is a release candidate: the
@@ -16,13 +16,105 @@ unsupported. Cube template resources
 and egress policy must be set by the operator; the provider does not enforce the
 optional CPU/memory/disk fields in the factory configuration.
 
+The appliance runs one `factory` binary in three service roles:
+
+- the Temporal worker, which executes runs and forge publication activities;
+- the execution API, which accepts the versioned `/v1` contract over an
+  authenticated listener; and
+- the connector host, which is a worker process hosting the host-side forge
+  adapters. Run it only when you want a dedicated connector worker; the normal
+  worker already hosts connector activities.
+
+All three share `/var/lib/factory`, `/etc/factory/factory.toml`, and the
+operator-owned credential files. Keep one authoritative deployment.
+
 ## Configuration and credentials
 
 Start with `factory.example.toml`. Set the actual Cube endpoint and template,
 repository allowlist, harness binary, credentials and verification commands.
-For a worker using `deploy/factory-worker.service`, use absolute paths under
-`/etc/factory` for configuration and provisioned files, and set
-`storage.data_dir = "/var/lib/factory"`. The service cannot read home directories.
+For services using the units in `deploy/`, use absolute paths under `/etc/factory`
+for configuration and provisioned files, and set
+`storage.data_dir = "/var/lib/factory"`. The services cannot read home
+directories.
+
+### Execution API
+
+Generate a bearer token and enable the listener:
+
+```sh
+sudo install -d -m 0700 /etc/factory
+sudo sh -c 'umask 077; openssl rand -hex 32 > /etc/factory/api.token'
+sudo chown factory:factory /etc/factory/api.token
+```
+
+```toml
+[api]
+enabled = true
+listen = "0.0.0.0:8090"
+token_file = "/etc/factory/api.token"
+tls_cert_file = "/etc/factory/tls/api.crt"
+tls_key_file = "/etc/factory/tls/api.key"
+```
+
+The token must contain at least 32 characters from the HTTP bearer alphabet.
+The token file and the TLS private key must be regular files with mode `0600`
+and no group or other access; `factory doctor --profile production` and API
+startup refuse anything else. A loopback listener may use plain HTTP behind a
+TLS-terminating proxy. Any non-loopback listener requires native TLS, with both
+files set together. The Kubernetes chart mounts an optional TLS Secret at
+`/etc/esf/tls` and exposes the listener through a Service.
+
+### Forge connectors and pipelines
+
+A connector is a host-side adapter; its credential is a private-file reference,
+never a value in the configuration:
+
+```toml
+[connectors.azuredevops]
+kind       = "azuredevops"
+base_url   = "https://dev.azure.com/acme"
+token_file = "/etc/factory/secrets/azuredevops-token"
+
+[pipelines.bugfix]
+connector = "azuredevops"
+
+[[pipelines.bugfix.rules]]
+project              = "Payments"
+area                 = "Payments\\Bugs"
+label                = "esf"
+type                 = "Bug"
+state                = "Active"
+scope                = "payments"
+repository           = "https://dev.azure.com/acme/payments/_git/payments"
+base_branch          = "main"
+verification_profile = "default"
+```
+
+Create the token as a regular file owned by `factory` with mode `0600`; the
+worker restarts and rejects it if it is group- or other-readable, a symlink, or
+unavailable. The token is read only on the host and is never injected into a
+Cube sandbox.
+
+### Evidence signing key
+
+Publication requires a host-held PKCS#8 ed25519 signing key outside every Cube
+sandbox:
+
+```sh
+sudo install -d -m 0700 /etc/factory/secrets
+sudo sh -c 'umask 077; openssl genpkey -algorithm ED25519 -out /etc/factory/secrets/evidence-signing-key.pem'
+sudo chown factory:factory /etc/factory/secrets/evidence-signing-key.pem
+```
+
+```toml
+[evidence]
+signing_key_file = "/etc/factory/secrets/evidence-signing-key.pem"
+```
+
+`factory doctor --profile production` fails when the key is absent, group- or
+other-readable, not a regular file, or not a PKCS#8 ed25519 private key. Back up
+the key with the matching configuration; losing it prevents signing new
+evidence, and publishing it lets anyone forge a bundle.
 
 For remote Temporal:
 
@@ -188,38 +280,103 @@ It does not activate the program. To promote it, set `intake.program_path` to
 the saved JSON path and restart the worker. Keep the program operator-owned;
 recorded run manifests identify its SHA-256 digest.
 
-## Install the worker
+## Install the appliance
 
 1. Build with the version in `go.mod`: `go build -trimpath -o bin/factory ./cmd/factory`.
+   The release installer accepts `ESF_COMPONENT=factory`, `api`, `connector`, or
+   `appliance` and installs the same binary for every role.
 2. Create a dedicated `factory` system user/group. Install the binary at
    `/usr/local/bin/factory` and configuration at `/etc/factory/factory.toml`.
 3. Configuration may be `root:factory` mode `0640`. Payload keyrings, API token
-   files and TLS private keys must instead be regular files with no group/other
-   access (mode `0600`), readable by the service identity. Use service-owned
-   files or systemd `LoadCredential`; keep credential source files root-only.
-   Symlinks and oversized secret files are refused. Before upgrading an existing
+   files, connector token files, TLS private keys and the evidence signing key
+   must instead be regular files with no group/other access (mode `0600`),
+   readable by the service identity. Use service-owned files or systemd
+   `LoadCredential`; keep credential source files root-only. Symlinks and
+   oversized secret files are refused. Before upgrading an existing
    installation, migrate any `0640` keyrings to this ownership/permission model
-   on every submitting CLI and worker, then run doctor as that identity before
-   restarting. Create `/etc/factory/worker.env` even without environment secrets.
-4. Run `factory doctor --config /etc/factory/factory.toml` as the service user
-   with the same environment. Resolve every reported failure.
-5. Install `deploy/factory-worker.service` into `/etc/systemd/system/`, reload
-   systemd, and enable/start `factory-worker`.
+   on every submitting CLI and service, then run doctor as that identity before
+   restarting. Create `/etc/factory/worker.env` even without environment secrets;
+   `factory-api.service` and `factory-connector.service` read the same file.
+4. Run `factory doctor --profile production --config /etc/factory/factory.toml`
+   as the service user with the same environment. Resolve every reported
+   failure, including the API listener, connector configuration, token-file
+   permissions, and evidence signing key checks. Use `--offline` when Cube and
+   Temporal are intentionally unreachable.
+5. Install the units for the roles you run:
 
-The service uses restricted filesystem access, a private temporary directory,
+   ```sh
+   sudo install -m 0644 deploy/factory-worker.service /etc/systemd/system/
+   sudo install -m 0644 deploy/factory-api.service /etc/systemd/system/
+   sudo install -m 0644 deploy/factory-connector.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now factory-worker factory-api
+   ```
+
+   `factory-worker` and `factory-connector` both run the Temporal worker and
+   host forge adapter activities. Start one, or both when you intend to scale
+   worker concurrency; they use the same task queue and configuration.
+
+   The release installer can copy the selected units when run from a checkout:
+   `sudo ESF_COMPONENT=appliance ESF_SYSTEMD_DIR=/etc/systemd/system ./install.sh`.
+   It never starts or enables a service; run `systemctl daemon-reload` and
+   enable the roles you intend to operate.
+
+The units use restricted filesystem access, a private temporary directory,
 automatic restart after failure, and SIGTERM shutdown. The worker stops polling
-and gives activities 30 seconds to finish before stopping. Temporal resumes
-outstanding work when a worker returns. Agent execution is not automatically
-retried because an acknowledgement can be lost after the agent finishes.
+and gives activities 30 seconds to finish before stopping. The API drains
+in-flight requests on shutdown. Temporal resumes outstanding work when a worker
+returns. Agent execution is not automatically retried because an
+acknowledgement can be lost after the agent finishes.
 
-Drain active runs before upgrading from earlier workflow code. Validate replay
-against retained histories before attempting a rolling upgrade across versions.
+Drain active runs before upgrading from earlier workflow code. Stop the API and
+connector units with the worker, promote the new binary, configuration, and
+credentials, run `factory config migrate --dry-run` and
+`factory doctor --profile production`, then start the units again. Validate
+replay against retained histories before attempting a rolling upgrade across
+versions.
+
+## Kubernetes appliance
+
+`deploy/helm/esf` renders the same appliance: one factory worker Deployment, an
+execution API Deployment and Service, and one connector worker Deployment.
+Every workload uses the digest-pinned image, the restricted non-root security
+context, a single replica with the `Recreate` strategy, and
+`automountServiceAccountToken: false`. Both worker Deployments use the same task
+queue and configuration, so disable one when a single worker is sufficient. The
+NetworkPolicy denies all ingress except the API Service port and keeps egress
+limited to DNS plus the CIDRs and ports you list.
+
+```sh
+helm upgrade --install esf deploy/helm/esf -f values.yaml
+```
+
+Provide `factory.configSecret` with the same `[api]`, `[connectors.*]`,
+`[pipelines.*]`, and `[evidence]` sections. Set `api.port` to the listener port.
+If the API listens on a non-loopback address, set `api.tlsSecret` to a Secret
+containing `tls.crt` and `tls.key`; otherwise keep the listener loopback-only
+behind a TLS proxy. Put the API and connector tokens and the signing key in
+`factory.credentialSecret`; an init container stages them as `0600` files under
+`/etc/esf/credentials`.
+
+The chart's workloads mount one `ReadWriteOnce` claim. The API and connector
+pods are pinned to the factory worker's node, and the chart requires
+`factory.enabled=true`; provide a block-backed claim that permits the
+co-located mounts, and keep exactly one replica per workload. The chart remains outside the
+Kubernetes/Helm qualification gate: installing it does not qualify a cluster or
+close that gate.
+
+Upgrade by scaling the workloads to zero, snapshotting the claim, Temporal, the
+Secrets, and the values file, verifying the image digest, then running
+`helm upgrade`. Recreate strategy starts one authoritative pod per workload; do
+not use rolling or multiple replicas. Restore into an isolated namespace with
+the matching PVC and key material before trusting a rollback.
 
 ## Operations and recovery
 
-- Alert on failed runs, unverified cleanup, disk exhaustion, missing worker
-  pollers, and Temporal queue latency. Export the existing OTLP metrics to the
-  deployment's collector and retain service logs.
+- Alert on failed runs, unverified cleanup, disk exhaustion, missing worker or
+  connector pollers, API listener failures, and Temporal queue latency. Export
+  the existing OTLP metrics to the deployment's collector and retain service
+  logs.
 - Sandbox ownership includes the Temporal execution ID. Creation recovers an
   existing matching sandbox after a lost response; retries do not create another
   VM when the first create is unresolved. Cleanup searches ownership metadata
@@ -232,7 +389,9 @@ against retained histories before attempting a rolling upgrade across versions.
   storage and use the retained Temporal history to investigate; do not blindly
   resubmit the same task to obtain missing evidence.
 - Back up Temporal's database using its operator-supported backup method, the
-  complete artifact filesystem, configuration, and the payload keyring. Stop
+  complete artifact filesystem, configuration, and the payload keyring. Include
+  the API token, every connector token, the TLS private key, and the evidence
+  signing key; the host backup below covers them through `/etc/factory`. Stop
   submissions and drain runs before a coordinated backup if your storage cannot
   take consistent snapshots. Keep encrypted key backups separately protected.
 - Test restoration into an isolated namespace/cluster and a separate artifact
@@ -247,7 +406,8 @@ See [the readiness review](production-readiness.md) for executed validation.
 Use local or block-backed storage for the factory evidence tree. NFS and other
 shared network filesystems are unsupported. Before changing the factory binary,
 stop new submissions, wait for active factory runs to reach a terminal state,
-and reconcile sandbox cleanup. Then stop `factory-worker`.
+and reconcile sandbox cleanup. Then stop `factory-api`, `factory-connector`, and
+`factory-worker` (skip units you do not run).
 
 Use `factory storage usage --output json` to measure the durable evidence tree
 and its run count before sizing or restoring the volume. This command reads
@@ -256,9 +416,12 @@ metadata only and leaves evidence intact.
 orphaned `.artifact-*` files left by interrupted atomic writes. If the exact
 list is acceptable, pass its `plan_digest` to `factory retention apply
 --older-than-days 30 --plan-digest DIGEST`. Apply rejects a changed plan and
-never selects completed manifests, patches, logs, change records, or other evidence.
-There is no automatic deletion. Plan a separate reviewed policy before
-deleting historical evidence.
+never selects completed manifests, patches, logs, change records, signed
+evidence bundles (`evidence/bundle.json`), detached signatures
+(`evidence/signature.json`), or other evidence. There is no automatic deletion.
+Plan a separate reviewed policy before deleting historical evidence; until
+then, retain bundles and signatures with the run records and keep them in every
+artifact-store backup and restore drill.
 Set `limits.artifact_bytes` to cap each durable artifact write (32 MiB by
 default). Oversized writes fail explicitly; use `limits.command_output_bytes`
 for the separate bound applied before Cube command output reaches the SDK.

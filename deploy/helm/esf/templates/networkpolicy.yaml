@@ -10,7 +10,18 @@ spec:
     matchLabels:
       app.kubernetes.io/name: {{ include "esf.name" . }}
   policyTypes: [Ingress, Egress]
-  ingress: []
+  ingress:
+    {{- if .Values.api.enabled }}
+    # The execution API is the only admitted ingress path. Workloads without
+    # an API listener receive no inbound traffic.
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: {{ include "esf.name" . }}, app.kubernetes.io/component: api}
+      ports:
+        - {protocol: TCP, port: {{ .Values.api.port }}}
+    {{- else }}
+    []
+    {{- end }}
   egress:
     - to:
         - namespaceSelector:
