@@ -668,3 +668,22 @@ func TestWorkItemWorkflowAcceptanceTimesOut(t *testing.T) {
 		t.Fatal("a timed-out acceptance marked the change done")
 	}
 }
+
+func TestWorkItemWorkflowWithdrawnAtIntakeUsesPersistedState(t *testing.T) {
+	connector := publicationFake()
+	// The connector cannot re-read the item, so the manifest's intake state is
+	// the authoritative fallback.
+	harness := publicationHarness(t, connector)
+	proposal := workItemProposal("1", "Bug", "Reproduction")
+	proposal.WorkItem.State = "Closed"
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{Proposal: proposal})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != workItemStatusWithdrawn {
+		t.Fatalf("status = %q, want %s", outcome.Status, workItemStatusWithdrawn)
+	}
+	if len(connector.Branches) != 0 || len(connector.Publications) != 0 {
+		t.Fatalf("a withdrawn intake published: %#v / %#v", connector.Branches, connector.Publications)
+	}
+}

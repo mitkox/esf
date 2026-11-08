@@ -38,6 +38,7 @@ type Fake struct {
 
 var _ Connector = (*Fake)(nil)
 var _ BranchPublisher = (*Fake)(nil)
+var _ BranchBuilder = (*Fake)(nil)
 var _ WorkItemStateReader = (*Fake)(nil)
 
 // NewFake creates a fake connector with the given capabilities.
@@ -86,6 +87,13 @@ func (f *Fake) ReadWorkItem(_ context.Context, id string) (WorkItem, error) {
 		return WorkItem{}, f.WorkItemReadErr
 	}
 	return WorkItem{ID: id, WorkItemFields: WorkItemFields{State: f.WorkItemState}}, nil
+}
+
+// PublishBranch records a branch publication and returns the configured result.
+// It is the compatibility path; the factory calls BuildBranch/PushBranch.
+func (f *Fake) PublishBranch(_ context.Context, req BranchPublication) (BranchPublicationResult, error) {
+	f.Branches = append(f.Branches, req)
+	return f.BranchResult, f.BranchErr
 }
 
 // BuildBranch records a host-side build and returns the configured tree

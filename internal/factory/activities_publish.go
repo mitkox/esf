@@ -132,9 +132,9 @@ func (a *Activities) PublishChange(ctx context.Context, in PublishChangeInput) (
 	if err != nil {
 		return a.failPublication(ctx, manifest, "connector_unavailable", err.Error(), AlertPublicationFailed, notify.SeverityWarning), nil
 	}
-	publisher, ok := connector.(forge.BranchPublisher)
+	publisher, ok := connector.(forge.BranchBuilder)
 	if !ok {
-		return a.failPublication(ctx, manifest, "connector_unavailable", "the forge connector cannot publish a branch", AlertPublicationFailed, notify.SeverityWarning), nil
+		return a.failPublication(ctx, manifest, "connector_unavailable", "the forge connector cannot build and gate a branch before pushing", AlertPublicationFailed, notify.SeverityWarning), nil
 	}
 	caps := connector.Capabilities()
 	if err := caps.Validate(); err != nil {
@@ -147,7 +147,9 @@ func (a *Activities) PublishChange(ctx context.Context, in PublishChangeInput) (
 			if readErr != nil {
 				return a.failPublication(ctx, manifest, "work_item_unavailable", readErr.Error(), AlertPublicationFailed, notify.SeverityWarning), nil
 			}
-			state = strings.TrimSpace(current.State)
+			if live := strings.TrimSpace(current.State); live != "" {
+				state = live
+			}
 		}
 		if workItemWithdrawn(state) {
 			return a.withdrawPublication(ctx, manifest, state), nil

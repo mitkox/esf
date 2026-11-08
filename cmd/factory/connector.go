@@ -88,7 +88,7 @@ sandbox.
 				return fmt.Errorf("connector telemetry: %w", err)
 			}
 			defer func() { _ = telemetry.Shutdown(context.Background()) }()
-			healthReporter, err := factory.NewConnectorHealthReporter(artifactFactory, telemetry, logger)
+			healthReporter, err := factory.NewConnectorHealthReporter(cfg, artifactFactory, telemetry, logger)
 			if err != nil {
 				return err
 			}
@@ -119,7 +119,11 @@ sandbox.
 // It reads every credential through Config.Connector and builds the adapter
 // through the same path the worker uses, so a connector cannot be configured
 // differently in the two workloads.
-func buildConnectorRuntime(cfg factory.Config, sink forge.IntakeSink, healthReporter *factory.ConnectorHealthReporter) ([]connector.Spec, error) {
+func buildConnectorRuntime(cfg factory.Config, sink forge.IntakeSink, reporters ...*factory.ConnectorHealthReporter) ([]connector.Spec, error) {
+	var healthReporter *factory.ConnectorHealthReporter
+	if len(reporters) > 0 {
+		healthReporter = reporters[0]
+	}
 	names := make([]string, 0, len(cfg.Connectors))
 	for name := range cfg.Connectors {
 		names = append(names, name)

@@ -504,7 +504,7 @@ type ConnectorHealthReporter struct {
 
 // NewConnectorHealthReporter builds an observability-only activity set. Only
 // ReportConnectorHealth is meaningful on it.
-func NewConnectorHealthReporter(artifactFactory artifacts.Factory, telemetry *Telemetry, logger *slog.Logger) (*ConnectorHealthReporter, error) {
+func NewConnectorHealthReporter(cfg Config, artifactFactory artifacts.Factory, telemetry *Telemetry, logger *slog.Logger) (*ConnectorHealthReporter, error) {
 	if artifactFactory == nil {
 		return nil, fmt.Errorf("connector health: artifact factory is required")
 	}
@@ -515,6 +515,7 @@ func NewConnectorHealthReporter(artifactFactory artifacts.Factory, telemetry *Te
 		artifactFactory: artifactFactory,
 		telemetry:       telemetry,
 		redactor:        NewRedactor(),
+		cfg:             cfg,
 		log:             logger,
 	}}, nil
 }

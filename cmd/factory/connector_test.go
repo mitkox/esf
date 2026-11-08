@@ -190,7 +190,7 @@ func TestConnectorHealthObserverWritesSweepSnapshot(t *testing.T) {
 		t.Fatalf("NewTelemetry: %v", err)
 	}
 	defer telemetry.Shutdown(context.Background())
-	reporter, err := factory.NewConnectorHealthReporter(artifactFactory, telemetry, nil)
+	reporter, err := factory.NewConnectorHealthReporter(factory.Default(), artifactFactory, telemetry, nil)
 	if err != nil {
 		t.Fatalf("NewConnectorHealthReporter: %v", err)
 	}

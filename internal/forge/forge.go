@@ -307,12 +307,18 @@ type BranchBuild struct {
 }
 
 // BranchPublisher is an optional connector capability: a forge adapter that
-// can build the branch a pull request needs and push it separately.
-//
-// The factory builds first, evaluates every publication gate against the built
-// tree, and only then calls PushBranch. A connector that cannot split the two
-// steps cannot enforce a pre-push gate and is not accepted as a publisher.
+// can create the branch a pull request needs. It remains the compatibility
+// contract for adapters written before pre-push gating existed.
 type BranchPublisher interface {
+	PublishBranch(ctx context.Context, req BranchPublication) (BranchPublicationResult, error)
+}
+
+// BranchBuilder is the publication capability the factory uses: build the
+// commit first, gate the built tree, then push.
+//
+// A connector that cannot split build from push cannot enforce a pre-push gate
+// and is refused publication rather than allowed to push before the gate.
+type BranchBuilder interface {
 	BuildBranch(ctx context.Context, req BranchPublication) (BranchBuild, error)
 	PushBranch(ctx context.Context, req BranchPublication, build BranchBuild) (BranchPublicationResult, error)
 	DiscardBranch(build BranchBuild)
