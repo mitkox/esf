@@ -86,6 +86,18 @@ artifact model already defines as the authoritative record of a finished run.
 It is not a substitute for the signed evidence bundle; that bundle is verified
 offline with `factory verify`.
 
+### Pipeline boundary (2026-11-08)
+
+The API remains the external submission surface. The first-party work-item
+pipeline is not an API client: it is the reference in-process consumer of the
+same submission contract. Both entry points pass their values through one
+shared preparation step that resolves unset operator defaults, normalizes the
+request and applies the shared validation, so the pipeline keeps its
+scope-aware harness and verification defaults and adds only its own work-item,
+forge-connector and review fields. A conformance test in `internal/factory`
+proves the two paths produce equal shared request fields and equal validation
+errors.
+
 ### Idempotent submission
 
 The workflow ID is derived from the run ID with the factory's existing

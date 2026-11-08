@@ -664,6 +664,22 @@ func recordWorkItemOutcome(ctx workflow.Context, acts *Activities, in WorkItemOu
 	}
 }
 
+// workItemRunRequest is the pipeline's in-process use of the shared submission
+// contract. The pipeline resolves the harness and verification profile for the
+// work item's scope and passes them in, so the shared step leaves those values
+// in place. The work item, forge connector and review override describe the
+// pipeline origin; they are added here rather than to the shared contract.
+func workItemRunRequest(cfg Config, sub Submission, workItem *WorkItemEvidence, connector string, review bool) (RunRequest, error) {
+	run, err := PrepareChangeRun(cfg, sub)
+	if err != nil {
+		return RunRequest{}, err
+	}
+	run.WorkItem = workItem
+	run.ForgeConnector = connector
+	run.Review = &review
+	return run, nil
+}
+
 // ResolveWorkItemIntake resolves operator mapping and resources, then claims
 // the durable intake record before any Change exists.
 func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResolveInput) (WorkItemResolution, error) {
@@ -741,33 +757,45 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
 		return resolution, nil
 	}
-	request := RunRequest{
+	// The run identity is derived before submission so the shared constructor
+	// validates the exact identifier the workflow will use.
+	resolution.AgentHarness = harness
+	resolution.Task = task
+	resolution.TaskHash = repository.HashTask(task)
+	resolution.ChangeID = WorkItemChangeID(connector, resolved.Repository, workItem.ID)
+	resolution.RunID = WorkItemRunID(connector, resolved.Repository, workItem.ID, workItem.Revision)
+	resolution.ActivationID = ChangeActivationWorkflowID(connector, resolved.Repository, workItem.ID, workItem.Revision)
+
+	// Pipeline runs use the forge pull request as acceptance. The pre-publication
+	// human gate is for CLI-driven runs; enabling it here would make a gate
+	// timeout look like forge acceptance.
+	request, err := workItemRunRequest(a.cfg, Submission{
+		RunID:               resolution.RunID,
 		Repository:          resolved.Repository,
-		RepositoryKind:      string(repository.SourceRemote),
 		Revision:            resolved.BaseBranch,
 		Task:                task,
 		AgentHarness:        harness,
 		VerificationProfile: resolved.VerificationProfile,
 		Scope:               scope,
-		ForgeConnector:      connector,
-		WorkItem: &WorkItemEvidence{
-			Connector:    connector,
-			Pipeline:     resolved.Pipeline,
-			ID:           workItem.ID,
-			Revision:     workItem.Revision,
-			Project:      workItem.Project,
-			State:        workItem.State,
-			SnapshotHash: proposal.WorkItemHash,
-			Repository:   resolved.Repository,
-			Source:       string(proposal.Source),
-			Actor:        actorEvidenceFor(actor, proposal.RepositoryPermission),
-		},
+		ChangeID:            resolution.ChangeID,
+	}, &WorkItemEvidence{
+		Connector:    connector,
+		Pipeline:     resolved.Pipeline,
+		ID:           workItem.ID,
+		Revision:     workItem.Revision,
+		Project:      workItem.Project,
+		State:        workItem.State,
+		SnapshotHash: proposal.WorkItemHash,
+		Repository:   resolved.Repository,
+		Source:       string(proposal.Source),
+		Actor:        actorEvidenceFor(actor, proposal.RepositoryPermission),
+	}, connector, false)
+	if err != nil {
+		resolution.Status = intakeStatusRejected
+		resolution.Reason = err.Error()
+		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
+		return resolution, nil
 	}
-	// Pipeline runs use the forge pull request as acceptance. The pre-publication
-	// human gate is for CLI-driven runs; enabling it here would make a gate
-	// timeout look like forge acceptance.
-	review := false
-	request.Review = &review
 
 	resources, err := a.cfg.ResolveResources(request)
 	if err != nil {
@@ -798,15 +826,6 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 	}
 	resolution.Scope = resources.Scope
 	resolution.VerificationProfile = request.VerificationProfile
-
-	resolution.AgentHarness = harness
-	resolution.Task = task
-	resolution.TaskHash = repository.HashTask(task)
-	resolution.ChangeID = WorkItemChangeID(connector, resolved.Repository, workItem.ID)
-	resolution.RunID = WorkItemRunID(connector, resolved.Repository, workItem.ID, workItem.Revision)
-	resolution.ActivationID = ChangeActivationWorkflowID(connector, resolved.Repository, workItem.ID, workItem.Revision)
-	request.RunID = resolution.RunID
-	request.ChangeID = resolution.ChangeID
 	resolution.Request = request
 
 	store, err := openIntakeStore(a.artifactFactory.Root())

@@ -126,13 +126,11 @@ func (c *apiController) lookupRunStatus(ctx context.Context, runID string) (fact
 }
 
 func (c *apiController) runRequest(request api.RunRequest) (factory.RunRequest, error) {
-	run := factory.RunRequest{
+	run, err := factory.PrepareChangeRun(c.config, factory.Submission{
 		RunID:               request.RunID,
 		Repository:          request.Repository,
-		RepositoryKind:      string(repository.SourceRemote),
 		Revision:            request.Revision,
 		Task:                request.Task,
-		SandboxTemplate:     c.config.Cube.TemplateID,
 		AgentHarness:        request.AgentHarness,
 		AgentModel:          request.AgentModel,
 		VerificationProfile: request.VerificationProfile,
@@ -142,24 +140,9 @@ func (c *apiController) runRequest(request api.RunRequest) (factory.RunRequest, 
 		EgressPolicy:        request.EgressPolicy,
 		ChangeID:            request.ChangeID,
 		ParentRunID:         request.ParentRunID,
-		AgentTimeout:        c.config.Limits.AgentTimeout.Std(),
-		VerificationTimeout: c.config.Limits.VerificationTimeout.Std(),
-		TotalTimeout:        c.config.Limits.TotalTimeout.Std(),
-	}
-	if run.AgentHarness == "" {
-		run.AgentHarness = firstHarnessName(c.config)
-	}
-	if run.VerificationProfile == "" {
-		run.VerificationProfile = firstProfileName(c.config)
-	}
-	if err := run.Validate(); err != nil {
+	})
+	if err != nil {
 		return factory.RunRequest{}, fmt.Errorf("%w: %v", api.ErrInvalidRequest, err)
-	}
-	// The run ID becomes a route segment and the artifact store's directory
-	// name. Refuse an identity the store cannot address before starting work
-	// that every later read would fail to find.
-	if err := artifacts.ValidateSegment(run.RunID); err != nil {
-		return factory.RunRequest{}, fmt.Errorf("%w: run_id %q must be one URL path segment", api.ErrInvalidRequest, run.RunID)
 	}
 	return run, nil
 }
