@@ -205,8 +205,11 @@ type AcceptanceRecord struct {
 	State       forge.AcceptanceState `json:"state"`
 	MergeCommit string                `json:"merge_commit,omitempty"`
 	MergeTree   string                `json:"merge_tree,omitempty"`
-	Note        string                `json:"note,omitempty"`
-	ReadAt      time.Time             `json:"read_at,omitempty"`
+	// SourceCommit is the merge-source commit the forge reported, kept for
+	// audit. Acceptance does not depend on it when the record is older.
+	SourceCommit string    `json:"source_commit,omitempty"`
+	Note         string    `json:"note,omitempty"`
+	ReadAt       time.Time `json:"read_at,omitempty"`
 	// Votes and the actors below are observations, not permissions: ESF never
 	// approves or merges a pull request.
 	Votes             []forge.ApprovalVote `json:"votes,omitempty"`

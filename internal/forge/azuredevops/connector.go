@@ -210,6 +210,7 @@ type azurePullRequest struct {
 	LastMergeSourceCommit azureCommitRef `json:"lastMergeSourceCommit"`
 	LastMergeTargetCommit azureCommitRef `json:"lastMergeTargetCommit"`
 	ClosedDate            string         `json:"closedDate"`
+	CreationDate          string         `json:"creationDate"`
 	Reviewers             []struct {
 		ID          string `json:"id"`
 		DisplayName string `json:"displayName"`
@@ -248,14 +249,18 @@ func (c *Client) Publish(ctx context.Context, plan forge.PublicationPlan) (forge
 		return forge.PublishResult{}, fmt.Errorf("azuredevops: source and target branches are required")
 	}
 
-	existing, err := c.findActivePullRequest(ctx, project, repo, sourceRef)
+	existing, err := c.findPullRequest(ctx, project, repo, sourceRef, "all")
 	if err != nil {
 		// Do not create a second pull request when the idempotency lookup
 		// itself failed: publication must be retryable without duplicates.
 		return forge.PublishResult{}, err
 	}
 	if existing != nil {
-		if plan.Attachment != nil && c.Capabilities().Attachments {
+		// A completed or abandoned pull request is the deterministic
+		// publication for this source ref. Reuse it and let acceptance read its
+		// terminal state instead of opening a second pull request.
+		active := strings.EqualFold(strings.TrimSpace(existing.Status), "active")
+		if active && plan.Attachment != nil && c.Capabilities().Attachments {
 			// Attaching by the fixed bundle name makes a retry update the same
 			// attachment rather than creating a second pull request.
 			if err := c.attach(ctx, project, repo, existing.PullRequestID, *plan.Attachment); err != nil {
@@ -360,11 +365,19 @@ func (c *Client) ReadAcceptance(ctx context.Context, req forge.AcceptanceRequest
 }
 
 func (c *Client) findActivePullRequest(ctx context.Context, project, repo, sourceRef string) (*azurePullRequest, error) {
+	return c.findPullRequest(ctx, project, repo, sourceRef, "active")
+}
+
+// findPullRequest returns the newest pull request for a source ref with the
+// requested status. An empty status searches every status.
+func (c *Client) findPullRequest(ctx context.Context, project, repo, sourceRef, status string) (*azurePullRequest, error) {
 	endpoint := c.apiURL(project, "_apis", "git", "repositories", repo, "pullRequests")
 	query := endpoint.Query()
 	query.Set("api-version", apiVersion)
 	query.Set("searchCriteria.sourceRefName", sourceRef)
-	query.Set("searchCriteria.status", "active")
+	if strings.TrimSpace(status) != "" {
+		query.Set("searchCriteria.status", status)
+	}
 	endpoint.RawQuery = query.Encode()
 	body, err := c.get(ctx, endpoint)
 	if err != nil {
@@ -379,8 +392,31 @@ func (c *Client) findActivePullRequest(ctx context.Context, project, repo, sourc
 	if len(response.Value) == 0 {
 		return nil, nil
 	}
-	existing := response.Value[0]
-	return &existing, nil
+	newest := response.Value[0]
+	for _, candidate := range response.Value[1:] {
+		if pullRequestNewer(candidate, newest) {
+			newest = candidate
+		}
+	}
+	return &newest, nil
+}
+
+// pullRequestNewer orders pull requests by creation time, falling back to the
+// numeric id when the forge omits or malforms the timestamp.
+func pullRequestNewer(candidate, current azurePullRequest) bool {
+	candidateTime, candidateErr := time.Parse(time.RFC3339, strings.TrimSpace(candidate.CreationDate))
+	currentTime, currentErr := time.Parse(time.RFC3339, strings.TrimSpace(current.CreationDate))
+	switch {
+	case candidateErr == nil && currentErr == nil:
+		if !candidateTime.Equal(currentTime) {
+			return candidateTime.After(currentTime)
+		}
+	case candidateErr == nil:
+		return true
+	case currentErr == nil:
+		return false
+	}
+	return candidate.PullRequestID > current.PullRequestID
 }
 
 func (c *Client) attach(ctx context.Context, project, repo string, pullRequestID int64, attachment forge.Attachment) error {

@@ -324,6 +324,9 @@ func WorkItemWorkflow(ctx workflow.Context, in WorkItemWorkflowInput) (WorkItemO
 					recordStatus = intakeRecordFailed
 				case acceptance != nil && acceptance.TimedOut:
 					outcome.Status = workItemStatusAcceptanceTimeout
+					if !acceptance.Read {
+						outcome.Status = workItemStatusAcceptanceUnknown
+					}
 				case acceptance != nil && acceptance.Drift:
 					outcome.Status = workItemStatusAcceptanceDrift
 					recordStatus = intakeRecordFailed
@@ -535,15 +538,18 @@ func publishAndReadAcceptance(
 		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "ReadFailed", err.Error())
 		return publication, nil, err
 	}
+	outcome.Acceptance = acceptance.Acceptance
+	if acceptance.TimedOut {
+		message := "the pull request stayed open for the maximum acceptance wait"
+		if acceptance.Note != "" {
+			message = acceptance.Note
+		}
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "TimedOut", message)
+		return publication, &acceptance, nil
+	}
 	if !acceptance.Read {
 		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "NoPullRequest",
 			"the forge did not report a pull request to observe")
-		return publication, &acceptance, nil
-	}
-	outcome.Acceptance = acceptance.Acceptance
-	if acceptance.TimedOut {
-		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "TimedOut",
-			"the pull request stayed open for the maximum acceptance wait")
 		return publication, &acceptance, nil
 	}
 	switch acceptance.Decision {
@@ -585,29 +591,41 @@ func readAcceptanceBounded(
 		return out, err
 	}
 	first, err := read()
-	if err != nil {
-		return ReadPublicationAcceptanceOutput{}, err
-	}
 	if !poll {
-		return first, nil
+		return first, err
 	}
 	deadline := workflow.Now(ctx).Add(workItemAcceptanceMaxWait)
 	out := first
+	readFailed := err != nil
+	var lastReadErr error
+	if readFailed {
+		lastReadErr = err
+	}
 	for {
-		if acceptanceTerminal(out) || out.TimedOut {
+		if !readFailed && (acceptanceTerminal(out) || out.TimedOut) {
 			return out, nil
 		}
 		if !workflow.Now(ctx).Before(deadline) {
 			out.TimedOut = true
+			if readFailed {
+				out.Note = fmt.Sprintf("the acceptance state could not be read before the deadline: %v", lastReadErr)
+			}
 			return out, nil
 		}
 		if err := workflow.NewTimer(ctx, workItemAcceptancePollInterval).Get(ctx, nil); err != nil {
 			return out, err
 		}
-		out, err = read()
+		next, err := read()
 		if err != nil {
-			return ReadPublicationAcceptanceOutput{}, err
+			// A transient forge read must not end the wait: keep the last
+			// successful output and poll again until the deadline.
+			readFailed = true
+			lastReadErr = err
+			continue
 		}
+		out = next
+		readFailed = false
+		lastReadErr = nil
 	}
 }
 

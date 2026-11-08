@@ -338,7 +338,9 @@ func (a *Activities) PublishChange(ctx context.Context, in PublishChangeInput) (
 }
 
 // ReadPublicationAcceptance reads the forge merge state. A merged pull request
-// marks the change done only when its tree matches the published tree.
+// marks the change done when its merge-source commit matches the commit the
+// publication record already stores; matching trees remain the fallback for an
+// observation without a source commit.
 func (a *Activities) ReadPublicationAcceptance(ctx context.Context, in ReadPublicationAcceptanceInput) (ReadPublicationAcceptanceOutput, error) {
 	if strings.TrimSpace(in.RunID) == "" {
 		return ReadPublicationAcceptanceOutput{}, fmt.Errorf("acceptance: a run id is required")
@@ -498,9 +500,9 @@ func (a *Activities) ReadPublicationAcceptance(ctx context.Context, in ReadPubli
 		out.Drift = true
 		out.Note = outcome.Note
 		manifest = a.appendManifestAlert(ctx, manifest, a.raiseAlert(ctx, manifest.RunID, AlertAcceptanceDrift, notify.SeverityWarning,
-			"merged pull request tree does not match the evidenced tree", map[string]string{
+			"merged pull request does not match the published change", map[string]string{
 				"pull_request": pullRequestID, "merge_commit": result.MergeCommit,
-				"merge_tree": result.MergeTree,
+				"merge_tree": result.MergeTree, "source_commit": result.SourceCommit,
 			}))
 		manifest.Conditions = SetCondition(manifest.Conditions, Condition{
 			Type: ConditionAcceptance, Status: ConditionFalse, Reason: "Drift",

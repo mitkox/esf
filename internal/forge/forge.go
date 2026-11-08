@@ -372,8 +372,10 @@ func (s AcceptanceState) Valid() bool {
 
 // AcceptanceResult is the acceptance state read from the forge.
 //
-// MergeTree is the tree of the merge commit. The factory accepts a merged pull
-// request only when it matches the tree derived from the evidenced patch.
+// SourceCommit is the merge-source commit. A merged pull request is accepted
+// when it matches the commit recorded at publication; MergeTree is the tree of
+// the merge commit and is the fallback comparison when the forge reports no
+// source commit.
 type AcceptanceResult struct {
 	PullRequest       PullRequest
 	State             AcceptanceState

@@ -226,28 +226,49 @@ func (s *publicationStore) RecordAcceptance(ctx context.Context, event publicati
 				outcome = publicationAcceptanceOutcome{Decision: publicationDecisionAlreadyApplied, Record: rec}
 				return nil
 			}
+			observedSource := strings.TrimSpace(event.Result.SourceCommit)
+			storedCommit := strings.TrimSpace(rec.Commit)
+			sourceMatches := observedSource != "" && storedCommit != "" && strings.EqualFold(storedCommit, observedSource)
+			// Tree equality is only a fallback: it cannot distinguish a moved
+			// base from a different change, and it is the only comparison an
+			// older record or an older forge observation can support.
+			treeFallback := observedSource == "" || storedCommit == ""
+			treeMatches := strings.TrimSpace(event.Result.MergeTree) != "" &&
+				strings.TrimSpace(rec.Tree) != "" &&
+				strings.EqualFold(strings.TrimSpace(rec.Tree), strings.TrimSpace(event.Result.MergeTree))
 			switch {
 			case mergeCommit == "":
 				applyAcceptance(&rec, event, now)
 				rec.Acceptance.Note = "merged pull request did not report a merge commit"
 				state.Records[key] = rec
 				outcome = publicationAcceptanceOutcome{Decision: publicationDecisionDrift, Record: rec, Note: rec.Acceptance.Note}
-			case strings.TrimSpace(event.Result.MergeTree) == "":
-				applyAcceptance(&rec, event, now)
-				rec.Acceptance.Note = "merged pull request did not report a merge tree"
-				state.Records[key] = rec
-				outcome = publicationAcceptanceOutcome{Decision: publicationDecisionDrift, Record: rec, Note: rec.Acceptance.Note}
-			case strings.TrimSpace(rec.Tree) == "" || !strings.EqualFold(strings.TrimSpace(rec.Tree), strings.TrimSpace(event.Result.MergeTree)):
-				applyAcceptance(&rec, event, now)
-				rec.Acceptance.Note = fmt.Sprintf("merged tree %s does not match the evidenced tree %s", event.Result.MergeTree, rec.Tree)
-				state.Records[key] = rec
-				outcome = publicationAcceptanceOutcome{Decision: publicationDecisionDrift, Record: rec, Note: rec.Acceptance.Note}
-			default:
+			case sourceMatches:
 				applyAcceptance(&rec, event, now)
 				rec.Acceptance.Note = ""
 				rec.LastMergeCommit = mergeCommit
 				state.Records[key] = rec
 				outcome = publicationAcceptanceOutcome{Decision: publicationDecisionAccepted, Record: rec}
+			case strings.TrimSpace(event.Result.MergeTree) == "":
+				applyAcceptance(&rec, event, now)
+				rec.Acceptance.Note = "merged pull request did not report a merge tree"
+				state.Records[key] = rec
+				outcome = publicationAcceptanceOutcome{Decision: publicationDecisionDrift, Record: rec, Note: rec.Acceptance.Note}
+			case treeFallback && treeMatches:
+				applyAcceptance(&rec, event, now)
+				rec.Acceptance.Note = ""
+				rec.LastMergeCommit = mergeCommit
+				state.Records[key] = rec
+				outcome = publicationAcceptanceOutcome{Decision: publicationDecisionAccepted, Record: rec}
+			case observedSource != "" && storedCommit != "":
+				applyAcceptance(&rec, event, now)
+				rec.Acceptance.Note = fmt.Sprintf("merged source commit %s does not match the published commit %s", observedSource, storedCommit)
+				state.Records[key] = rec
+				outcome = publicationAcceptanceOutcome{Decision: publicationDecisionDrift, Record: rec, Note: rec.Acceptance.Note}
+			default:
+				applyAcceptance(&rec, event, now)
+				rec.Acceptance.Note = fmt.Sprintf("merged tree %s does not match the evidenced tree %s", event.Result.MergeTree, rec.Tree)
+				state.Records[key] = rec
+				outcome = publicationAcceptanceOutcome{Decision: publicationDecisionDrift, Record: rec, Note: rec.Acceptance.Note}
 			}
 		}
 		return nil
@@ -260,6 +281,7 @@ func applyAcceptance(rec *publicationRecord, event publicationAcceptanceEvent, n
 		State:             event.Result.State,
 		MergeCommit:       strings.TrimSpace(event.Result.MergeCommit),
 		MergeTree:         strings.TrimSpace(event.Result.MergeTree),
+		SourceCommit:      strings.TrimSpace(event.Result.SourceCommit),
 		Votes:             append([]forge.ApprovalVote(nil), event.Result.Votes...),
 		AutoCompleteSetBy: strings.TrimSpace(event.Result.AutoCompleteSetBy),
 		ClosedBy:          strings.TrimSpace(event.Result.ClosedBy),

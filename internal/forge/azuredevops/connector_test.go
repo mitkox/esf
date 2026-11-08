@@ -111,6 +111,106 @@ func TestPublishReusesExistingPullRequest(t *testing.T) {
 	}
 }
 
+func TestPublishReusesCompletedPullRequest(t *testing.T) {
+	t.Parallel()
+
+	var created bool
+	server := newForgeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/acme/Payments/_apis/git/repositories/payments/pullRequests":
+		default:
+			t.Errorf("unexpected request path %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			if r.URL.Query().Get("searchCriteria.sourceRefName") != "refs/heads/esf/work-item-42-r7" {
+				t.Errorf("search query = %q", r.URL.RawQuery)
+			}
+			if r.URL.Query().Get("searchCriteria.status") == "active" {
+				writeFixture(w, []byte(`{"value":[]}`))
+				return
+			}
+			writeFixture(w, []byte(`{"value":[
+				{"pullRequestId":16,"status":"abandoned","creationDate":"2026-11-08T09:00:00Z"},
+				{"pullRequestId":17,"status":"completed","creationDate":"2026-11-08T11:00:00Z"}]}`))
+		case http.MethodPost:
+			created = true
+			writeFixture(w, []byte(`{"pullRequestId":18,"status":"active"}`))
+		default:
+			http.Error(w, "method", http.StatusMethodNotAllowed)
+		}
+	})
+	client := newTestClient(t, server.URL()+"/acme", RetryPolicy{MaxAttempts: 1})
+	result, err := client.Publish(context.Background(), forge.PublicationPlan{
+		Repository: server.URL() + "/acme/Payments/_git/payments",
+		BaseBranch: "main",
+		Branch:     "esf/work-item-42-r7",
+		Title:      "Fix the retry loop",
+		Body:       "Summary.\n\nEvidence bundle digest: sha256:" + strings.Repeat("a", 64),
+		Draft:      true,
+		Attachment: &forge.Attachment{Name: forge.EvidenceBundleAttachmentName, MediaType: "application/octet-stream"},
+	})
+	if err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	if created {
+		t.Fatal("a retry after a completed pull request created a second pull request")
+	}
+	if result.PullRequest.ID != "17" {
+		t.Fatalf("pull request = %#v, want the completed pull request", result.PullRequest)
+	}
+	if !strings.Contains(result.PullRequest.URL, "/pullrequest/17") {
+		t.Fatalf("pull request URL = %q", result.PullRequest.URL)
+	}
+}
+
+func TestPublishReusesAbandonedPullRequest(t *testing.T) {
+	t.Parallel()
+
+	var created bool
+	server := newForgeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/acme/Payments/_apis/git/repositories/payments/pullRequests" {
+			t.Errorf("unexpected request path %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			if r.URL.Query().Get("searchCriteria.status") == "active" {
+				writeFixture(w, []byte(`{"value":[]}`))
+				return
+			}
+			writeFixture(w, []byte(`{"value":[{"pullRequestId":17,"status":"abandoned","creationDate":"2026-11-08T11:00:00Z"}]}`))
+		case http.MethodPost:
+			created = true
+			writeFixture(w, []byte(`{"pullRequestId":18,"status":"active"}`))
+		default:
+			http.Error(w, "method", http.StatusMethodNotAllowed)
+		}
+	})
+	client := newTestClient(t, server.URL()+"/acme", RetryPolicy{MaxAttempts: 1})
+	result, err := client.Publish(context.Background(), forge.PublicationPlan{
+		Repository: server.URL() + "/acme/Payments/_git/payments",
+		BaseBranch: "main",
+		Branch:     "esf/work-item-42-r7",
+		Title:      "Fix the retry loop",
+		Body:       "Summary.\n\nEvidence bundle digest: sha256:" + strings.Repeat("a", 64),
+		Draft:      true,
+		Attachment: &forge.Attachment{Name: forge.EvidenceBundleAttachmentName, MediaType: "application/octet-stream"},
+	})
+	if err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	if created {
+		t.Fatal("a retry after an abandoned pull request created a second pull request")
+	}
+	if result.PullRequest.ID != "17" {
+		t.Fatalf("pull request = %#v, want the abandoned pull request", result.PullRequest)
+	}
+}
+
 func TestReadAcceptanceMapsForgeState(t *testing.T) {
 	t.Parallel()
 

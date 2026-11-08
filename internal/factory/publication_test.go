@@ -45,13 +45,29 @@ func publicationFake() *forge.Fake {
 	return fake
 }
 
-func publicationHarness(t *testing.T, connector *forge.Fake) *workItemTestEnvironment {
+func publicationHarness(t *testing.T, connector forge.Connector) *workItemTestEnvironment {
 	t.Helper()
 	keyPath, _ := writeSigningKey(t)
 	return newWorkItemTestEnvironment(t, "",
 		withWorkItemConfig(enableEvidenceSigning(keyPath)),
 		withWorkItemConnector("azdo", connector),
 	)
+}
+
+// transientAcceptanceConnector fails a fixed number of acceptance reads before
+// delegating to the fake. The activity retries each read, so failures are
+// consumed by whole polling rounds rather than by a single read.
+type transientAcceptanceConnector struct {
+	*forge.Fake
+	remainingFailures int
+}
+
+func (c *transientAcceptanceConnector) ReadAcceptance(ctx context.Context, req forge.AcceptanceRequest) (forge.AcceptanceResult, error) {
+	if c.remainingFailures > 0 {
+		c.remainingFailures--
+		return forge.AcceptanceResult{}, errors.New("transient forge read failure")
+	}
+	return c.Fake.ReadAcceptance(ctx, req)
 }
 
 func TestWorkItemWorkflowPublishesDraftAndAcceptsMergedPullRequest(t *testing.T) {
@@ -366,6 +382,120 @@ func TestWorkItemWorkflowAcceptanceDriftDoesNotMarkDone(t *testing.T) {
 	}
 	if manifest.Hardening == nil || len(manifest.Hardening.Alerts) == 0 || manifest.Hardening.Alerts[0].Kind != AlertAcceptanceDrift {
 		t.Fatalf("drift alert = %#v", manifest.Hardening)
+	}
+}
+
+func TestWorkItemWorkflowAcceptsMergeAfterBaseMoved(t *testing.T) {
+	connector := publicationFake()
+	// The target branch advanced after publication, so the merge tree differs
+	// from the evidenced tree even though the forge merged the published
+	// commit.
+	connector.AcceptanceResult.MergeTree = "tree-after-base-advanced"
+	connector.AcceptanceResult.SourceCommit = "commit-1"
+	harness := publicationHarness(t, connector)
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Bug", "Reproduction"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != string(StateSucceeded) {
+		t.Fatalf("status = %q (conditions: %#v)", outcome.Status, outcome.Conditions)
+	}
+	acceptance := conditionByType(t, outcome.Conditions, ConditionAcceptance)
+	if acceptance.Status != ConditionTrue || acceptance.Reason != "Merged" {
+		t.Fatalf("acceptance condition = %#v", acceptance)
+	}
+	if outcome.Acceptance == nil || outcome.Acceptance.SourceCommit != "commit-1" {
+		t.Fatalf("observed source commit was not kept for audit: %#v", outcome.Acceptance)
+	}
+	changes, err := NewChangeStore(harness.artifactDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	change, err := changes.Load(outcome.Runs[0].ChangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if change.Status != ChangeDone {
+		t.Fatalf("change status = %s, want DONE", change.Status)
+	}
+}
+
+func TestWorkItemWorkflowRejectsMismatchedMergeSourceCommit(t *testing.T) {
+	connector := publicationFake()
+	// A different commit was merged; the merge tree differs too, so the
+	// publication is not the evidenced change.
+	connector.AcceptanceResult.SourceCommit = "commit-other"
+	connector.AcceptanceResult.MergeTree = "tree-other"
+	harness := publicationHarness(t, connector)
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Bug", "Reproduction"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != workItemStatusAcceptanceDrift {
+		t.Fatalf("status = %q, want acceptance_drift", outcome.Status)
+	}
+	acceptance := conditionByType(t, outcome.Conditions, ConditionAcceptance)
+	if acceptance.Status != ConditionFalse || acceptance.Reason != "Drift" {
+		t.Fatalf("acceptance condition = %#v", acceptance)
+	}
+	changes, err := NewChangeStore(harness.artifactDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	change, err := changes.Load(outcome.Runs[0].ChangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if change.Status == ChangeDone {
+		t.Fatal("a mismatched merge source commit marked the change done")
+	}
+}
+
+func TestWorkItemWorkflowPollsThroughAcceptanceReadFailures(t *testing.T) {
+	fake := publicationFake()
+	connector := &transientAcceptanceConnector{Fake: fake, remainingFailures: 6}
+	harness := publicationHarness(t, connector)
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Bug", "Reproduction"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != string(StateSucceeded) {
+		t.Fatalf("status = %q (conditions: %#v)", outcome.Status, outcome.Conditions)
+	}
+	acceptance := conditionByType(t, outcome.Conditions, ConditionAcceptance)
+	if acceptance.Status != ConditionTrue || acceptance.Reason != "Merged" {
+		t.Fatalf("acceptance condition = %#v", acceptance)
+	}
+	if len(fake.Acceptances) == 0 {
+		t.Fatal("acceptance was never read successfully")
+	}
+}
+
+func TestWorkItemWorkflowAcceptanceReadFailuresTimeOut(t *testing.T) {
+	fake := publicationFake()
+	connector := &transientAcceptanceConnector{Fake: fake, remainingFailures: 1 << 20}
+	harness := publicationHarness(t, connector)
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Bug", "Reproduction"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != workItemStatusAcceptanceUnknown {
+		t.Fatalf("status = %q, want %s", outcome.Status, workItemStatusAcceptanceUnknown)
+	}
+	acceptance := conditionByType(t, outcome.Conditions, ConditionAcceptance)
+	if acceptance.Status != ConditionUnknown || acceptance.Reason != "TimedOut" {
+		t.Fatalf("acceptance condition = %#v", acceptance)
+	}
+	if outcome.PullRequest == nil || outcome.PullRequest.ID != "17" {
+		t.Fatalf("unresolved acceptance lost the published pull request: %#v", outcome.PullRequest)
 	}
 }
 
