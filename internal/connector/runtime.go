@@ -185,14 +185,20 @@ func New(specs []Spec, opts Options) (*Runtime, error) {
 			return nil, fmt.Errorf("connector %q: a candidate deliverer is required", spec.Name)
 		}
 		if spec.WebhookHandler == nil {
-			return nil, fmt.Errorf("connector %q: a webhook handler is required", spec.Name)
-		}
-		spec.WebhookListen = strings.TrimSpace(spec.WebhookListen)
-		if spec.WebhookListen == "" {
-			return nil, fmt.Errorf("connector %q: a webhook listen address is required", spec.Name)
-		}
-		if err := httpsecurity.ValidateListen(spec.WebhookListen, spec.TLSConfig != nil); err != nil {
-			return nil, fmt.Errorf("connector %q: webhook listener: %w", spec.Name, err)
+			// A sweep-only connector never binds an inbound listener. Reject a
+			// configured address or TLS without a handler instead of silently
+			// ignoring them.
+			if strings.TrimSpace(spec.WebhookListen) != "" || spec.TLSConfig != nil {
+				return nil, fmt.Errorf("connector %q: a webhook listener requires a webhook handler", spec.Name)
+			}
+		} else {
+			spec.WebhookListen = strings.TrimSpace(spec.WebhookListen)
+			if spec.WebhookListen == "" {
+				return nil, fmt.Errorf("connector %q: a webhook listen address is required", spec.Name)
+			}
+			if err := httpsecurity.ValidateListen(spec.WebhookListen, spec.TLSConfig != nil); err != nil {
+				return nil, fmt.Errorf("connector %q: webhook listener: %w", spec.Name, err)
+			}
 		}
 		copied = append(copied, spec)
 	}
@@ -230,6 +236,9 @@ func (r *Runtime) Run(ctx context.Context) error {
 		}
 	}
 	for _, spec := range r.specs {
+		if spec.WebhookHandler == nil {
+			continue
+		}
 		listener, err := net.Listen("tcp", spec.WebhookListen)
 		if err != nil {
 			closeListeners()

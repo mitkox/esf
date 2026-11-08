@@ -143,6 +143,10 @@ local_paths = []
 # kind       = "azuredevops"
 # base_url   = "https://dev.azure.com/acme"
 # token_file = "/run/credentials/factory-worker.service/azuredevops-token"
+# # The webhook receiver authenticates forge service hooks with its own
+# # credential, never the outbound token, which can write to the repository.
+# webhook_username = "factory"
+# webhook_secret_file = "/run/credentials/factory-connector.service/webhook-secret"
 # # The connector workload binds each webhook receiver on loopback by default.
 # # A non-loopback address requires native TLS. Give every connector its own
 # # address when more than one is configured.

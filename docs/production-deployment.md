@@ -71,9 +71,12 @@ never a value in the configuration:
 
 ```toml
 [connectors.azuredevops]
-kind       = "azuredevops"
-base_url   = "https://dev.azure.com/acme"
-token_file = "/etc/factory/secrets/azuredevops-token"
+kind                = "azuredevops"
+base_url            = "https://dev.azure.com/acme"
+token_file          = "/etc/factory/secrets/azuredevops-token"
+webhook_listen      = "127.0.0.1:8091"
+webhook_username    = "esf-hooks"
+webhook_secret_file = "/etc/factory/secrets/azuredevops-webhook"
 
 [pipelines.bugfix]
 connector = "azuredevops"
@@ -90,10 +93,29 @@ base_branch          = "main"
 verification_profile = "default"
 ```
 
-Create the token as a regular file owned by `factory` with mode `0600`; the
-worker restarts and rejects it if it is group- or other-readable, a symlink, or
-unavailable. The token is read only on the host and is never injected into a
-Cube sandbox.
+Create both credentials as regular files owned by `factory` with mode `0600`; the
+worker restarts and rejects a credential that is group- or other-readable, a
+symlink, or unavailable. The outbound `token_file` authenticates API calls and
+git pushes. The inbound `webhook_username`/`webhook_secret_file` pair
+authenticates service-hook deliveries and cannot write to a repository. A
+webhook-configured connector requires the inbound pair: `factory connector`
+and `factory doctor --profile production` fail closed when it is missing or
+unsafe. A connector with no `webhook_listen` and no inbound credential runs
+reconciliation only and binds no listener. The token is read only on the host
+and is never injected into a Cube sandbox.
+
+Generate the inbound secret independently of the PAT so rotating it does not
+rotate repository credentials:
+
+```sh
+sudo sh -c 'umask 077; openssl rand -hex 32 > /etc/factory/secrets/azuredevops-webhook'
+sudo chown factory:factory /etc/factory/secrets/azuredevops-webhook
+```
+
+Migration: a connector that already sets `webhook_listen` or TLS files must add
+`webhook_username` and `webhook_secret_file` before upgrading; the connector
+workload and the production doctor refuse the configuration until it does. A
+sweep-only connector needs no change.
 
 ### Evidence signing key
 

@@ -38,6 +38,20 @@ func (s *captureSink) snapshot() ([]forge.Proposal, []forge.Rejection) {
 	return append([]forge.Proposal(nil), s.proposals...), append([]forge.Rejection(nil), s.rejections...)
 }
 
+const (
+	webhookTestUsername = "esf-hooks"
+	webhookTestPassword = "hook-secret"
+)
+
+func webhookTestSecret(t *testing.T) forge.Credential {
+	t.Helper()
+	credential, err := forge.ReadCredential(writeCredentialFile(t, webhookTestPassword))
+	if err != nil {
+		t.Fatalf("read webhook credential: %v", err)
+	}
+	return credential
+}
+
 func newWebhookHarness(t *testing.T, aclFixture string, mutate ...func(*WebhookConfig)) (*forgeServer, *captureSink, *Webhook) {
 	t.Helper()
 	server := newForgeServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -60,6 +74,8 @@ func newWebhookHarness(t *testing.T, aclFixture string, mutate ...func(*WebhookC
 	sink := &captureSink{}
 	cfg := WebhookConfig{
 		Connector: "azdo",
+		Username:  webhookTestUsername,
+		Secret:    webhookTestSecret(t),
 		Sink:      sink,
 		Repositories: forge.RepositoryResolverFunc(func(forge.WorkItemFields) (string, error) {
 			return server.URL() + "/acme/Payments/_git/payments", nil
@@ -89,7 +105,7 @@ func TestWebhookAcceptsMappedUpdateFromReFetchedWorkItem(t *testing.T) {
 	t.Parallel()
 
 	server, sink, webhook := newWebhookHarness(t, "acl-allow.json")
-	response := postWebhook(t, webhook, readFixture(t, "webhook-updated-mapped.json"), "esf", "pat")
+	response := postWebhook(t, webhook, readFixture(t, "webhook-updated-mapped.json"), webhookTestUsername, webhookTestPassword)
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202", response.Code)
 	}
@@ -156,10 +172,10 @@ func TestWebhookCountsDuplicateDeliveryOnce(t *testing.T) {
 
 	server, sink, webhook := newWebhookHarness(t, "acl-allow.json")
 	body := readFixture(t, "webhook-updated-mapped.json")
-	if response := postWebhook(t, webhook, body, "esf", "pat"); response.Code != http.StatusAccepted {
+	if response := postWebhook(t, webhook, body, webhookTestUsername, webhookTestPassword); response.Code != http.StatusAccepted {
 		t.Fatalf("first delivery status = %d", response.Code)
 	}
-	if response := postWebhook(t, webhook, body, "esf", "pat"); response.Code != http.StatusNoContent {
+	if response := postWebhook(t, webhook, body, webhookTestUsername, webhookTestPassword); response.Code != http.StatusNoContent {
 		t.Fatalf("duplicate delivery status = %d, want 204", response.Code)
 	}
 	proposals, _ := sink.snapshot()
@@ -178,7 +194,7 @@ func TestWebhookFiltersUnrelatedFieldUpdate(t *testing.T) {
 	t.Parallel()
 
 	server, sink, webhook := newWebhookHarness(t, "acl-allow.json")
-	response := postWebhook(t, webhook, readFixture(t, "webhook-updated-unrelated.json"), "esf", "pat")
+	response := postWebhook(t, webhook, readFixture(t, "webhook-updated-unrelated.json"), webhookTestUsername, webhookTestPassword)
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", response.Code)
 	}
@@ -198,7 +214,7 @@ func TestWebhookRejectsInvalidCredentialsBeforeParsing(t *testing.T) {
 	t.Parallel()
 
 	server, sink, webhook := newWebhookHarness(t, "acl-allow.json")
-	response := postWebhook(t, webhook, []byte("{not valid json"), "esf", "wrong")
+	response := postWebhook(t, webhook, []byte("{not valid json"), webhookTestUsername, "wrong")
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", response.Code)
 	}
@@ -221,7 +237,7 @@ func TestWebhookAuditsActorWithoutRepositoryWrite(t *testing.T) {
 	t.Parallel()
 
 	_, sink, webhook := newWebhookHarness(t, "acl-read-only.json")
-	response := postWebhook(t, webhook, readFixture(t, "webhook-updated-mapped.json"), "esf", "pat")
+	response := postWebhook(t, webhook, readFixture(t, "webhook-updated-mapped.json"), webhookTestUsername, webhookTestPassword)
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", response.Code)
 	}
@@ -250,7 +266,7 @@ func TestWebhookBoundsBodyBeforeParsing(t *testing.T) {
 	server, sink, webhook := newWebhookHarness(t, "acl-allow.json", func(cfg *WebhookConfig) {
 		cfg.MaxBodyBytes = 64
 	})
-	response := postWebhook(t, webhook, readFixture(t, "webhook-updated-mapped.json"), "esf", "pat")
+	response := postWebhook(t, webhook, readFixture(t, "webhook-updated-mapped.json"), webhookTestUsername, webhookTestPassword)
 	if response.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want 413", response.Code)
 	}
@@ -260,5 +276,51 @@ func TestWebhookBoundsBodyBeforeParsing(t *testing.T) {
 	}
 	if requests := server.Requests(); len(requests) != 0 {
 		t.Fatalf("oversized delivery made %d forge requests", len(requests))
+	}
+}
+
+func TestWebhookRejectsOutboundCredential(t *testing.T) {
+	t.Parallel()
+
+	server, sink, webhook := newWebhookHarness(t, "acl-allow.json")
+	response := postWebhook(t, webhook, readFixture(t, "webhook-updated-mapped.json"), "esf", "pat")
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 for the outbound forge credential", response.Code)
+	}
+	proposals, rejections := sink.snapshot()
+	if len(proposals) != 0 || len(rejections) != 0 {
+		t.Fatalf("proposals = %d, rejections = %d, want none", len(proposals), len(rejections))
+	}
+	if requests := server.Requests(); len(requests) != 0 {
+		t.Fatalf("an outbound credential made %d forge requests", len(requests))
+	}
+}
+
+func TestNewWebhookRequiresDedicatedCredential(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(t, "https://dev.azure.com/acme", RetryPolicy{MaxAttempts: 1})
+	resolver := forge.RepositoryResolverFunc(func(forge.WorkItemFields) (string, error) {
+		return "https://dev.azure.com/acme/payments/_git/payments", nil
+	})
+	cases := []struct {
+		name string
+		cfg  WebhookConfig
+		want string
+	}{
+		{name: "missing username", cfg: WebhookConfig{Secret: webhookTestSecret(t)}, want: "username"},
+		{name: "missing secret", cfg: WebhookConfig{Username: webhookTestUsername}, want: "secret"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := tc.cfg
+			cfg.Sink = &captureSink{}
+			cfg.Repositories = resolver
+			if _, err := NewWebhook(client, cfg); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("NewWebhook() = %v, want an error mentioning %q", err, tc.want)
+			}
+		})
 	}
 }

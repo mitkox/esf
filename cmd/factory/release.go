@@ -354,6 +354,11 @@ func productionConnectorConfiguration(cfg factory.Config) doctorCheck {
 			continue
 		}
 		connectorConfig := cfg.Connectors[connectorName]
+		if connectorConfig.WebhookConfigured() {
+			if _, err := cfg.ConnectorWebhook(connectorName); err != nil {
+				problems = append(problems, err.Error())
+			}
+		}
 		tlsConfig, err := httpsecurity.LoadTLSConfig(connectorConfig.WebhookTLSCertFile, connectorConfig.WebhookTLSKeyFile)
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("connector %q: webhook TLS: %v", connectorName, err))

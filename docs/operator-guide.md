@@ -334,6 +334,32 @@ run outside every Cube sandbox: the connector holds a forge credential, and the
 publisher reads the signed evidence bundle from the artifact store. Neither
 credential is reachable from an agent.
 
+### Webhook credential
+
+The webhook receiver authenticates service-hook deliveries with
+`webhook_username` and `webhook_secret_file`. They are a dedicated inbound
+credential: `token_file` remains the outbound credential for API calls and git
+pushes and is never accepted for an inbound delivery.
+
+```toml
+[connectors.azuredevops]
+kind                = "azuredevops"
+base_url            = "https://dev.azure.com/acme"
+token_file          = "/etc/factory/secrets/azuredevops-token"
+webhook_listen      = "127.0.0.1:8091"
+webhook_username    = "esf-hooks"
+webhook_secret_file = "/etc/factory/secrets/azuredevops-webhook"
+```
+
+Write the inbound secret to a private file owned by `factory` with mode `0600`.
+`factory connector` refuses to start, and `factory doctor --profile production`
+fails, when a connector configures `webhook_listen` without the pair or when
+the file fails the private-file rules. A connector with neither `webhook_listen`
+nor the inbound pair is sweep-only: it reconciles work items and binds no
+listener, so its configuration needs no change. Rotate the inbound secret by
+replacing the file and restarting the connector; the PAT does not need to be
+rotated.
+
 ### Metrics and alerts
 
 The factory exports these instruments through the configured OTLP endpoint
@@ -410,6 +436,10 @@ Symptom: the forge returns 401/403, sweeps stop, publication fails with
 A PAT whose owner leaves the organization is an expiry waiting to happen. Use a
 service principal or app installation, and keep the PAT path only as the
 documented fallback.
+
+Inbound webhook authentication uses `webhook_secret_file`, not the PAT. Rotate
+that file independently: a PAT rotation does not change it, and rotating the
+inbound secret does not require a new PAT.
 
 ### Publication throttle
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -37,18 +38,21 @@ func newConnectorCommand(configPath *string) *cobra.Command {
 		Short: "Run forge connector intake (reconciliation and webhooks)",
 		Long: `Run every configured forge connector's intake workload.
 
-Each connector reconciles its work-item revisions on the configured interval and
-serves an authenticated webhook receiver. The receiver binds loopback by
-default; a non-loopback address requires native TLS. Forge credentials are read
-from the same private token files the worker uses and never enter a Cube
-sandbox.
+Each connector reconciles its work-item revisions on the configured interval.
+A connector with a webhook listener also serves an authenticated receiver; it
+binds loopback by default and a non-loopback address requires native TLS.
+Outbound forge authentication uses token_file; inbound deliveries use the
+separate webhook_username and webhook_secret_file credential. Credentials are
+read from private files and never enter a Cube sandbox.
 
   [connectors.azuredevops]
-  kind        = "azuredevops"
-  base_url    = "https://dev.azure.com/acme"
-  token_file  = "/etc/factory/azuredevops.token"
-  webhook_listen = "127.0.0.1:8091"
-  sweep_interval = "1m"`,
+  kind                = "azuredevops"
+  base_url            = "https://dev.azure.com/acme"
+  token_file          = "/etc/factory/azuredevops.token"
+  webhook_listen      = "127.0.0.1:8091"
+  webhook_username    = "esf-hooks"
+  webhook_secret_file = "/etc/factory/azuredevops-webhook.secret"
+  sweep_interval      = "1m"`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(command *cobra.Command, _ []string) error {
@@ -140,13 +144,40 @@ func buildConnectorRuntime(cfg factory.Config, sink forge.IntakeSink, reporters 
 		if !ok {
 			return nil, fmt.Errorf("connector %q: the connector workload does not support kind %q", name, connectorConfig.Kind)
 		}
+		var webhookHandler http.Handler
+		var listen string
 		tlsConfig, err := httpsecurity.LoadTLSConfig(connectorConfig.WebhookTLSCertFile, connectorConfig.WebhookTLSKeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("connector %q: webhook TLS: %w", name, err)
 		}
-		listen := connectorConfig.WebhookListenAddress()
-		if err := httpsecurity.ValidateListen(listen, tlsConfig != nil); err != nil {
-			return nil, fmt.Errorf("connector %q: webhook listener: %w", name, err)
+		if connectorConfig.WebhookConfigured() {
+			auth, err := cfg.ConnectorWebhook(name)
+			if err != nil {
+				return nil, err
+			}
+			webhook, err := azuredevops.NewWebhook(azure, azuredevops.WebhookConfig{
+				Connector: name,
+				Username:  auth.Username,
+				Secret:    auth.Credential,
+				Sink:      sink,
+				Repositories: forge.RepositoryResolverFunc(func(fields forge.WorkItemFields) (string, error) {
+					resolved, err := cfg.ResolvePipelineForConnector(name, fields)
+					if err != nil {
+						return "", err
+					}
+					return resolved.Repository, nil
+				}),
+			})
+			if err != nil {
+				return nil, fmt.Errorf("connector %q: %w", name, err)
+			}
+			webhookHandler = webhook
+			listen = connectorConfig.WebhookListenAddress()
+			if err := httpsecurity.ValidateListen(listen, tlsConfig != nil); err != nil {
+				return nil, fmt.Errorf("connector %q: webhook listener: %w", name, err)
+			}
+		} else {
+			tlsConfig = nil
 		}
 		watermark, err := connectorWatermark(cfg.Storage.DataDir, name)
 		if err != nil {
@@ -156,27 +187,13 @@ func buildConnectorRuntime(cfg factory.Config, sink forge.IntakeSink, reporters 
 		if err != nil {
 			return nil, fmt.Errorf("connector %q: %w", name, err)
 		}
-		webhook, err := azuredevops.NewWebhook(azure, azuredevops.WebhookConfig{
-			Connector: name,
-			Sink:      sink,
-			Repositories: forge.RepositoryResolverFunc(func(fields forge.WorkItemFields) (string, error) {
-				resolved, err := cfg.ResolvePipelineForConnector(name, fields)
-				if err != nil {
-					return "", err
-				}
-				return resolved.Repository, nil
-			}),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("connector %q: %w", name, err)
-		}
 		specs = append(specs, connector.Spec{
 			Name:           name,
 			SweepInterval:  connectorConfig.SweepIntervalOrDefault(),
 			Sweeper:        sweeper,
 			Deliver:        sweepDeliverer(cfg, name, azure, sink),
 			WebhookListen:  listen,
-			WebhookHandler: webhook,
+			WebhookHandler: webhookHandler,
 			TLSConfig:      tlsConfig,
 			Observe:        connectorHealthObserver(healthReporter),
 			Subscription: func(ctx context.Context) (forge.SubscriptionState, string) {

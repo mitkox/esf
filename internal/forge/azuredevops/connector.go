@@ -458,8 +458,13 @@ func pullRequestURL(pullRequest azurePullRequest, base *url.URL, project, repo s
 	if base == nil || project == "" || repo == "" || pullRequest.PullRequestID <= 0 {
 		return pullRequest.URL
 	}
-	path := strings.TrimRight(base.Path, "/") + "/" + project + "/_git/" + repo + "/pullrequest/" + strconv.FormatInt(pullRequest.PullRequestID, 10)
-	return base.Scheme + "://" + base.Host + path
+	endpoint := *base
+	id := strconv.FormatInt(pullRequest.PullRequestID, 10)
+	endpoint.Path = strings.TrimRight(base.Path, "/") + "/" + project + "/_git/" + repo + "/pullrequest/" + id
+	endpoint.RawPath = strings.TrimRight(base.EscapedPath(), "/") + "/" + url.PathEscape(project) + "/_git/" + url.PathEscape(repo) + "/pullrequest/" + id
+	endpoint.RawQuery = ""
+	endpoint.Fragment = ""
+	return endpoint.String()
 }
 
 func acceptanceState(status string) (forge.AcceptanceState, error) {

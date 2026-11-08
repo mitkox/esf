@@ -116,14 +116,20 @@ func TestConnectorWebhookAuthenticatesAndBoundsOverListener(t *testing.T) {
 	if err := os.WriteFile(tokenFile, []byte("esf:pat"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	webhookSecretFile := filepath.Join(dir, "azdo-webhook.secret")
+	if err := os.WriteFile(webhookSecretFile, []byte("hook-secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	cfg := factory.Default()
 	cfg.Storage.DataDir = dir
 	cfg.Connectors = map[string]factory.ConnectorConfig{
 		"azdo": {
-			Kind:          "azuredevops",
-			BaseURL:       "http://127.0.0.1:1",
-			TokenFile:     tokenFile,
-			WebhookListen: "127.0.0.1:8091",
+			Kind:              "azuredevops",
+			BaseURL:           "http://127.0.0.1:1",
+			TokenFile:         tokenFile,
+			WebhookUsername:   "esf-hooks",
+			WebhookSecretFile: webhookSecretFile,
+			WebhookListen:     "127.0.0.1:8091",
 		},
 	}
 	sink := &recordingIntakeSink{}
@@ -155,12 +161,26 @@ func TestConnectorWebhookAuthenticatesAndBoundsOverListener(t *testing.T) {
 		t.Fatalf("unauthenticated status = %d, want 401", response.StatusCode)
 	}
 
+	request, err = http.NewRequest(http.MethodPost, server.URL+"/hooks/azuredevops", strings.NewReader("{not json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.SetBasicAuth("esf", "pat")
+	response, err = http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("outbound-credential POST: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("outbound-credential status = %d, want 401", response.StatusCode)
+	}
+
 	oversized := bytes.Repeat([]byte("x"), 1<<20+1)
 	request, err = http.NewRequest(http.MethodPost, server.URL+"/hooks/azuredevops", bytes.NewReader(oversized))
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.SetBasicAuth("esf", "pat")
+	request.SetBasicAuth("esf-hooks", "hook-secret")
 	response, err = http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatalf("oversized POST: %v", err)
@@ -169,8 +189,8 @@ func TestConnectorWebhookAuthenticatesAndBoundsOverListener(t *testing.T) {
 	if response.StatusCode != http.StatusRequestEntityTooLarge {
 		t.Fatalf("oversized status = %d, want 413", response.StatusCode)
 	}
-	if stats := webhook.Stats(); stats.Unauthorized != 1 {
-		t.Fatalf("stats = %#v, want one authentication rejection", stats)
+	if stats := webhook.Stats(); stats.Unauthorized != 2 {
+		t.Fatalf("stats = %#v, want two authentication rejections", stats)
 	}
 	if proposals, rejections := sink.counts(); proposals != 0 || rejections != 0 {
 		t.Fatalf("proposals = %d, rejections = %d, want none", proposals, rejections)
@@ -502,5 +522,56 @@ func TestConnectorIntakeSignalsWhenStartRacesWithRunningWorkflow(t *testing.T) {
 	signal, ok := signals[0].Arg.(factory.WorkItemRevisionSignal)
 	if !ok || signal.Proposal.WorkItem.Revision != "2" {
 		t.Fatalf("signal payload = %#v, want the racing revision", signals[0].Arg)
+	}
+}
+
+func TestBuildConnectorRuntimeRequiresWebhookSecretForListener(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	tokenFile := filepath.Join(dir, "azdo.token")
+	if err := os.WriteFile(tokenFile, []byte("esf:pat"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := factory.Default()
+	cfg.Storage.DataDir = dir
+	cfg.Connectors = map[string]factory.ConnectorConfig{
+		"azdo": {
+			Kind: "azuredevops", BaseURL: "http://127.0.0.1:1",
+			TokenFile: tokenFile, WebhookListen: "127.0.0.1:8091",
+		},
+	}
+	if _, err := buildConnectorRuntime(cfg, &recordingIntakeSink{}, nil); err == nil || !strings.Contains(err.Error(), "webhook_secret_file") {
+		t.Fatalf("buildConnectorRuntime without an inbound credential = %v, want a webhook_secret_file error", err)
+	}
+
+	connector := cfg.Connectors["azdo"]
+	connector.WebhookUsername = "esf-hooks"
+	connector.WebhookSecretFile = filepath.Join(dir, "missing-webhook.secret")
+	cfg.Connectors["azdo"] = connector
+	if _, err := buildConnectorRuntime(cfg, &recordingIntakeSink{}, nil); err == nil || !strings.Contains(err.Error(), "webhook_secret_file") {
+		t.Fatalf("buildConnectorRuntime with a missing inbound credential = %v, want a webhook_secret_file error", err)
+	}
+}
+
+func TestBuildConnectorRuntimeRunsSweepOnlyWithoutWebhook(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	tokenFile := filepath.Join(dir, "azdo.token")
+	if err := os.WriteFile(tokenFile, []byte("esf:pat"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := factory.Default()
+	cfg.Storage.DataDir = dir
+	cfg.Connectors = map[string]factory.ConnectorConfig{
+		"azdo": {Kind: "azuredevops", BaseURL: "http://127.0.0.1:1", TokenFile: tokenFile},
+	}
+	specs, err := buildConnectorRuntime(cfg, &recordingIntakeSink{}, nil)
+	if err != nil {
+		t.Fatalf("buildConnectorRuntime: %v", err)
+	}
+	if len(specs) != 1 || specs[0].WebhookHandler != nil || specs[0].WebhookListen != "" {
+		t.Fatalf("sweep-only spec = %#v, want no webhook listener", specs)
 	}
 }

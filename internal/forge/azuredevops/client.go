@@ -540,11 +540,13 @@ func parseBaseURL(raw string) (*url.URL, error) {
 func (c *Client) apiURL(segments ...string) *url.URL {
 	endpoint := *c.base
 	path := strings.TrimRight(endpoint.Path, "/")
+	rawPath := strings.TrimRight(endpoint.EscapedPath(), "/")
 	for _, segment := range segments {
 		path += "/" + segment
+		rawPath += "/" + url.PathEscape(segment)
 	}
 	endpoint.Path = path
-	endpoint.RawPath = ""
+	endpoint.RawPath = rawPath
 	endpoint.RawQuery = ""
 	endpoint.Fragment = ""
 	return &endpoint

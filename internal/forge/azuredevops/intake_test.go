@@ -61,9 +61,10 @@ func newTestClient(t *testing.T, baseURL string, retry RetryPolicy) *Client {
 }
 
 type forgeRequest struct {
-	Method string
-	Path   string
-	Query  url.Values
+	Method     string
+	Path       string
+	RequestURI string
+	Query      url.Values
 }
 
 type forgeServer struct {
@@ -79,7 +80,7 @@ func newForgeServer(t *testing.T, handler http.HandlerFunc) *forgeServer {
 	server := &forgeServer{t: t, handler: handler}
 	server.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		server.mu.Lock()
-		server.records = append(server.records, forgeRequest{Method: r.Method, Path: r.URL.Path, Query: r.URL.Query()})
+		server.records = append(server.records, forgeRequest{Method: r.Method, Path: r.URL.Path, RequestURI: r.RequestURI, Query: r.URL.Query()})
 		server.mu.Unlock()
 		username, password, ok := r.BasicAuth()
 		if !ok || username != "esf" || password != "pat" {

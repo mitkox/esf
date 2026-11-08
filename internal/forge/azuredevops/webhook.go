@@ -40,6 +40,11 @@ var defaultWatchedFields = []string{
 type WebhookConfig struct {
 	// Connector is the audit name. It defaults to the client's name.
 	Connector string
+	// Username and Secret authenticate inbound service hooks. They are a
+	// dedicated inbound credential, deliberately separate from the client's
+	// outbound credential, and cannot authorize a forge write.
+	Username string
+	Secret   forge.Credential
 	// Sink receives proposals and audited rejections.
 	Sink forge.IntakeSink
 	// Repositories maps work-item attributes to the operator-selected
@@ -60,6 +65,8 @@ type WebhookConfig struct {
 type Webhook struct {
 	client       *Client
 	connector    string
+	username     string
+	secret       forge.Credential
 	sink         forge.IntakeSink
 	repositories forge.RepositoryResolver
 	watched      map[string]struct{}
@@ -86,6 +93,16 @@ type WebhookStats struct {
 func NewWebhook(client *Client, cfg WebhookConfig) (*Webhook, error) {
 	if client == nil {
 		return nil, fmt.Errorf("azuredevops: webhook client is required")
+	}
+	username := strings.TrimSpace(cfg.Username)
+	if username == "" {
+		return nil, fmt.Errorf("azuredevops: webhook username is required")
+	}
+	if strings.ContainsAny(username, ":\x00\r\n") {
+		return nil, fmt.Errorf("azuredevops: webhook username must not contain ':' or control characters")
+	}
+	if strings.TrimSpace(cfg.Secret.Value()) == "" {
+		return nil, fmt.Errorf("azuredevops: webhook secret is required")
 	}
 	if cfg.Sink == nil {
 		return nil, fmt.Errorf("azuredevops: webhook sink is required")
@@ -129,6 +146,8 @@ func NewWebhook(client *Client, cfg WebhookConfig) (*Webhook, error) {
 	return &Webhook{
 		client:       client,
 		connector:    connector,
+		username:     username,
+		secret:       cfg.Secret,
 		sink:         cfg.Sink,
 		repositories: cfg.Repositories,
 		watched:      watched,
@@ -157,7 +176,7 @@ func (h *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Credentials are checked before the body is read or parsed.
-	if !h.client.authorized(r) {
+	if !h.authorized(r) {
 		h.unauthorized.Add(1)
 		w.Header().Set("WWW-Authenticate", `Basic realm="esf-azuredevops-webhook"`)
 		writeWebhookError(w, http.StatusUnauthorized, "unauthorized")
@@ -318,8 +337,8 @@ func changedFieldNames(fields map[string]json.RawMessage) []string {
 }
 
 // authorized checks the single Basic Authorization header with constant-time
-// comparisons against the connector's configured credentials.
-func (c *Client) authorized(r *http.Request) bool {
+// comparisons against the receiver's dedicated inbound credential.
+func (h *Webhook) authorized(r *http.Request) bool {
 	values := r.Header.Values("Authorization")
 	if len(values) != 1 {
 		return false
@@ -336,8 +355,7 @@ func (c *Client) authorized(r *http.Request) bool {
 	if !ok {
 		return false
 	}
-	expectedUsername, expectedPassword := splitBasicCredential(c.credential.Value())
-	return constantTimeEqual(username, expectedUsername) && constantTimeEqual(password, expectedPassword)
+	return constantTimeEqual(username, h.username) && constantTimeEqual(password, h.secret.Value())
 }
 
 func constantTimeEqual(a, b string) bool {

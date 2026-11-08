@@ -189,6 +189,8 @@ func TestConnectorConfigValidation(t *testing.T) {
 				Kind:               "azuredevops",
 				BaseURL:            "https://dev.azure.com/acme",
 				TokenFile:          "/run/secrets/azdo.token",
+				WebhookUsername:    "esf-hooks",
+				WebhookSecretFile:  "/run/secrets/azdo-webhook.secret",
 				WebhookListen:      "127.0.0.1:9091",
 				WebhookTLSCertFile: "/run/secrets/tls.crt",
 				WebhookTLSKeyFile:  "/run/secrets/tls.key",
@@ -218,6 +220,41 @@ func TestConnectorConfigValidation(t *testing.T) {
 				TokenFile: "/run/secrets/azdo.token", WebhookTLSCertFile: "/run/secrets/tls.crt",
 			},
 			want: "set together",
+		},
+		{
+			name: "webhook listener without dedicated credential",
+			connector: ConnectorConfig{
+				Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme",
+				TokenFile: "/run/secrets/azdo.token", WebhookListen: "127.0.0.1:9091",
+			},
+			want: "webhook_username and webhook_secret_file are required",
+		},
+		{
+			name: "webhook username without secret file",
+			connector: ConnectorConfig{
+				Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme",
+				TokenFile: "/run/secrets/azdo.token", WebhookListen: "127.0.0.1:9091",
+				WebhookUsername: "esf-hooks",
+			},
+			want: "webhook_secret_file is required",
+		},
+		{
+			name: "relative webhook secret file",
+			connector: ConnectorConfig{
+				Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme",
+				TokenFile: "/run/secrets/azdo.token", WebhookListen: "127.0.0.1:9091",
+				WebhookUsername: "esf-hooks", WebhookSecretFile: "webhook.secret",
+			},
+			want: "webhook_secret_file must be an absolute path",
+		},
+		{
+			name: "webhook username separator",
+			connector: ConnectorConfig{
+				Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme",
+				TokenFile: "/run/secrets/azdo.token", WebhookListen: "127.0.0.1:9091",
+				WebhookUsername: "esf:hooks", WebhookSecretFile: "/run/secrets/webhook.secret",
+			},
+			want: "webhook_username must not contain",
 		},
 		{
 			name: "negative sweep interval",
@@ -254,8 +291,15 @@ func TestConnectorWebhookListenersMustBeDistinct(t *testing.T) {
 	t.Parallel()
 
 	cfg := forgeTestConfig()
+	first := cfg.Connectors["azdo"]
+	first.WebhookListen = "127.0.0.1:8091"
+	first.WebhookUsername = "esf-hooks"
+	first.WebhookSecretFile = "/run/secrets/azdo-webhook.secret"
+	cfg.Connectors["azdo"] = first
 	cfg.Connectors["second"] = ConnectorConfig{
 		Kind: "azuredevops", BaseURL: "https://dev.azure.com/other", TokenFile: "/run/secrets/other.token",
+		WebhookUsername:   "other-hooks",
+		WebhookSecretFile: "/run/secrets/other-webhook.secret",
 	}
 	err := cfg.Validate()
 	if err == nil || !strings.Contains(err.Error(), "both bind webhook_listen") {
@@ -536,6 +580,8 @@ acknowledge_open_egress = true
 kind = "azuredevops"
 base_url = "https://dev.azure.com/acme"
 token_file = "/run/secrets/azdo.token"
+webhook_username = "esf-hooks"
+webhook_secret_file = "/run/secrets/azdo-webhook.secret"
 webhook_listen = "127.0.0.1:8092"
 webhook_tls_cert_file = "/run/secrets/tls.crt"
 webhook_tls_key_file = "/run/secrets/tls.key"
@@ -569,6 +615,8 @@ verification_profile = "default"
 	}
 	connector := cfg.Connectors["azuredevops"]
 	if connector.WebhookListenAddress() != "127.0.0.1:8092" ||
+		connector.WebhookUsername != "esf-hooks" ||
+		connector.WebhookSecretFile != "/run/secrets/azdo-webhook.secret" ||
 		connector.WebhookTLSCertFile != "/run/secrets/tls.crt" ||
 		connector.WebhookTLSKeyFile != "/run/secrets/tls.key" ||
 		connector.SweepIntervalOrDefault() != 30*time.Second {
@@ -597,5 +645,54 @@ verification_profile = "default"
 				t.Fatalf("LoadConfig accepted an unknown %s key", tc.name)
 			}
 		})
+	}
+}
+
+func TestConnectorWebhookUsesDedicatedSecret(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	tokenFile := filepath.Join(dir, "azdo.token")
+	secretFile := filepath.Join(dir, "azdo-webhook.secret")
+	if err := os.WriteFile(tokenFile, []byte("esf:pat"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(secretFile, []byte("hook-secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	connector := ConnectorConfig{
+		Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme",
+		TokenFile:         tokenFile,
+		WebhookUsername:   "esf-hooks",
+		WebhookSecretFile: secretFile,
+	}
+	cfg := forgeTestConfig()
+	cfg.Connectors["azdo"] = connector
+
+	settings, err := cfg.Connector("azdo")
+	if err != nil {
+		t.Fatalf("Connector: %v", err)
+	}
+	if settings.Credential.Value() != "esf:pat" {
+		t.Fatalf("outbound credential = %q", settings.Credential.Value())
+	}
+	webhook, err := cfg.ConnectorWebhook("azdo")
+	if err != nil {
+		t.Fatalf("ConnectorWebhook: %v", err)
+	}
+	if webhook.Username != "esf-hooks" || webhook.Credential.Value() != "hook-secret" {
+		t.Fatalf("webhook credential = %q / %q", webhook.Username, webhook.Credential.Value())
+	}
+
+	connector.WebhookSecretFile = ""
+	cfg.Connectors["azdo"] = connector
+	if _, err := cfg.ConnectorWebhook("azdo"); err == nil || !strings.Contains(err.Error(), "webhook_secret_file") {
+		t.Fatalf("ConnectorWebhook without a secret file = %v, want no token_file fallback", err)
+	}
+
+	connector.WebhookSecretFile = filepath.Join(dir, "missing")
+	cfg.Connectors["azdo"] = connector
+	if _, err := cfg.ConnectorWebhook("azdo"); err == nil || !strings.Contains(err.Error(), "webhook_secret_file") {
+		t.Fatalf("ConnectorWebhook with a missing secret file = %v", err)
 	}
 }

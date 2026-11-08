@@ -198,7 +198,7 @@ func TestRuntimeRejectsInvalidSpecs(t *testing.T) {
 		{"zero interval", []Spec{func() Spec { s := valid; s.SweepInterval = 0; return s }()}, "interval must be positive"},
 		{"missing sweeper", []Spec{func() Spec { s := valid; s.Sweeper = nil; return s }()}, "sweeper is required"},
 		{"missing deliverer", []Spec{func() Spec { s := valid; s.Deliver = nil; return s }()}, "deliverer is required"},
-		{"missing handler", []Spec{func() Spec { s := valid; s.WebhookHandler = nil; return s }()}, "webhook handler is required"},
+		{"missing handler", []Spec{func() Spec { s := valid; s.WebhookHandler = nil; return s }()}, "requires a webhook handler"},
 		{"missing listen", []Spec{func() Spec { s := valid; s.WebhookListen = ""; return s }()}, "listen address is required"},
 		{"plaintext remote listen", []Spec{func() Spec { s := valid; s.WebhookListen = "0.0.0.0:8091"; return s }()}, "non-loopback"},
 	}
@@ -574,5 +574,39 @@ func TestRuntimeCancelledDeliveryLeavesWatermarkUnadvanced(t *testing.T) {
 	}
 	if stored != "before" {
 		t.Fatalf("watermark after a cancelled delivery = %q, want the unadvanced before", stored)
+	}
+}
+
+func TestRuntimeRunsSweepOnlyConnectorWithoutListener(t *testing.T) {
+	t.Parallel()
+
+	swept := make(chan struct{}, 1)
+	runtime, err := New([]Spec{{
+		Name:          "azdo",
+		SweepInterval: time.Hour,
+		Sweeper: &fakeSweeper{sweep: func(context.Context) (forge.SweepResult, error) {
+			select {
+			case swept <- struct{}{}:
+			default:
+			}
+			return forge.SweepResult{}, nil
+		}},
+		Deliver: func(context.Context, forge.Candidate) error { return nil },
+	}}, Options{Logger: quietLogger()})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+	select {
+	case <-swept:
+	case <-time.After(5 * time.Second):
+		t.Fatal("sweep-only connector did not run its first sweep")
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Run: %v", err)
 	}
 }

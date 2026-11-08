@@ -36,6 +36,11 @@ type ConnectorConfig struct {
 	BaseURL   string `toml:"base_url"`
 	TokenFile string `toml:"token_file"`
 
+	// WebhookUsername and WebhookSecretFile authenticate inbound service
+	// hooks. They are a dedicated inbound credential, separate from TokenFile,
+	// which remains the outbound credential.
+	WebhookUsername   string `toml:"webhook_username"`
+	WebhookSecretFile string `toml:"webhook_secret_file"`
 	// WebhookListen is the connector's inbound webhook address. Empty binds
 	// the loopback default; a non-loopback address requires native TLS.
 	WebhookListen string `toml:"webhook_listen"`
@@ -58,6 +63,17 @@ func (c ConnectorConfig) WebhookListenAddress() string {
 // WebhookTLSConfigured reports whether both TLS files are configured.
 func (c ConnectorConfig) WebhookTLSConfigured() bool {
 	return strings.TrimSpace(c.WebhookTLSCertFile) != "" && strings.TrimSpace(c.WebhookTLSKeyFile) != ""
+}
+
+// WebhookConfigured reports whether the connector serves a webhook receiver.
+//
+// A connector with no listener address and no inbound credential is
+// sweep-only: it reconciles work items and never binds an inbound socket.
+func (c ConnectorConfig) WebhookConfigured() bool {
+	return strings.TrimSpace(c.WebhookListen) != "" ||
+		c.WebhookTLSConfigured() ||
+		strings.TrimSpace(c.WebhookUsername) != "" ||
+		strings.TrimSpace(c.WebhookSecretFile) != ""
 }
 
 // SweepIntervalOrDefault returns the configured interval or the default.
@@ -133,6 +149,42 @@ func (c Config) Connector(name string) (forge.ConnectorSettings, error) {
 		BaseURL:    strings.TrimSpace(connector.BaseURL),
 		Credential: credential,
 	}, nil
+}
+
+// ConnectorWebhook is the resolved inbound credential for one connector's
+// webhook receiver.
+type ConnectorWebhook struct {
+	Username   string
+	Credential forge.Credential
+}
+
+// ConnectorWebhook resolves a connector's dedicated webhook credential.
+//
+// It reads webhook_secret_file through the same private-file rules as the
+// outbound token, and it never falls back to token_file: inbound
+// authentication must not be able to authorize a forge write.
+func (c Config) ConnectorWebhook(name string) (ConnectorWebhook, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ConnectorWebhook{}, fmt.Errorf("connector name is required")
+	}
+	connector, ok := c.Connectors[name]
+	if !ok {
+		return ConnectorWebhook{}, fmt.Errorf("connector %q is not configured", name)
+	}
+	if problems := connector.problems(); len(problems) > 0 {
+		return ConnectorWebhook{}, fmt.Errorf("connector %q: %s", name, strings.Join(problems, "; "))
+	}
+	username := strings.TrimSpace(connector.WebhookUsername)
+	secretFile := strings.TrimSpace(connector.WebhookSecretFile)
+	if username == "" || secretFile == "" {
+		return ConnectorWebhook{}, fmt.Errorf("connector %q: webhook_username and webhook_secret_file are required", name)
+	}
+	credential, err := forge.ReadCredential(secretFile)
+	if err != nil {
+		return ConnectorWebhook{}, fmt.Errorf("connector %q: webhook_secret_file: %w", name, err)
+	}
+	return ConnectorWebhook{Username: username, Credential: credential}, nil
 }
 
 // NewForgeConnector constructs the host-side adapter for one operator
@@ -228,10 +280,12 @@ func (c Config) validateForge() []string {
 			problems = append(problems, fmt.Sprintf("connector %q: %s", name, strings.Join(connectorProblems, "; ")))
 		}
 		listen := connector.WebhookListenAddress()
-		if previous, ok := listeners[listen]; ok {
-			problems = append(problems, fmt.Sprintf("connectors %q and %q both bind webhook_listen %q; assign each connector a distinct address", previous, name, listen))
-		} else {
-			listeners[listen] = name
+		if connector.WebhookConfigured() {
+			if previous, ok := listeners[listen]; ok {
+				problems = append(problems, fmt.Sprintf("connectors %q and %q both bind webhook_listen %q; assign each connector a distinct address", previous, name, listen))
+			} else {
+				listeners[listen] = name
+			}
 		}
 	}
 	for _, name := range sortedForgeNames(c.Pipelines) {
@@ -264,6 +318,7 @@ func (c ConnectorConfig) problems() []string {
 	} else if !filepath.IsAbs(tokenFile) {
 		problems = append(problems, "token_file must be an absolute path")
 	}
+	problems = append(problems, c.webhookAuthProblems()...)
 	if tlsConfigured := c.WebhookTLSConfigured(); (strings.TrimSpace(c.WebhookTLSCertFile) == "") != (strings.TrimSpace(c.WebhookTLSKeyFile) == "") {
 		problems = append(problems, "webhook_tls_cert_file and webhook_tls_key_file must be set together")
 	} else if err := httpsecurity.ValidateListen(c.WebhookListenAddress(), tlsConfigured); err != nil {
@@ -271,6 +326,34 @@ func (c ConnectorConfig) problems() []string {
 	}
 	if c.SweepInterval < 0 {
 		problems = append(problems, "sweep_interval must not be negative")
+	}
+	return problems
+}
+
+// webhookAuthProblems checks the dedicated inbound credential. A connector
+// without a listener and without an inbound credential is sweep-only and does
+// not need one.
+func (c ConnectorConfig) webhookAuthProblems() []string {
+	username := strings.TrimSpace(c.WebhookUsername)
+	secretFile := strings.TrimSpace(c.WebhookSecretFile)
+	listenerConfigured := strings.TrimSpace(c.WebhookListen) != "" || c.WebhookTLSConfigured()
+	var problems []string
+	switch {
+	case username == "" && secretFile == "":
+		if listenerConfigured {
+			problems = append(problems, "webhook_username and webhook_secret_file are required when a webhook listener is configured")
+		}
+	case username == "":
+		problems = append(problems, "webhook_username is required with webhook_secret_file")
+	case secretFile == "":
+		problems = append(problems, "webhook_secret_file is required with webhook_username")
+	default:
+		if strings.ContainsAny(username, ":\x00\r\n") {
+			problems = append(problems, "webhook_username must not contain ':' or control characters")
+		}
+		if !filepath.IsAbs(secretFile) {
+			problems = append(problems, "webhook_secret_file must be an absolute path")
+		}
 	}
 	return problems
 }

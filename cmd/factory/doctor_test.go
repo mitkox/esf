@@ -124,10 +124,35 @@ func TestProductionConnectorConfigurationCheck(t *testing.T) {
 		}()}, "fail", "non-loopback"},
 		{"missing webhook TLS files", map[string]factory.ConnectorConfig{"azdo": func() factory.ConnectorConfig {
 			c := connector(goodToken)
+			c.WebhookUsername = "esf-hooks"
+			c.WebhookSecretFile = goodToken
 			c.WebhookTLSCertFile = filepath.Join(t.TempDir(), "missing.crt")
 			c.WebhookTLSKeyFile = filepath.Join(t.TempDir(), "missing.key")
 			return c
 		}()}, "fail", "webhook TLS"},
+		{"webhook listener without dedicated secret", map[string]factory.ConnectorConfig{"azdo": func() factory.ConnectorConfig {
+			c := connector(goodToken)
+			c.WebhookListen = "127.0.0.1:8091"
+			return c
+		}()}, "fail", "webhook_secret_file"},
+		{"missing webhook secret file", map[string]factory.ConnectorConfig{"azdo": func() factory.ConnectorConfig {
+			c := connector(goodToken)
+			c.WebhookUsername = "esf-hooks"
+			c.WebhookSecretFile = filepath.Join(t.TempDir(), "missing.secret")
+			return c
+		}()}, "fail", "webhook_secret_file"},
+		{"group readable webhook secret", map[string]factory.ConnectorConfig{"azdo": func() factory.ConnectorConfig {
+			c := connector(goodToken)
+			c.WebhookUsername = "esf-hooks"
+			c.WebhookSecretFile = writeDoctorToken(t, 0o644)
+			return c
+		}()}, "fail", "permissions"},
+		{"valid webhook configuration", map[string]factory.ConnectorConfig{"azdo": func() factory.ConnectorConfig {
+			c := connector(goodToken)
+			c.WebhookUsername = "esf-hooks"
+			c.WebhookSecretFile = goodToken
+			return c
+		}()}, "ok", ""},
 	}
 	for _, tc := range cases {
 		tc := tc

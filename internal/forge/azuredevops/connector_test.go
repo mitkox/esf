@@ -389,3 +389,48 @@ func TestSubscriptionStateMapsServiceHooks(t *testing.T) {
 		})
 	}
 }
+
+func TestPublishEscapesProjectAndRepositoryPathSegments(t *testing.T) {
+	t.Parallel()
+
+	const project = "Payments Team"
+	const repo = "payments repo"
+	server := newForgeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			if r.URL.Path != "/acme/"+project+"/_apis/git/repositories/"+repo+"/pullRequests" {
+				t.Errorf("decoded request path = %q", r.URL.Path)
+			}
+			writeFixture(w, []byte(`{"value":[]}`))
+		case http.MethodPost:
+			if r.URL.Path != "/acme/"+project+"/_apis/git/repositories/"+repo+"/pullRequests" {
+				t.Errorf("decoded request path = %q", r.URL.Path)
+			}
+			writeFixture(w, []byte(`{"pullRequestId":17,"status":"active","isDraft":true}`))
+		default:
+			http.Error(w, "method", http.StatusMethodNotAllowed)
+		}
+	})
+	client := newTestClient(t, server.URL()+"/acme", RetryPolicy{MaxAttempts: 1})
+	result, err := client.Publish(context.Background(), forge.PublicationPlan{
+		Repository: server.URL() + "/acme/" + project + "/_git/" + repo,
+		BaseBranch: "main",
+		Branch:     "esf/work-item-42-r7",
+		Title:      "Fix the retry loop",
+		Body:       "Summary.\n\nEvidence bundle digest: sha256:" + strings.Repeat("a", 64),
+		Draft:      true,
+	})
+	if err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	wantURL := server.URL() + "/acme/Payments%20Team/_git/payments%20repo/pullrequest/17"
+	if result.PullRequest.URL != wantURL {
+		t.Fatalf("pull request URL = %q, want %q", result.PullRequest.URL, wantURL)
+	}
+	wantPath := "/acme/Payments%20Team/_apis/git/repositories/payments%20repo/pullRequests?"
+	for _, request := range server.Requests() {
+		if !strings.HasPrefix(request.RequestURI, wantPath) {
+			t.Fatalf("%s request URI = %q, want prefix %q", request.Method, request.RequestURI, wantPath)
+		}
+	}
+}
