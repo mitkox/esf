@@ -810,3 +810,202 @@ func TestRuntimeRunsSweepOnlyConnectorWithoutListener(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 }
+
+// discardIntakeSink accepts every webhook outcome; these tests exercise the
+// receiver authentication and the runtime observation path, not intake.
+type discardIntakeSink struct{}
+
+func (discardIntakeSink) Propose(context.Context, forge.Proposal) error { return nil }
+func (discardIntakeSink) Reject(context.Context, forge.Rejection) error { return nil }
+
+// newRealWebhookHandler builds the production Azure DevOps receiver over a
+// private inbound credential and a failing forge, so an authenticated delivery
+// fails in the fetch path and an unsigned request fails in authentication,
+// exactly as the connector workload wires them.
+func newRealWebhookHandler(t *testing.T) http.Handler {
+	t.Helper()
+
+	forgeServer := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(forgeServer.Close)
+
+	directory := t.TempDir()
+	writeCredential := func(name, value string) forge.Credential {
+		t.Helper()
+		path := filepath.Join(directory, name)
+		if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		credential, err := forge.ReadCredential(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		return credential
+	}
+	client, err := azuredevops.NewClient(azuredevops.Config{
+		Name:       "azdo",
+		BaseURL:    forgeServer.URL,
+		Credential: writeCredential("azdo.token", "esf:pat"),
+		Retry:      azuredevops.RetryPolicy{MaxAttempts: 1},
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	webhook, err := azuredevops.NewWebhook(client, azuredevops.WebhookConfig{
+		Connector: "azdo",
+		Username:  "esf-hooks",
+		Secret:    writeCredential("webhook.secret", "hook-secret"),
+		Sink:      discardIntakeSink{},
+		Repositories: forge.RepositoryResolverFunc(func(forge.WorkItemFields) (string, error) {
+			return "https://dev.azure.com/acme/payments/_git/payments", nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("NewWebhook: %v", err)
+	}
+	return webhook
+}
+
+// TestRuntimeIgnoresUnauthenticatedWebhookForHealth proves a credential-less
+// POST rejected by the real receiver is not a delivery attempt and leaves the
+// connector healthy, while an authenticated delivery whose handler fails still
+// degrades it.
+func TestRuntimeIgnoresUnauthenticatedWebhookForHealth(t *testing.T) {
+	t.Parallel()
+
+	observations := make(chan HealthObservation, 8)
+	addresses := make(chan net.Addr, 1)
+	runtime, err := New([]Spec{{
+		Name:          "azdo",
+		SweepInterval: time.Hour,
+		Sweeper: &fakeSweeper{sweep: func(context.Context) (forge.SweepResult, error) {
+			return forge.SweepResult{NextCursor: "cursor-1"}, nil
+		}},
+		Deliver:        func(context.Context, forge.Candidate) error { return nil },
+		WebhookListen:  "127.0.0.1:0",
+		WebhookHandler: newRealWebhookHandler(t),
+		Subscription: func(context.Context) (forge.SubscriptionState, string) {
+			return forge.SubscriptionActive, "1 subscription enabled"
+		},
+		Observe: func(_ context.Context, observation HealthObservation) error {
+			observations <- observation
+			return nil
+		},
+	}}, Options{
+		Logger: quietLogger(),
+		OnListen: func(_ string, address net.Addr, _ bool) {
+			addresses <- address
+		},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+	stopRuntimeOnCleanup(t, cancel, done)
+
+	address := <-addresses
+	sweep := nextObservation(t, observations)
+	if health := evaluateObservedHealth(time.Now().UTC(), sweep); health.Status != forge.HealthHealthy {
+		t.Fatalf("initial health = %s/%s, want a healthy completed sweep", health.Status, health.Reason)
+	}
+
+	unsigned, err := http.NewRequest(http.MethodPost, "http://"+address.String()+"/hooks/azuredevops", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(unsigned)
+	if err != nil {
+		t.Fatalf("unsigned POST: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unsigned status = %d, want 401", response.StatusCode)
+	}
+	select {
+	case observation := <-observations:
+		t.Fatalf("an unauthenticated webhook produced a health observation: %#v", observation)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	body := `{"id":"event-0001","eventType":"workitem.updated","publisherId":"tfs","resource":{"workItemId":42,"rev":6,"fields":{"System.State":"Active"}}}`
+	authenticated, err := http.NewRequest(http.MethodPost, "http://"+address.String()+"/hooks/azuredevops", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	authenticated.SetBasicAuth("esf-hooks", "hook-secret")
+	response, err = http.DefaultClient.Do(authenticated)
+	if err != nil {
+		t.Fatalf("authenticated POST: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusBadGateway {
+		t.Fatalf("authenticated status = %d, want 502 from the failing forge", response.StatusCode)
+	}
+
+	failed := nextObservation(t, observations)
+	if failed.Event != HealthEventDelivery || failed.Successful {
+		t.Fatalf("observation = %#v, want a failed delivery", failed)
+	}
+	if !strings.Contains(failed.Detail, "502") {
+		t.Fatalf("failed delivery detail = %q, want the handler status", failed.Detail)
+	}
+	if health := evaluateObservedHealth(time.Now().UTC(), failed); health.Status != forge.HealthDegraded || health.Reason != "delivery_failed" {
+		t.Fatalf("authenticated failure health = %s/%s, want degraded/delivery_failed", health.Status, health.Reason)
+	}
+}
+
+// TestRuntimeFailedSweepPassRefreshesPassState proves a pass whose delivery
+// fails still records the subscription state and durable queue depth, so the
+// gauge and snapshot keep updating during an intake outage.
+func TestRuntimeFailedSweepPassRefreshesPassState(t *testing.T) {
+	t.Parallel()
+
+	observations := make(chan HealthObservation, 4)
+	runtime, err := New([]Spec{{
+		Name:          "azdo",
+		SweepInterval: time.Hour,
+		Sweeper: &fakeSweeper{sweep: func(context.Context) (forge.SweepResult, error) {
+			return forge.SweepResult{
+				Items:      []forge.Candidate{{Connector: "azdo", WorkItem: forge.WorkItem{ID: "42", Revision: "1"}}},
+				NextCursor: "cursor-1",
+			}, nil
+		}},
+		Deliver:        func(context.Context, forge.Candidate) error { return errors.New("intake unavailable") },
+		WebhookListen:  "127.0.0.1:0",
+		WebhookHandler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		Subscription: func(context.Context) (forge.SubscriptionState, string) {
+			return forge.SubscriptionActive, "1 subscription enabled"
+		},
+		QueueDepth: func(context.Context) (map[string]int, error) {
+			return map[string]int{"payments": 7}, nil
+		},
+		Observe: func(_ context.Context, observation HealthObservation) error {
+			observations <- observation
+			return nil
+		},
+	}}, Options{Logger: quietLogger()})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+	stopRuntimeOnCleanup(t, cancel, done)
+
+	failed := nextObservation(t, observations)
+	if failed.Event != HealthEventDelivery || failed.Successful {
+		t.Fatalf("observation = %#v, want the failed pass delivery", failed)
+	}
+	if failed.Subscription != forge.SubscriptionActive || failed.SubscriptionDetail == "" {
+		t.Fatalf("failed pass subscription = %q/%q, want the current state", failed.Subscription, failed.SubscriptionDetail)
+	}
+	if failed.QueueDepth["payments"] != 7 || len(failed.QueueDepth) != 1 {
+		t.Fatalf("failed pass queue depth = %v, want the current pending count", failed.QueueDepth)
+	}
+	if health := evaluateObservedHealth(time.Now().UTC(), failed); health.Status != forge.HealthDegraded || health.Reason != "delivery_failed" {
+		t.Fatalf("failed pass health = %s/%s, want degraded/delivery_failed", health.Status, health.Reason)
+	}
+}

@@ -380,20 +380,30 @@ immediately with reason `sweep_failed`, including a sweep whose reconciliation
 finished but whose watermark could not be committed: reconciliation is only
 successful once its cursor is durable. A failed delivery attempt also degrades
 immediately with reason `delivery_failed`, because fresh successful timestamps
-can otherwise hide a stalled delivery path. A successful sweep and an
-authenticated delivery each stay fresh for three sweep intervals, so with the
-default one-minute cadence a healthy connector is not degraded just because a
-later sweep succeeded after its last delivery. A delivery may therefore be older
-than the newest successful sweep and still count as current. A fresh successful
-sweep with no delivery ever observed is healthy, with reason `sweep_only`: a
-sweep-only connector, or one that has seen no work, proves reconciliation
-without a webhook delivery.
+can otherwise hide a stalled delivery path. A reconciliation pass whose delivery
+fails still records the subscription state and durable queue depth alongside
+that failure, so `factory_scope_queue_depth` and the console snapshot keep
+updating while intake is down. A successful sweep and an authenticated delivery
+each stay fresh for three sweep intervals, so with the default one-minute
+cadence a healthy connector is not degraded just because a later sweep succeeded
+after its last delivery. A delivery may therefore be older than the newest
+successful sweep and still count as current. A fresh successful sweep with no
+delivery ever observed is healthy, with reason `sweep_only`: a sweep-only
+connector, or one that has seen no work, proves reconciliation without a webhook
+delivery.
 
 The degraded reasons are `sweep_failed`, `delivery_failed`, `stale_sweep`,
 `no_successful_sweep` (a delivery was observed but no successful sweep),
 `no_recent_delivery`, `subscription_disabled` and `subscription_probationary`.
 A connector with no successful sweep, no delivery, and no failed attempt is
 `unknown` with reason `no_observations`, not degraded.
+
+Health is latest-attempt-wins: each observation replaces the connector's durable
+state, so a failed delivery stays visible until the next observation replaces
+it, including a later successful sweep observation. A failed delivery is not
+held until a successful delivery arrives. A webhook request the receiver rejects
+before authenticating (HTTP 401) is not a delivery attempt: it never becomes the
+replacing observation and leaves connector health unchanged.
 
 A connector raises `connector.degraded` when it enters the degraded state or its
 reason changes; a connector that stays degraded with the same reason does not

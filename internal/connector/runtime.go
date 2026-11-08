@@ -85,12 +85,13 @@ type HealthObservation struct {
 type HealthObserver func(ctx context.Context, observation HealthObservation) error
 
 // QueueDepthReader reports the durable pending work-item count per operator
-// scope. It is called once per sweep so a health observation carries the queue
-// state.
+// scope. It is called once per sweep pass so a health observation carries the
+// queue state, including a pass whose delivery failed.
 type QueueDepthReader func(ctx context.Context) (map[string]int, error)
 
 // SubscriptionReader reads the forge's event-subscription state. It is
-// called once per sweep so a silently disabled subscription becomes observable.
+// called once per sweep pass so a silently disabled subscription becomes
+// observable, including during an intake outage.
 type SubscriptionReader func(ctx context.Context) (forge.SubscriptionState, string)
 
 // Spec is one connector's webhook receiver and reconciliation loop.
@@ -344,7 +345,7 @@ func (r *Runtime) runSweep(ctx context.Context, spec Spec) {
 				r.logger.WarnContext(ctx, "connector reconciliation sweep failed",
 					"connector", spec.Name, "error", err)
 			}
-			r.observe(ctx, spec, HealthEventSweep, false, "reconciliation sweep failed")
+			r.observe(ctx, spec, HealthEventSweep, false, "reconciliation sweep failed", true)
 		} else {
 			delivered := true
 			for _, candidate := range result.Items {
@@ -357,7 +358,6 @@ func (r *Runtime) runSweep(ctx context.Context, spec Spec) {
 							"revision", candidate.WorkItem.Revision,
 							"error", err)
 					}
-					r.observe(ctx, spec, HealthEventDelivery, false, "intake delivery failed")
 				}
 				// A sweep delivery is recovery, not a webhook delivery: it
 				// must not advance the last-delivery timestamp, or a dead
@@ -367,7 +367,16 @@ func (r *Runtime) runSweep(ctx context.Context, spec Spec) {
 			// delivered. The next sweep then replays the batch; the stable
 			// workflow identity and the durable intake claim make the replay
 			// idempotent.
-			if delivered && ctx.Err() == nil {
+			switch {
+			case ctx.Err() != nil:
+				// Shutdown interrupted the pass; it has no outcome to record.
+			case !delivered:
+				// Record the failed pass once, with the subscription and queue
+				// depth. Intake is failing while work accumulates, so the
+				// gauge and durable snapshot must keep updating even though no
+				// sweep succeeded.
+				r.observe(ctx, spec, HealthEventDelivery, false, "intake delivery failed", true)
+			default:
 				if err := spec.Sweeper.CommitSweep(ctx, result.NextCursor); err != nil {
 					if ctx.Err() == nil {
 						r.logger.WarnContext(ctx, "connector reconciliation watermark not saved",
@@ -377,11 +386,11 @@ func (r *Runtime) runSweep(ctx context.Context, spec Spec) {
 					// successful-sweep timestamp. A fresh timestamp with the
 					// cursor unadvanced would report healthy intake that is
 					// stalled on the same failed commit.
-					r.observe(ctx, spec, HealthEventSweep, false, "sweep commit failed")
+					r.observe(ctx, spec, HealthEventSweep, false, "sweep commit failed", true)
 				} else {
 					// Record success only after the whole pass completed: every
 					// candidate delivered and the watermark saved.
-					r.observe(ctx, spec, HealthEventSweep, true, "")
+					r.observe(ctx, spec, HealthEventSweep, true, "", true)
 				}
 			}
 		}
@@ -393,9 +402,14 @@ func (r *Runtime) runSweep(ctx context.Context, spec Spec) {
 	}
 }
 
-// observeWebhook records the authenticated-delivery outcome after the handler
-// has answered. A 401 or 5xx is a failed delivery; a filtered or rejected
-// delivery still proves the subscription reached the receiver.
+// observeWebhook records the delivery outcome after the handler has answered.
+//
+// A request the handler rejects before authentication is not a delivery
+// attempt: any unauthenticated client could otherwise write a durable degraded
+// state and fail the connector readiness probe. The handler's own rejection
+// counters keep that traffic visible. A 5xx answer is a delivery-path failure;
+// a filtered or rejected delivery still proves the subscription reached the
+// receiver.
 func (r *Runtime) observeWebhook(spec Spec, next http.Handler) http.Handler {
 	if spec.Observe == nil {
 		return next
@@ -403,12 +417,15 @@ func (r *Runtime) observeWebhook(spec Spec, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		recorder := &webhookStatusRecorder{ResponseWriter: response, status: http.StatusOK}
 		next.ServeHTTP(recorder, request)
-		successful := recorder.status != http.StatusUnauthorized && recorder.status < http.StatusInternalServerError
+		if recorder.status == http.StatusUnauthorized {
+			return
+		}
+		successful := recorder.status < http.StatusInternalServerError
 		detail := ""
 		if !successful {
 			detail = "webhook delivery failed with status " + strconv.Itoa(recorder.status)
 		}
-		r.observe(request.Context(), spec, HealthEventDelivery, successful, detail)
+		r.observe(request.Context(), spec, HealthEventDelivery, successful, detail, false)
 	})
 }
 
@@ -424,7 +441,11 @@ func (w *webhookStatusRecorder) WriteHeader(status int) {
 
 // observe updates the connector's successful-observation state and calls the
 // connector's observer. A nil observer disables observation.
-func (r *Runtime) observe(ctx context.Context, spec Spec, event HealthEvent, successful bool, detail string) {
+//
+// refreshPassState reads and stores the subscription and queue depth for this
+// observation. Every sweep pass sets it, including a pass whose delivery
+// failed, so the durable snapshot keeps tracking backlog while intake is down.
+func (r *Runtime) observe(ctx context.Context, spec Spec, event HealthEvent, successful bool, detail string, refreshPassState bool) {
 	if spec.Observe == nil {
 		return
 	}
@@ -432,10 +453,23 @@ func (r *Runtime) observe(ctx context.Context, spec Spec, event HealthEvent, suc
 	if tracker == nil {
 		return
 	}
+	tracker.mu.Lock()
+	switch event {
+	case HealthEventSweep:
+		if successful {
+			tracker.lastSuccessfulSweep = r.now()
+		}
+	case HealthEventDelivery:
+		if successful {
+			tracker.lastDelivery = r.now()
+		}
+	}
+	tracker.mu.Unlock()
+
 	var subscription forge.SubscriptionState
 	var subscriptionDetail string
 	var queueDepth map[string]int
-	if event == HealthEventSweep {
+	if refreshPassState {
 		subscription = forge.SubscriptionUnknown
 		if spec.Subscription != nil {
 			state, stateDetail := spec.Subscription(ctx)
@@ -443,9 +477,6 @@ func (r *Runtime) observe(ctx context.Context, spec Spec, event HealthEvent, suc
 		}
 		tracker.mu.Lock()
 		tracker.subscription, tracker.subscriptionDetail = subscription, subscriptionDetail
-		if successful {
-			tracker.lastSuccessfulSweep = r.now()
-		}
 		tracker.mu.Unlock()
 		if spec.QueueDepth != nil {
 			depths, err := spec.QueueDepth(ctx)
@@ -460,14 +491,6 @@ func (r *Runtime) observe(ctx context.Context, spec Spec, event HealthEvent, suc
 		}
 	}
 	lastSweep, lastDelivery, storedSubscription, storedDetail := tracker.status()
-	if event != HealthEventSweep {
-		tracker.mu.Lock()
-		if successful {
-			tracker.lastDelivery = r.now()
-		}
-		tracker.mu.Unlock()
-		lastSweep, lastDelivery, storedSubscription, storedDetail = tracker.status()
-	}
 	observation := HealthObservation{
 		Connector:           spec.Name,
 		SweepInterval:       spec.SweepInterval,

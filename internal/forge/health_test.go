@@ -290,6 +290,42 @@ func TestHealthSnapshotRoundTripIsBoundedAndPrivate(t *testing.T) {
 	}
 }
 
+// TestSaveConnectorHealthReplacesTheLatestObservation proves the documented
+// durable contract is latest-attempt-wins: a later observation for the same
+// connector replaces the previous degraded entry, including a successful sweep
+// after a failed delivery. The failed attempt is not held until a successful
+// delivery arrives.
+func TestSaveConnectorHealthReplacesTheLatestObservation(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	failedDelivery := ConnectorHealth{
+		Connector: "azdo", Status: HealthDegraded, Reason: "delivery_failed",
+		Detail: "webhook delivery failed with status 502", Subscription: SubscriptionActive,
+	}
+	if err := SaveConnectorHealth(root, failedDelivery); err != nil {
+		t.Fatalf("SaveConnectorHealth failed delivery: %v", err)
+	}
+	sweepOnly := ConnectorHealth{
+		Connector: "azdo", Status: HealthHealthy, Reason: "sweep_only",
+		Detail: "the reconciliation sweep is current and no delivery has been observed yet", Subscription: SubscriptionActive,
+	}
+	if err := SaveConnectorHealth(root, sweepOnly); err != nil {
+		t.Fatalf("SaveConnectorHealth later sweep: %v", err)
+	}
+
+	snapshot, err := LoadHealthSnapshot(root)
+	if err != nil {
+		t.Fatalf("LoadHealthSnapshot: %v", err)
+	}
+	if len(snapshot.Connectors) != 1 || snapshot.Connectors[0].Connector != "azdo" {
+		t.Fatalf("snapshot = %+v, want one replaced azdo entry", snapshot.Connectors)
+	}
+	if stored := snapshot.Connectors[0]; stored.Status != HealthHealthy || stored.Reason != "sweep_only" {
+		t.Fatalf("stored health = %s/%s, want the latest observation", stored.Status, stored.Reason)
+	}
+}
+
 func TestSaveConnectorHealthRejectsUnsafeIdentity(t *testing.T) {
 	t.Parallel()
 
