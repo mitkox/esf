@@ -54,11 +54,11 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: {drop: [ALL]}
           startupProbe:
-            exec: {command: ["/usr/local/bin/factory", "doctor", "--config", "/etc/esf/factory.toml", "--profile", "production", "--output", "json", "--offline"]}
+            exec: {command: ["/usr/local/bin/factory", "doctor", "--config", "/etc/esf/factory.toml", "--profile", "production", "--output", "json", "--offline", "--skip-connector-health"]}
             periodSeconds: 10
             failureThreshold: 30
           readinessProbe:
-            exec: {command: ["/usr/local/bin/factory", "doctor", "--config", "/etc/esf/factory.toml", "--profile", "production", "--output", "json", "--offline"]}
+            exec: {command: ["/usr/local/bin/factory", "doctor", "--config", "/etc/esf/factory.toml", "--profile", "production", "--output", "json", "--offline", "--skip-connector-health"]}
             periodSeconds: 20
           livenessProbe:
             exec: {command: ["/usr/local/bin/factory", "version", "--json"]}

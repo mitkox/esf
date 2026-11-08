@@ -14,14 +14,19 @@ Supply existing configuration Secrets and qualified image digests in
 ReadWriteOnce claim, or set a storage class that provisions one. NFS and
 RWX-backed storage are unsupported. All workloads mount that claim, so the chart co-locates the API and connector
 pods with the factory worker and requires `factory.enabled=true`; use storage
-that permits the co-located mounts. The startup and
-readiness probes run `factory doctor --profile production --offline`, which
-checks the API listener when enabled, configured connectors, the durable
-connector-health snapshot (each connector's status, reason and freshness),
-token-file permissions, and the evidence signing key. Because the health check
-fails until every configured connector has reported, worker and API pods become
-ready only after the connector has completed its first sweep. Install the
-pinned agents on the optional agent claim before starting the worker. Each
+that permits the co-located mounts. The API and worker startup and readiness
+probes run `factory doctor --profile production --offline
+--skip-connector-health`, a configuration-only check of the API listener when
+enabled, configured connectors, token-file permissions, and the evidence
+signing key. A first install, a connector outage, or a sweep gap longer than the
+freshness window therefore does not remove run execution from service. The
+connector Deployment's own startup and readiness probes keep the full
+production profile, including the durable connector-health snapshot (each
+connector's status, reason and freshness), so connector health gates the
+connector workload and the pod becomes ready only after every configured
+connector has reported. Operator pre-flight `factory doctor --profile
+production` always keeps the connector-health check. Install the pinned agents
+on the optional agent claim before starting the worker. Each
 Deployment uses one replica, the `Recreate` strategy, the restricted non-root
 security context, a read-only root filesystem, no added capabilities, and
 `automountServiceAccountToken: false`. The NetworkPolicy denies all ingress

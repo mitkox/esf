@@ -38,6 +38,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
+	"github.com/mitkox/esf/internal/console"
 	"github.com/mitkox/esf/internal/factory"
 	"github.com/mitkox/esf/internal/factoryartifacts"
 )
@@ -523,20 +524,6 @@ func printIntake(result *factory.IntakeResult, label string) {
 		label, result.Ready.Value, result.Ready.Probability, result.TaskType.Value, result.Ambiguity.Level)
 }
 
-// shellArg quotes a value interpolated into a copyable shell command. It mirrors
-// the console's unexported helper: an identifier is emitted verbatim only when
-// it cannot carry shell syntax, so a copied command cannot execute injected
-// input.
-func shellArg(value string) string {
-	if value != "" && strings.IndexFunc(value, func(r rune) bool {
-		return !(r == '-' || r == '_' || r == '.' || r == '/' || r == ':' || r == '+' || r == '=' ||
-			(r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'))
-	}) == -1 {
-		return value
-	}
-	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
-}
-
 // watchRunStatus streams condition transitions until the workflow closes.
 //
 // It polls the workflow query rather than opening a long-lived connection: the
@@ -562,7 +549,7 @@ func watchRunStatus(ctx context.Context, c client.Client, workflowID, runID stri
 			fmt.Printf("%s %-22s %-7s %s\n", time.Now().Format("15:04:05"), cond.Type, cond.Status, cond.Reason)
 		}
 		if status.State == factory.StatePaused {
-			fmt.Printf("%s %-22s %-7s %s\n", time.Now().Format("15:04:05"), "PAUSED", "", "awaiting `factory review "+shellArg(runID)+" --approve|--reject`")
+			fmt.Printf("%s %-22s %-7s %s\n", time.Now().Format("15:04:05"), "PAUSED", "", "awaiting `factory review "+console.ShellArg(runID)+" --approve|--reject`")
 		}
 		if isTerminalRunState(status.State) {
 			fmt.Printf("%s final state: %s\n", time.Now().Format("15:04:05"), status.State)
@@ -790,6 +777,7 @@ func newDoctorCommand(configPath *string) *cobra.Command {
 	command.Flags().BoolVar(&offline, "offline", false, "validate configuration and harnesses without contacting CubeSandbox or Temporal")
 	command.Flags().StringVar(&profile, "profile", "", "diagnostic profile (production)")
 	command.Flags().StringVar(&output, "output", "", "output format (json)")
+	command.Flags().BoolVar(&doctorSkipConnectorHealth, "skip-connector-health", false, "skip the durable connector-health check in the production profile")
 	return command
 }
 

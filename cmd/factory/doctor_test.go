@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,7 +129,7 @@ func TestProductionConnectorConfigurationCheck(t *testing.T) {
 		{"missing webhook TLS files", map[string]factory.ConnectorConfig{"azdo": func() factory.ConnectorConfig {
 			c := connector(goodToken)
 			c.WebhookUsername = "esf-hooks"
-			c.WebhookSecretFile = goodToken
+			c.WebhookSecretFile = writeDoctorToken(t, 0o600)
 			c.WebhookTLSCertFile = filepath.Join(t.TempDir(), "missing.crt")
 			c.WebhookTLSKeyFile = filepath.Join(t.TempDir(), "missing.key")
 			return c
@@ -152,7 +154,7 @@ func TestProductionConnectorConfigurationCheck(t *testing.T) {
 		{"valid webhook configuration", map[string]factory.ConnectorConfig{"azdo": func() factory.ConnectorConfig {
 			c := connector(goodToken)
 			c.WebhookUsername = "esf-hooks"
-			c.WebhookSecretFile = goodToken
+			c.WebhookSecretFile = writeDoctorToken(t, 0o600)
 			return c
 		}()}, "ok", ""},
 	}
@@ -392,5 +394,75 @@ func TestProductionEvidenceSigningKeyCheck(t *testing.T) {
 				t.Fatalf("detail = %q, want %q", check.Detail, tc.want)
 			}
 		})
+	}
+}
+
+// runDoctorProduction executes the doctor command in its production profile and
+// returns the JSON report. The report is printed through printJSON to stdout, so
+// the test captures that stream instead of the command's writers.
+func runDoctorProduction(t *testing.T, configPath string, extra ...string) string {
+	t.Helper()
+	command := newDoctorCommand(&configPath)
+	command.SilenceErrors = true
+	command.SetArgs(append([]string{"--profile", "production", "--output", "json", "--offline"}, extra...))
+	original := os.Stdout
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = writer
+	_ = command.Execute()
+	writer.Close()
+	os.Stdout = original
+	body, err := io.ReadAll(reader)
+	reader.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(body)
+}
+
+func TestDoctorSkipConnectorHealthFlag(t *testing.T) {
+	t.Cleanup(func() { doctorSkipConnectorHealth = false })
+
+	tokenFile := writeDoctorToken(t, 0o600)
+	path := filepath.Join(t.TempDir(), "factory.toml")
+	body := fmt.Sprintf(`[hardening]
+acknowledge_open_egress = true
+
+[cube]
+api_url = "http://127.0.0.1:4000"
+template_id = "tpl-test"
+
+[temporal]
+host_port = "127.0.0.1:7233"
+task_queue = "factory"
+tls = true
+
+[storage]
+data_dir = %q
+
+[connectors.azdo]
+kind = "azuredevops"
+base_url = "https://dev.azure.com/acme"
+token_file = %q
+`, t.TempDir(), tokenFile)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	full := runDoctorProduction(t, path)
+	if !strings.Contains(full, `"name": "connector_health"`) {
+		t.Fatalf("default production doctor omitted connector_health:\n%s", full)
+	}
+
+	probe := runDoctorProduction(t, path, "--skip-connector-health")
+	if strings.Contains(probe, `"name": "connector_health"`) {
+		t.Fatalf("configuration-only doctor still ran connector_health:\n%s", probe)
+	}
+	for _, name := range []string{"connector_configuration", "token_file_permissions", "evidence_signing_key"} {
+		if !strings.Contains(probe, `"name": "`+name+`"`) {
+			t.Fatalf("configuration-only doctor omitted %s:\n%s", name, probe)
+		}
 	}
 }

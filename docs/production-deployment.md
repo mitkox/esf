@@ -412,6 +412,17 @@ no `[connectors.*]` intake is configured. The
 NetworkPolicy denies all ingress except the API Service port and keeps egress
 limited to DNS plus the CIDRs and ports you list.
 
+The API and worker startup and readiness probes run
+`factory doctor --profile production --offline --skip-connector-health`, a
+configuration-only check of the API listener, configured connectors,
+token-file permissions, and the evidence signing key. A first install, a
+connector outage, or a sweep gap longer than the freshness window therefore
+does not mark run execution unready. The connector Deployment keeps the full
+production probe, including the durable connector-health snapshot, so connector
+health gates only the connector workload, which becomes ready after every
+configured connector has reported. Operator pre-flight `factory doctor
+--profile production` always includes the connector-health check.
+
 ```sh
 helm upgrade --install esf deploy/helm/esf -f values.yaml
 ```

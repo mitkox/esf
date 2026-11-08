@@ -537,6 +537,11 @@ func productionEvidenceSigningKey(cfg factory.Config) doctorCheck {
 	return passedCheck(name)
 }
 
+// doctorSkipConnectorHealth selects the configuration-only production checks
+// the workload probes need. The --skip-connector-health flag sets it; operator
+// pre-flight keeps the durable connector-health check.
+var doctorSkipConnectorHealth bool
+
 func runStructuredDoctor(ctx context.Context, configPath, profile, output string, offline bool) error {
 	if profile != "" && profile != "production" {
 		return fmt.Errorf("unsupported doctor profile %q", profile)
@@ -562,7 +567,11 @@ func runStructuredDoctor(ctx context.Context, configPath, profile, output string
 		checks = append(checks,
 			productionAPIListener(cfg),
 			productionConnectorConfiguration(cfg),
-			productionConnectorHealth(cfg, time.Now().UTC()),
+		)
+		if !doctorSkipConnectorHealth {
+			checks = append(checks, productionConnectorHealth(cfg, time.Now().UTC()))
+		}
+		checks = append(checks,
 			productionTokenFiles(cfg),
 			productionEvidenceSigningKey(cfg),
 		)
