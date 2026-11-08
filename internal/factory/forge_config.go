@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -356,17 +357,38 @@ func (c ConnectorConfig) webhookAuthProblems() []string {
 			problems = append(problems, "webhook_secret_file must be an absolute path")
 		}
 		// Both references need not exist yet, so compare their cleaned absolute
-		// forms. The credential reader rejects a symlink when it opens either
-		// file, so a symlink cannot alias the two past this check.
+		// forms first, and compare file identity when both exist: a hard link is
+		// a regular file, so the credential reader accepts it and only this
+		// check can reject the alias. The reader rejects a symlink when it opens
+		// either file. An identical-content copy is a separate file and cannot
+		// be detected at validation time.
 		if tokenFile := strings.TrimSpace(c.TokenFile); filepath.IsAbs(secretFile) && filepath.IsAbs(tokenFile) {
-			secretPath, secretErr := filepath.Abs(secretFile)
-			tokenPath, tokenErr := filepath.Abs(tokenFile)
-			if secretErr == nil && tokenErr == nil && secretPath == tokenPath {
+			if sameCredentialFile(tokenFile, secretFile) {
 				problems = append(problems, "webhook_secret_file must not name the same file as token_file")
 			}
 		}
 	}
 	return problems
+}
+
+// sameCredentialFile reports whether two credential references name one file.
+// References that do not exist yet can only be compared by their cleaned
+// absolute paths; existing files are also compared by identity.
+func sameCredentialFile(first, second string) bool {
+	firstPath, firstErr := filepath.Abs(first)
+	secondPath, secondErr := filepath.Abs(second)
+	if firstErr == nil && secondErr == nil && firstPath == secondPath {
+		return true
+	}
+	firstInfo, firstErr := os.Stat(first)
+	if firstErr != nil {
+		return false
+	}
+	secondInfo, secondErr := os.Stat(second)
+	if secondErr != nil {
+		return false
+	}
+	return os.SameFile(firstInfo, secondInfo)
 }
 
 // pipelineProblems checks one pipeline against the rest of the configuration.

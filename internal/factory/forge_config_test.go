@@ -303,6 +303,47 @@ func TestConnectorConfigValidation(t *testing.T) {
 	}
 }
 
+// TestConnectorConfigRejectsHardLinkedWebhookSecret covers the alias that is a
+// regular file: a hard link passes the private-file reader, so the guard has to
+// compare file identity and not only cleaned path strings.
+func TestConnectorConfigRejectsHardLinkedWebhookSecret(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	tokenFile := filepath.Join(dir, "azdo.token")
+	if err := os.WriteFile(tokenFile, []byte("esf:pat"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	secretFile := filepath.Join(dir, "azdo-webhook.secret")
+	if err := os.Link(tokenFile, secretFile); err != nil {
+		t.Skipf("hard links are not supported on this filesystem: %v", err)
+	}
+
+	connector := ConnectorConfig{
+		Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme",
+		TokenFile:         tokenFile,
+		WebhookUsername:   "esf-hooks",
+		WebhookSecretFile: secretFile,
+	}
+	cfg := forgeTestConfig()
+	cfg.Connectors["azdo"] = connector
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "webhook_secret_file must not name the same file as token_file") {
+		t.Fatalf("Validate() = %v, want a hard-link alias rejection", err)
+	}
+
+	// A distinct secret file is still a valid inbound credential.
+	distinct := filepath.Join(dir, "azdo-webhook-distinct.secret")
+	if err := os.WriteFile(distinct, []byte("hook-secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	connector.WebhookSecretFile = distinct
+	cfg.Connectors["azdo"] = connector
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("a distinct webhook secret must validate: %v", err)
+	}
+}
+
 // TestConnectorWebhookListenersMustBeDistinct keeps the runtime from starting
 // one receiver that would collide with another connector's bind.
 func TestConnectorWebhookListenersMustBeDistinct(t *testing.T) {
