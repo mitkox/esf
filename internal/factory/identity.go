@@ -2,14 +2,12 @@ package factory
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/mitkox/esf/internal/forge"
@@ -241,7 +239,7 @@ type scopeSlotClaim struct {
 
 // scopeSlotStore durably serialises scope admission across workers.
 type scopeSlotStore struct {
-	root string
+	state lockedState[scopeSlotState]
 }
 
 // ScopeSlotInput identifies the scope lease to release.
@@ -258,7 +256,21 @@ func openScopeSlotStore(artifactRoot string) (*scopeSlotStore, error) {
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, fmt.Errorf("scope slots: create %s: %w", root, err)
 	}
-	return &scopeSlotStore{root: root}, nil
+	return &scopeSlotStore{state: lockedState[scopeSlotState]{
+		root:        root,
+		fileName:    scopeSlotStateFileName,
+		lockName:    scopeSlotLockFileName,
+		tempPattern: ".scope-slots-*",
+		label:       "scope slots",
+		newState: func() scopeSlotState {
+			return scopeSlotState{Scopes: map[string][]scopeSlotLease{}}
+		},
+		normalize: func(state *scopeSlotState) {
+			if state.Scopes == nil {
+				state.Scopes = map[string][]scopeSlotLease{}
+			}
+		},
+	}}, nil
 }
 
 // Acquire admits runID into scope when fewer than limit leases are active.
@@ -287,7 +299,7 @@ func (s *scopeSlotStore) Acquire(ctx context.Context, scope, runID string, limit
 		now = time.Now().UTC()
 	}
 	claim := scopeSlotClaim{Limit: limit}
-	err = s.withState(func(state *scopeSlotState) error {
+	err = s.state.withState(func(state *scopeSlotState) error {
 		leases := pruneScopeSlotLeases(state.Scopes[scope], now)
 		for _, lease := range leases {
 			if lease.RunID == runID {
@@ -331,7 +343,7 @@ func (s *scopeSlotStore) Release(ctx context.Context, scope, runID string) error
 	if err != nil {
 		return err
 	}
-	return s.withState(func(state *scopeSlotState) error {
+	return s.state.withState(func(state *scopeSlotState) error {
 		leases := state.Scopes[scope]
 		kept := leases[:0]
 		for _, lease := range leases {
@@ -360,92 +372,11 @@ func (s *scopeSlotStore) Active(ctx context.Context, scope string, now time.Time
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	state, err := s.load()
+	state, err := s.state.load()
 	if err != nil {
 		return 0, err
 	}
 	return len(pruneScopeSlotLeases(state.Scopes[scope], now)), nil
-}
-
-func (s *scopeSlotStore) withState(update func(*scopeSlotState) error) error {
-	root, err := os.OpenRoot(s.root)
-	if err != nil {
-		return err
-	}
-	defer root.Close()
-	lock, err := root.OpenFile(scopeSlotLockFileName, os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0o600)
-	if err != nil {
-		return err
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return err
-	}
-	defer func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) }()
-
-	state, err := s.load()
-	if err != nil {
-		return err
-	}
-	if err := update(&state); err != nil {
-		return err
-	}
-	return s.save(state)
-}
-
-func (s *scopeSlotStore) load() (scopeSlotState, error) {
-	state := scopeSlotState{Scopes: map[string][]scopeSlotLease{}}
-	data, err := os.ReadFile(filepath.Join(s.root, scopeSlotStateFileName))
-	if errors.Is(err, os.ErrNotExist) {
-		return state, nil
-	}
-	if err != nil {
-		return state, err
-	}
-	if err := json.Unmarshal(data, &state); err != nil {
-		return state, fmt.Errorf("scope slots: decode state: %w", err)
-	}
-	if state.Scopes == nil {
-		state.Scopes = map[string][]scopeSlotLease{}
-	}
-	return state, nil
-}
-
-func (s *scopeSlotStore) save(state scopeSlotState) error {
-	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return fmt.Errorf("scope slots: encode state: %w", err)
-	}
-	tmp, err := os.CreateTemp(s.root, ".scope-slots-*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return err
-	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpName, filepath.Join(s.root, scopeSlotStateFileName)); err != nil {
-		return err
-	}
-	dir, err := os.Open(s.root)
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	return dir.Sync()
 }
 
 func pruneScopeSlotLeases(leases []scopeSlotLease, now time.Time) []scopeSlotLease {

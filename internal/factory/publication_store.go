@@ -2,13 +2,11 @@ package factory
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/mitkox/esf/internal/forge"
@@ -83,7 +81,7 @@ type publicationAcceptanceOutcome struct {
 }
 
 type publicationStore struct {
-	root string
+	state lockedState[publicationState]
 }
 
 func openPublicationStore(artifactRoot string) (*publicationStore, error) {
@@ -94,7 +92,31 @@ func openPublicationStore(artifactRoot string) (*publicationStore, error) {
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, fmt.Errorf("publication store: create %s: %w", root, err)
 	}
-	return &publicationStore{root: root}, nil
+	return &publicationStore{state: lockedState[publicationState]{
+		root:        root,
+		fileName:    publicationStateFileName,
+		lockName:    publicationStateLockName,
+		tempPattern: ".publication-state-*",
+		label:       "publication store",
+		newState: func() publicationState {
+			return publicationState{
+				Records:       map[string]publicationRecord{},
+				Current:       map[string]string{},
+				ByPullRequest: map[string]string{},
+			}
+		},
+		normalize: func(state *publicationState) {
+			if state.Records == nil {
+				state.Records = map[string]publicationRecord{}
+			}
+			if state.Current == nil {
+				state.Current = map[string]string{}
+			}
+			if state.ByPullRequest == nil {
+				state.ByPullRequest = map[string]string{}
+			}
+		},
+	}}, nil
 }
 
 func (s *publicationStore) RecordPublication(rec publicationRecord) (publicationRecord, error) {
@@ -103,7 +125,7 @@ func (s *publicationStore) RecordPublication(rec publicationRecord) (publication
 	}
 	now := time.Now().UTC()
 	var stored publicationRecord
-	err := s.withState(func(state *publicationState) error {
+	err := s.state.withState(func(state *publicationState) error {
 		key := publicationRecordKey(rec.ChangeID, rec.RunID)
 		prKey := publicationPRKey(rec.Connector, rec.Repository, rec.PullRequestID)
 		if existingKey, ok := state.ByPullRequest[prKey]; ok && existingKey != key {
@@ -171,7 +193,7 @@ func (s *publicationStore) RecordAcceptance(ctx context.Context, event publicati
 	}
 	now := time.Now().UTC()
 	var outcome publicationAcceptanceOutcome
-	err := s.withState(func(state *publicationState) error {
+	err := s.state.withState(func(state *publicationState) error {
 		prKey := publicationPRKeyForEvent(event, pullRequestID)
 		key, ok := state.ByPullRequest[prKey]
 		if !ok {
@@ -292,7 +314,7 @@ func applyAcceptance(rec *publicationRecord, event publicationAcceptanceEvent, n
 }
 
 func (s *publicationStore) Load(changeID string) (publicationRecord, bool, error) {
-	state, err := s.load()
+	state, err := s.state.load()
 	if err != nil {
 		return publicationRecord{}, false, err
 	}
@@ -305,7 +327,7 @@ func (s *publicationStore) Load(changeID string) (publicationRecord, bool, error
 }
 
 func (s *publicationStore) LoadByPullRequest(connector, repository, pullRequestID string) (publicationRecord, bool, error) {
-	state, err := s.load()
+	state, err := s.state.load()
 	if err != nil {
 		return publicationRecord{}, false, err
 	}
@@ -315,97 +337,6 @@ func (s *publicationStore) LoadByPullRequest(connector, repository, pullRequestI
 	}
 	record, ok := state.Records[key]
 	return record, ok, nil
-}
-
-func (s *publicationStore) load() (publicationState, error) {
-	state := publicationState{
-		Records:       map[string]publicationRecord{},
-		Current:       map[string]string{},
-		ByPullRequest: map[string]string{},
-	}
-	data, err := os.ReadFile(filepath.Join(s.root, publicationStateFileName))
-	if errors.Is(err, os.ErrNotExist) {
-		return state, nil
-	}
-	if err != nil {
-		return state, err
-	}
-	if err := json.Unmarshal(data, &state); err != nil {
-		return state, fmt.Errorf("publication store: decode state: %w", err)
-	}
-	if state.Records == nil {
-		state.Records = map[string]publicationRecord{}
-	}
-	if state.Current == nil {
-		state.Current = map[string]string{}
-	}
-	if state.ByPullRequest == nil {
-		state.ByPullRequest = map[string]string{}
-	}
-	return state, nil
-}
-
-func (s *publicationStore) withState(update func(*publicationState) error) error {
-	root, err := os.OpenRoot(s.root)
-	if err != nil {
-		return err
-	}
-	defer root.Close()
-	lock, err := root.OpenFile(publicationStateLockName, os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return err
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return err
-	}
-	defer func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) }()
-
-	state, err := s.load()
-	if err != nil {
-		return err
-	}
-	if err := update(&state); err != nil {
-		return err
-	}
-	return s.save(state)
-}
-
-func (s *publicationStore) save(state publicationState) error {
-	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return fmt.Errorf("publication store: encode state: %w", err)
-	}
-	tmp, err := os.CreateTemp(s.root, ".publication-state-*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return err
-	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpName, filepath.Join(s.root, publicationStateFileName)); err != nil {
-		return err
-	}
-	dir, err := os.Open(s.root)
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	return dir.Sync()
 }
 
 func validatePublicationRecord(rec publicationRecord) error {
