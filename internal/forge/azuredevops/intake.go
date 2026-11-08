@@ -130,6 +130,7 @@ func (s *Sweeper) Sweep(ctx context.Context) ([]forge.Candidate, error) {
 			Source:       forge.SourceSweep,
 			WorkItem:     snapshot.WorkItem,
 			WorkItemHash: snapshot.WorkItemHash,
+			Actor:        snapshot.Actor,
 		})
 	}
 	if err := s.watermark.Save(ctx, cursor); err != nil {

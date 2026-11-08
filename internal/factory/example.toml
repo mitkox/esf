@@ -143,6 +143,14 @@ local_paths = []
 # kind       = "azuredevops"
 # base_url   = "https://dev.azure.com/acme"
 # token_file = "/run/credentials/factory-worker.service/azuredevops-token"
+# # The connector workload binds each webhook receiver on loopback by default.
+# # A non-loopback address requires native TLS. Give every connector its own
+# # address when more than one is configured.
+# webhook_listen = "127.0.0.1:8091"
+# webhook_tls_cert_file = "/run/credentials/factory-connector.service/tls.crt"
+# webhook_tls_key_file = "/run/credentials/factory-connector.service/tls.key"
+# # Reconciliation cadence; the default is 1m.
+# sweep_interval = "1m"
 #
 # A pipeline is the ONLY place a work item learns its repository, scope, base
 # branch, and verification profile. Work-item payloads can match rules but can

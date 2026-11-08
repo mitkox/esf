@@ -183,6 +183,50 @@ func TestConnectorConfigValidation(t *testing.T) {
 			connector: ConnectorConfig{Kind: "gitlab", BaseURL: "https://user:pass@gitlab.example", TokenFile: "/run/secrets/token"},
 			want:      "base_url must be an absolute URL",
 		},
+		{
+			name: "custom webhook listener and TLS",
+			connector: ConnectorConfig{
+				Kind:               "azuredevops",
+				BaseURL:            "https://dev.azure.com/acme",
+				TokenFile:          "/run/secrets/azdo.token",
+				WebhookListen:      "127.0.0.1:9091",
+				WebhookTLSCertFile: "/run/secrets/tls.crt",
+				WebhookTLSKeyFile:  "/run/secrets/tls.key",
+				SweepInterval:      tomlx.FromStd(30 * time.Second),
+			},
+		},
+		{
+			name: "plaintext remote webhook",
+			connector: ConnectorConfig{
+				Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme",
+				TokenFile: "/run/secrets/azdo.token", WebhookListen: "0.0.0.0:8091",
+			},
+			want: "non-loopback",
+		},
+		{
+			name: "malformed webhook listener",
+			connector: ConnectorConfig{
+				Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme",
+				TokenFile: "/run/secrets/azdo.token", WebhookListen: "localhost",
+			},
+			want: "listen address",
+		},
+		{
+			name: "webhook TLS pair required",
+			connector: ConnectorConfig{
+				Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme",
+				TokenFile: "/run/secrets/azdo.token", WebhookTLSCertFile: "/run/secrets/tls.crt",
+			},
+			want: "set together",
+		},
+		{
+			name: "negative sweep interval",
+			connector: ConnectorConfig{
+				Kind: "azuredevops", BaseURL: "https://dev.azure.com/acme",
+				TokenFile: "/run/secrets/azdo.token", SweepInterval: tomlx.FromStd(-time.Second),
+			},
+			want: "sweep_interval",
+		},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -201,6 +245,49 @@ func TestConnectorConfigValidation(t *testing.T) {
 				t.Fatalf("Validate() = %v, want an error mentioning %q", err, tc.want)
 			}
 		})
+	}
+}
+
+// TestConnectorWebhookListenersMustBeDistinct keeps the runtime from starting
+// one receiver that would collide with another connector's bind.
+func TestConnectorWebhookListenersMustBeDistinct(t *testing.T) {
+	t.Parallel()
+
+	cfg := forgeTestConfig()
+	cfg.Connectors["second"] = ConnectorConfig{
+		Kind: "azuredevops", BaseURL: "https://dev.azure.com/other", TokenFile: "/run/secrets/other.token",
+	}
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "both bind webhook_listen") {
+		t.Fatalf("Validate() = %v, want a duplicate webhook listener error", err)
+	}
+	cfg.Connectors["second"] = func() ConnectorConfig {
+		connector := cfg.Connectors["second"]
+		connector.WebhookListen = "127.0.0.1:8092"
+		return connector
+	}()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("distinct listeners must be valid: %v", err)
+	}
+}
+
+func TestConnectorRuntimeDefaults(t *testing.T) {
+	t.Parallel()
+
+	var connector ConnectorConfig
+	if got := connector.WebhookListenAddress(); got != DefaultConnectorWebhookListen {
+		t.Fatalf("webhook listen = %q, want %q", got, DefaultConnectorWebhookListen)
+	}
+	if got := connector.SweepIntervalOrDefault(); got != DefaultConnectorSweepInterval {
+		t.Fatalf("sweep interval = %s, want %s", got, DefaultConnectorSweepInterval)
+	}
+	if connector.WebhookTLSConfigured() {
+		t.Fatal("TLS reported configured without both files")
+	}
+	connector.WebhookTLSCertFile = "/run/secrets/tls.crt"
+	connector.WebhookTLSKeyFile = "/run/secrets/tls.key"
+	if !connector.WebhookTLSConfigured() {
+		t.Fatal("TLS pair not reported configured")
 	}
 }
 
@@ -449,6 +536,10 @@ acknowledge_open_egress = true
 kind = "azuredevops"
 base_url = "https://dev.azure.com/acme"
 token_file = "/run/secrets/azdo.token"
+webhook_listen = "127.0.0.1:8092"
+webhook_tls_cert_file = "/run/secrets/tls.crt"
+webhook_tls_key_file = "/run/secrets/tls.key"
+sweep_interval = "30s"
 
 [pipelines.bugfix]
 connector = "azuredevops"
@@ -475,6 +566,13 @@ verification_profile = "default"
 	}
 	if got := cfg.Connectors["azuredevops"].Kind; got != "azuredevops" {
 		t.Fatalf("connector kind = %q", got)
+	}
+	connector := cfg.Connectors["azuredevops"]
+	if connector.WebhookListenAddress() != "127.0.0.1:8092" ||
+		connector.WebhookTLSCertFile != "/run/secrets/tls.crt" ||
+		connector.WebhookTLSKeyFile != "/run/secrets/tls.key" ||
+		connector.SweepIntervalOrDefault() != 30*time.Second {
+		t.Fatalf("connector runtime config = %#v", connector)
 	}
 	rules := cfg.Pipelines["bugfix"].Rules
 	if len(rules) != 1 || rules[0].Project != "Payments" || rules[0].Label != "esf" || rules[0].BaseBranch != "main" {

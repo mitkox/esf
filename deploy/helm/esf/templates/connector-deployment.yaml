@@ -56,9 +56,10 @@ spec:
         - name: connector
           image: {{ include "esf.image" .Values.factory.image | quote }}
           imagePullPolicy: IfNotPresent
-          # Forge adapters run in worker activities. This deployment is the
-          # connector host and shares the factory configuration and task queue.
-          args: ["worker", "--config", "/etc/esf/factory.toml"]
+          # The connector workload serves authenticated forge webhooks and runs
+          # their reconciliation sweeps. It shares configuration and the task
+          # queue with the worker, but it is not a second Temporal worker.
+          args: ["connector", "--config", "/etc/esf/factory.toml"]
           resources:
             {{- toYaml .Values.connector.resources | nindent 12 }}
           securityContext:

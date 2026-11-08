@@ -7,10 +7,22 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/mitkox/esf/internal/forge"
 	"github.com/mitkox/esf/internal/forge/azuredevops"
+	"github.com/mitkox/esf/internal/httpsecurity"
 	"github.com/mitkox/esf/internal/sandbox"
+	"github.com/mitkox/esf/internal/tomlx"
+)
+
+const (
+	// DefaultConnectorWebhookListen keeps the webhook receiver on loopback
+	// unless the operator explicitly binds another address.
+	DefaultConnectorWebhookListen = "127.0.0.1:8091"
+	// DefaultConnectorSweepInterval is how often reconciliation runs when the
+	// operator does not configure an interval.
+	DefaultConnectorSweepInterval = time.Minute
 )
 
 // ConnectorConfig declares one host-side forge adapter.
@@ -23,6 +35,37 @@ type ConnectorConfig struct {
 	Kind      string `toml:"kind"`
 	BaseURL   string `toml:"base_url"`
 	TokenFile string `toml:"token_file"`
+
+	// WebhookListen is the connector's inbound webhook address. Empty binds
+	// the loopback default; a non-loopback address requires native TLS.
+	WebhookListen string `toml:"webhook_listen"`
+	// WebhookTLSCertFile and WebhookTLSKeyFile enable native HTTPS for the
+	// webhook listener. Both are required together.
+	WebhookTLSCertFile string `toml:"webhook_tls_cert_file"`
+	WebhookTLSKeyFile  string `toml:"webhook_tls_key_file"`
+	// SweepInterval is the reconciliation cadence. Empty uses the default.
+	SweepInterval tomlx.Duration `toml:"sweep_interval"`
+}
+
+// WebhookListenAddress returns the configured address or the loopback default.
+func (c ConnectorConfig) WebhookListenAddress() string {
+	if listen := strings.TrimSpace(c.WebhookListen); listen != "" {
+		return listen
+	}
+	return DefaultConnectorWebhookListen
+}
+
+// WebhookTLSConfigured reports whether both TLS files are configured.
+func (c ConnectorConfig) WebhookTLSConfigured() bool {
+	return strings.TrimSpace(c.WebhookTLSCertFile) != "" && strings.TrimSpace(c.WebhookTLSKeyFile) != ""
+}
+
+// SweepIntervalOrDefault returns the configured interval or the default.
+func (c ConnectorConfig) SweepIntervalOrDefault() time.Duration {
+	if c.SweepInterval > 0 {
+		return c.SweepInterval.Std()
+	}
+	return DefaultConnectorSweepInterval
 }
 
 // PipelineConfig is one operator-only work-item mapping.
@@ -174,13 +217,21 @@ func (c Config) ResolvePipelineForConnector(connector string, fields forge.WorkI
 // validateForge accumulates connector and pipeline problems for Config.Validate.
 func (c Config) validateForge() []string {
 	var problems []string
+	listeners := map[string]string{}
 	for _, name := range sortedForgeNames(c.Connectors) {
 		if strings.TrimSpace(name) == "" {
 			problems = append(problems, "connector names must not be empty")
 			continue
 		}
-		if connectorProblems := c.Connectors[name].problems(); len(connectorProblems) > 0 {
+		connector := c.Connectors[name]
+		if connectorProblems := connector.problems(); len(connectorProblems) > 0 {
 			problems = append(problems, fmt.Sprintf("connector %q: %s", name, strings.Join(connectorProblems, "; ")))
+		}
+		listen := connector.WebhookListenAddress()
+		if previous, ok := listeners[listen]; ok {
+			problems = append(problems, fmt.Sprintf("connectors %q and %q both bind webhook_listen %q; assign each connector a distinct address", previous, name, listen))
+		} else {
+			listeners[listen] = name
 		}
 	}
 	for _, name := range sortedForgeNames(c.Pipelines) {
@@ -212,6 +263,14 @@ func (c ConnectorConfig) problems() []string {
 		problems = append(problems, "token_file is required")
 	} else if !filepath.IsAbs(tokenFile) {
 		problems = append(problems, "token_file must be an absolute path")
+	}
+	if tlsConfigured := c.WebhookTLSConfigured(); (strings.TrimSpace(c.WebhookTLSCertFile) == "") != (strings.TrimSpace(c.WebhookTLSKeyFile) == "") {
+		problems = append(problems, "webhook_tls_cert_file and webhook_tls_key_file must be set together")
+	} else if err := httpsecurity.ValidateListen(c.WebhookListenAddress(), tlsConfigured); err != nil {
+		problems = append(problems, "webhook_listen: "+err.Error())
+	}
+	if c.SweepInterval < 0 {
+		problems = append(problems, "sweep_interval must not be negative")
 	}
 	return problems
 }

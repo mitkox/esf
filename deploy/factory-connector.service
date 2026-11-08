@@ -1,5 +1,5 @@
 [Unit]
-Description=Factory connector host (forge adapters in the Temporal worker)
+Description=Factory connector intake (forge reconciliation and webhooks)
 Wants=network-online.target
 After=network-online.target
 StartLimitIntervalSec=300
@@ -12,11 +12,12 @@ Group=factory
 WorkingDirectory=/var/lib/factory
 StateDirectory=factory
 StateDirectoryMode=0750
-# Forge adapters run in worker activities. Connector token files named by
-# [connectors.<name>].token_file are owned by this user with mode 0600. The
-# private-file reader refuses group- or other-readable files.
+# Connector token files named by [connectors.<name>].token_file are owned by
+# this user with mode 0600. The private-file reader refuses group- or
+# other-readable files. The runtime also writes durable reconciliation
+# watermarks under the data directory.
 EnvironmentFile=/etc/factory/worker.env
-ExecStart=/usr/local/bin/factory worker --config /etc/factory/factory.toml
+ExecStart=/usr/local/bin/factory connector --config /etc/factory/factory.toml
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=60

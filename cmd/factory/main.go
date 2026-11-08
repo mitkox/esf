@@ -8,6 +8,7 @@
 //	factory status   inspect a run
 //	factory logs     show a run's evidence
 //	factory worker   run the Temporal worker
+//	factory connector run forge connector intake
 //	factory api      serve the public execution API
 //	factory verify   verify a signed evidence bundle offline
 //	factory doctor   verify Cube, Temporal and configuration before running
@@ -72,6 +73,7 @@ verification, one verified patch out.`,
 		newAgentsCommand(&configPath),
 		newConsoleCommand(&configPath),
 		newAPICommand(&configPath),
+		newConnectorCommand(&configPath),
 		newStorageCommand(&configPath),
 		newRetentionCommand(&configPath),
 		newRunCommand(&configPath),

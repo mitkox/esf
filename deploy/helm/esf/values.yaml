@@ -28,9 +28,9 @@ api:
   nodeSelector: {kubernetes.io/os: linux}
 
 connector:
-  # The connector host is a second worker Deployment. Both worker workloads use
-  # the same task queue and configuration, so disable one when you do not want
-  # to scale worker concurrency.
+  # The connector workload serves authenticated forge webhooks and runs their
+  # reconciliation sweeps. It shares the factory configuration and task queue
+  # with the worker, but it is not a second Temporal worker.
   enabled: true
   resources:
     requests: {cpu: 100m, memory: 256Mi}

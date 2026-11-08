@@ -117,6 +117,17 @@ func TestProductionConnectorConfigurationCheck(t *testing.T) {
 		{"valid", map[string]factory.ConnectorConfig{"azdo": connector(goodToken)}, "ok", ""},
 		{"group readable token", map[string]factory.ConnectorConfig{"azdo": connector(groupReadable)}, "fail", "token_file"},
 		{"unsupported kind", map[string]factory.ConnectorConfig{"azdo": {Kind: "jenkins", BaseURL: "https://dev.azure.com/acme", TokenFile: goodToken}}, "fail", "not supported"},
+		{"plaintext remote webhook", map[string]factory.ConnectorConfig{"azdo": func() factory.ConnectorConfig {
+			c := connector(goodToken)
+			c.WebhookListen = "0.0.0.0:8091"
+			return c
+		}()}, "fail", "non-loopback"},
+		{"missing webhook TLS files", map[string]factory.ConnectorConfig{"azdo": func() factory.ConnectorConfig {
+			c := connector(goodToken)
+			c.WebhookTLSCertFile = filepath.Join(t.TempDir(), "missing.crt")
+			c.WebhookTLSKeyFile = filepath.Join(t.TempDir(), "missing.key")
+			return c
+		}()}, "fail", "webhook TLS"},
 	}
 	for _, tc := range cases {
 		tc := tc

@@ -40,6 +40,9 @@ type Candidate struct {
 	Source       Source
 	WorkItem     WorkItem
 	WorkItemHash string
+	// Actor is the forge-resolved identity from the authoritative work-item
+	// response. A sweep must not copy a display name from an event payload.
+	Actor Actor
 }
 
 // Proposal is an authorized intake event that may start or signal a run.

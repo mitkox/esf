@@ -343,6 +343,16 @@ func productionConnectorConfiguration(cfg factory.Config) doctorCheck {
 	for _, connectorName := range names {
 		if _, err := cfg.Connector(connectorName); err != nil {
 			problems = append(problems, err.Error())
+			continue
+		}
+		connectorConfig := cfg.Connectors[connectorName]
+		tlsConfig, err := httpsecurity.LoadTLSConfig(connectorConfig.WebhookTLSCertFile, connectorConfig.WebhookTLSKeyFile)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("connector %q: webhook TLS: %v", connectorName, err))
+			continue
+		}
+		if err := httpsecurity.ValidateListen(connectorConfig.WebhookListenAddress(), tlsConfig != nil); err != nil {
+			problems = append(problems, fmt.Sprintf("connector %q: webhook_listen: %v", connectorName, err))
 		}
 	}
 	if len(problems) > 0 {
