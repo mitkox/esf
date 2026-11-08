@@ -111,8 +111,6 @@ func (c EvidenceConfig) configured() bool {
 	return strings.TrimSpace(c.SigningKeyFile) != ""
 }
 
-// validate fails at startup rather than after a run has already completed,
-// when an unusable key would leave the run without its evidence.
 func (c EvidenceConfig) validate() error {
 	if !c.configured() {
 		return nil

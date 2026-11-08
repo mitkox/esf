@@ -14,15 +14,11 @@ import (
 	"github.com/mitkox/esf/internal/forge"
 )
 
-// The client implements the connector contract. Intake and reconciliation live
-// in client.go, intake.go and webhook.go; this file completes the forge-facing
-// operations with the same host-side credential and bounded retry rules.
 var _ forge.Connector = (*Client)(nil)
 
 const (
 	// azureDevOpsMaxBodyBytes is the documented pull-request description cap.
 	azureDevOpsMaxBodyBytes = 4000
-	defaultStatusName       = forge.VerificationStatusName
 	statusGenre             = "esf"
 )
 
@@ -83,7 +79,7 @@ func (c *Client) Report(ctx context.Context, req forge.ReportRequest) error {
 
 		name := strings.TrimSpace(req.Status.Name)
 		if name == "" {
-			name = defaultStatusName
+			name = forge.VerificationStatusName
 		}
 		state := azureStatusState(req.Status.State)
 		payload, err := json.Marshal(map[string]any{

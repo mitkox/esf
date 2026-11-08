@@ -21,11 +21,6 @@ const (
 	publicationPendingPrefix = "pending:"
 )
 
-// publicationRecord is the durable record of one published pull request.
-//
-// It is separate from the change and the run manifest because acceptance can
-// outlive a workflow history, and because a merge observation may arrive before
-// publication has finished writing its own record.
 type publicationRecord struct {
 	ChangeID       string `json:"change_id"`
 	RunID          string `json:"run_id"`

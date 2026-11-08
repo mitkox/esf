@@ -16,6 +16,7 @@ import (
 	"github.com/mitkox/esf/internal/api"
 	"github.com/mitkox/esf/internal/factory"
 	artifacts "github.com/mitkox/esf/internal/factoryartifacts"
+	"github.com/mitkox/esf/internal/repository"
 )
 
 // newAPICommand serves the public execution API.
@@ -101,7 +102,7 @@ func (c *apiController) runRequest(request api.RunRequest) (factory.RunRequest, 
 	run := factory.RunRequest{
 		RunID:               request.RunID,
 		Repository:          request.Repository,
-		RepositoryKind:      "remote",
+		RepositoryKind:      string(repository.SourceRemote),
 		Revision:            request.Revision,
 		Task:                request.Task,
 		SandboxTemplate:     c.config.Cube.TemplateID,
@@ -167,20 +168,16 @@ func (c *apiController) Status(ctx context.Context, runID string) (api.RunStatus
 	if err != nil {
 		return api.RunStatus{}, api.ErrRunNotFound
 	}
-	exists, err := store.Exists(factory.ArtifactRun)
-	if err != nil {
-		return api.RunStatus{}, err
-	}
-	if exists {
-		body, err := store.Read(factory.ArtifactRun)
-		if err != nil {
-			return api.RunStatus{}, err
-		}
+	body, err := store.Read(factory.ArtifactRun)
+	if err == nil {
 		var manifest factory.RunManifest
 		if err := json.Unmarshal(body, &manifest); err != nil {
 			return api.RunStatus{}, fmt.Errorf("decode manifest for run %s: %w", runID, err)
 		}
 		return statusFromManifest(manifest), nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return api.RunStatus{}, err
 	}
 	status, err := factory.QueryRunStatus(ctx, c.client, factory.WorkflowIDForRun(runID), "")
 	if err != nil {

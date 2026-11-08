@@ -149,6 +149,14 @@ func newConfigCommand(configPath *string) *cobra.Command {
 		if err := os.Rename(tmp.Name(), path); err != nil {
 			return err
 		}
+		dir, err := os.Open(filepath.Dir(path))
+		if err != nil {
+			return err
+		}
+		defer dir.Close()
+		if err := dir.Sync(); err != nil {
+			return err
+		}
 		fmt.Printf("migrated %s; backup: %s\n", path, backup)
 		return nil
 	}}

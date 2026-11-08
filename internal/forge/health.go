@@ -11,11 +11,6 @@ import (
 	"time"
 )
 
-// Connector liveness is reported as a small, explicit projection rather than
-// by serializing adapter state. Three facts answer the operator's question:
-// reconciliation is running, deliveries still arrive, and the forge has not
-// disabled the subscription those deliveries depend on.
-
 // SubscriptionState is the forge's event-subscription state.
 type SubscriptionState string
 

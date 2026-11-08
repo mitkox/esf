@@ -280,6 +280,7 @@ func TestNewRejectsInvalidEndpointOrToken(t *testing.T) {
 		token   string
 	}{
 		{name: "missing scheme", baseURL: "factory.example.com", token: testToken},
+		{name: "plaintext remote host", baseURL: "http://factory.example.com", token: testToken},
 		{name: "missing host", baseURL: "https://", token: testToken},
 		{name: "missing token", baseURL: "https://factory.example.com", token: ""},
 	}

@@ -44,6 +44,7 @@ const (
 	workItemStatusAcceptanceDrift   = "acceptance_drift"
 	workItemStatusAcceptanceUnknown = "acceptance_unresolved"
 	workItemStatusRework            = "rework"
+	workItemStatusError             = "error"
 
 	workItemWorkflowPrefix     = "factory-workitem-"
 	changeActivationPrefix     = "factory-change-"
@@ -221,7 +222,7 @@ func WorkItemWorkflow(ctx workflow.Context, in WorkItemWorkflowInput) (WorkItemO
 		resolved, err := resolveWorkItemIntake(ctx, acts, proposal, in.Pipeline)
 		if err != nil {
 			setWorkItemCondition(ctx, &outcome.Conditions, ConditionIntake, ConditionFalse, "ResolveFailed", err.Error())
-			outcome.Status = "error"
+			outcome.Status = workItemStatusError
 			return finishWorkItemOutcome(ctx, outcome), nil
 		}
 		outcome.Connector = resolved.Connector
@@ -257,7 +258,7 @@ func WorkItemWorkflow(ctx workflow.Context, in WorkItemWorkflowInput) (WorkItemO
 			}
 			// The intake decision was accepted; the child failed afterward, so
 			// the Intake condition stays True and the outcome names the error.
-			outcome.Status = "error"
+			outcome.Status = workItemStatusError
 			recordWorkItemOutcome(ctx, acts, WorkItemOutcomeInput{
 				Connector: resolved.Connector, Repository: resolved.Repository,
 				WorkItemID: proposal.WorkItem.ID, Revision: proposal.WorkItem.Revision,

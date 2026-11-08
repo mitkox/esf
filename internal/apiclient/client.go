@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -90,6 +91,9 @@ func New(baseURL, token string) (*Client, error) {
 	}
 	if parsed.Host == "" {
 		return nil, errors.New("apiclient: the base URL must name a host")
+	}
+	if parsed.Scheme == "http" && !isLoopbackHost(parsed.Hostname()) {
+		return nil, errors.New("apiclient: plaintext http is allowed only for a loopback host")
 	}
 	if strings.TrimSpace(token) == "" {
 		return nil, errors.New("apiclient: a bearer token is required")
@@ -233,4 +237,13 @@ func apiError(response *http.Response) error {
 		message = body.Error
 	}
 	return &APIError{StatusCode: response.StatusCode, Code: body.Code, Message: message}
+}
+
+// isLoopbackHost reports whether host is an explicit loopback name or address.
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

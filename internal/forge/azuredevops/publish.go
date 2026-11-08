@@ -296,7 +296,7 @@ func (c *Client) PublishBranch(ctx context.Context, req forge.BranchPublication)
 }
 
 func validateBuildOptions(opts BuildPublicationOptions) error {
-	if _, err := parseGitRemote(opts.RepositoryURL); err != nil {
+	if err := parseGitRemote(opts.RepositoryURL); err != nil {
 		return err
 	}
 	if !validObjectID(opts.BaselineSHA) {
@@ -320,24 +320,21 @@ func validateBuildOptions(opts BuildPublicationOptions) error {
 	return nil
 }
 
-func parseGitRemote(raw string) (string, error) {
+func parseGitRemote(raw string) error {
 	value := strings.TrimSpace(raw)
 	if value == "" {
-		return "", errors.New("azuredevops: repository is required")
+		return errors.New("azuredevops: repository is required")
 	}
 	if strings.HasPrefix(value, "-") || strings.ContainsAny(value, "\x00\r\n") {
-		return "", errors.New("azuredevops: repository is not a safe git remote")
+		return errors.New("azuredevops: repository is not a safe git remote")
 	}
-	if strings.HasPrefix(value, "/") {
-		return value, nil
-	}
-	if strings.HasPrefix(value, "file://") {
-		return value, nil
+	if strings.HasPrefix(value, "/") || strings.HasPrefix(value, "file://") {
+		return nil
 	}
 	if strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://") {
-		return value, nil
+		return nil
 	}
-	return "", fmt.Errorf("azuredevops: repository %q is not an absolute path or http(s) URL", raw)
+	return fmt.Errorf("azuredevops: repository %q is not an absolute path or http(s) URL", raw)
 }
 
 func validObjectID(value string) bool {
