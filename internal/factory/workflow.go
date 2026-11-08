@@ -190,6 +190,11 @@ func softwareChangeWorkflow(ctx workflow.Context, req RunRequest) (RunManifest, 
 		return RunManifest{}, err
 	}
 
+	// A scope admission lease, when one was acquired, is held through cleanup.
+	// It is registered before the cleanup defer so cleanup runs first, and the
+	// release uses a disconnected context so cancellation cannot strand a slot.
+	defer func() { releaseScopeSlot(ctx, acts, state) }()
+
 	// Cleanup is registered BEFORE the sandbox exists, so it runs on every exit
 	// path: success, agent failure, verification failure, timeout and
 	// cancellation. A leaked microVM counts as a failed integration test, so
@@ -365,14 +370,36 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	// will be rejected again.
 	s.status.CurrentStep = "validate"
 	var validated ValidateOutput
-	if err := executeActivity(ctx, acts.ValidateRequest, noRetry(), ValidateInput{Request: req}).Get(ctx, &validated); err != nil {
-		s.status.State = StateInvalidRequest
-		s.setCondition(ctx, ConditionValidated, ConditionFalse, "PolicyRejected", err.Error())
-		return fmt.Errorf("request rejected: %w", err)
+	for {
+		// Reset before every attempt: a queued result and an admitted result
+		// are decoded into the same value, and the admitted result omits the
+		// empty queue fields.
+		validated = ValidateOutput{}
+		if err := executeActivity(ctx, acts.ValidateRequest, noRetry(), ValidateInput{Request: req}).Get(ctx, &validated); err != nil {
+			s.status.State = StateInvalidRequest
+			s.setCondition(ctx, ConditionValidated, ConditionFalse, "PolicyRejected", err.Error())
+			return fmt.Errorf("request rejected: %w", err)
+		}
+		if !validated.Queued {
+			break
+		}
+		// The scope is at its admission cap. Waiting is a durable workflow
+		// decision: the work is retried rather than rejected or dropped, and no
+		// sandbox exists while it waits.
+		s.status.CurrentStep = "validate.queued"
+		s.setCondition(ctx, ConditionValidated, ConditionUnknown, "Queued", validated.QueueReason)
+		if err := workflow.Sleep(ctx, scopeQueuePollInterval); err != nil {
+			return err
+		}
 	}
 	s.validate = validated
 	s.resources = validated.Resources
 	s.reviewPorts = validated.Resources.PreviewPorts
+	s.status.Scope = validated.Resources.Scope
+	req.Scope = validated.Resources.Scope
+	if validated.Resources.VerificationProfile != "" {
+		req.VerificationProfile = validated.Resources.VerificationProfile
+	}
 	s.setCondition(ctx, ConditionValidated, ConditionTrue, "PolicyAccepted",
 		"scope="+s.resources.Scope)
 	req.AgentTimeout = validated.AgentTimeout
@@ -1327,6 +1354,35 @@ func finalizeRun(
 }
 
 // ── activity options ──────────────────────────────────────────────────────
+
+// scopeQueuePollInterval bounds how long a run waits between scope admission
+// attempts. The retry is a workflow timer, so it survives a worker restart.
+const scopeQueuePollInterval = 5 * time.Second
+
+// releaseScopeSlot returns the run's scope admission lease, if it holds one.
+//
+// It runs from a deferred call with a disconnected context: cancellation is
+// exactly when a stranded lease would block a team, so release must not depend
+// on the workflow context remaining alive.
+func releaseScopeSlot(ctx workflow.Context, acts *Activities, state *workflowState) {
+	if state == nil || state.resources.MaxConcurrentRuns <= 0 {
+		return
+	}
+	disconnected, _ := workflow.NewDisconnectedContext(ctx)
+	actx := workflow.WithActivityOptions(disconnected, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumAttempts:    3,
+		},
+	})
+	in := ScopeSlotInput{Scope: state.resources.Scope, RunID: state.status.RunID}
+	if err := workflow.ExecuteActivity(actx, acts.ReleaseScopeSlot, in).Get(disconnected, nil); err != nil {
+		workflow.GetLogger(ctx).Warn("scope concurrency lease was not released",
+			"run_id", state.status.RunID, "scope", state.resources.Scope, "error", err)
+	}
+}
 
 // noRetry disables retries for deterministic operations.
 func noRetry() workflow.ActivityOptions {

@@ -117,6 +117,9 @@ func TestWebhookAcceptsMappedUpdateFromReFetchedWorkItem(t *testing.T) {
 	if proposal.Actor.DisplayName != "Ada Lovelace" || proposal.Actor.Descriptor != "aad.ada-lovelace" {
 		t.Fatalf("actor = %#v, want the API-resolved actor", proposal.Actor)
 	}
+	if proposal.RepositoryPermission != forge.PermissionWrite {
+		t.Fatalf("repository permission = %q, want write", proposal.RepositoryPermission)
+	}
 	if proposal.WorkItemHash != forge.DigestWorkItem(readFixture(t, "workitem-42.json")) {
 		t.Fatalf("work item hash = %q", proposal.WorkItemHash)
 	}

@@ -273,6 +273,8 @@ func (h *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Actor:         actor,
 		DeliveryID:    identity,
 		ChangedFields: changedFields,
+		// The proposal is evidence that the repository write check passed.
+		RepositoryPermission: forge.PermissionWrite,
 	}
 	if err := h.sink.Propose(r.Context(), proposal); err != nil {
 		h.dedupe.Release(dedupeKey)

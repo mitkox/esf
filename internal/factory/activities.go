@@ -256,6 +256,12 @@ type ValidateOutput struct {
 	// code must never resolve a name, because a config change during a run
 	// would make Temporal replay non-deterministic.
 	Resources ResolvedResources `json:"resources"`
+	// Queued reports that the run passed every policy check but the scope's
+	// admission cap is full. The workflow waits and retries validation; the
+	// work is never dropped and no sandbox exists yet.
+	Queued bool `json:"queued,omitempty"`
+	// QueueReason explains why the run is waiting.
+	QueueReason string `json:"queue_reason,omitempty"`
 }
 
 // CreateSandboxInput creates the run's microVM.
@@ -609,7 +615,7 @@ func (a *Activities) ValidateRequest(ctx context.Context, in ValidateInput) (Val
 		"task_hash":            out.TaskHash,
 		"agent_harness":        req.AgentHarness,
 		"agent_model":          req.AgentModel,
-		"verification_profile": req.VerificationProfile,
+		"verification_profile": resolved.VerificationProfile,
 		"sandbox_template":     req.SandboxTemplate,
 		"scope":                resolved.Scope,
 		"work_item":            req.WorkItem,
@@ -621,6 +627,26 @@ func (a *Activities) ValidateRequest(ctx context.Context, in ValidateInput) (Val
 	}
 	if err := a.writeJSON(store, ArtifactTask, record); err != nil {
 		return ValidateOutput{}, err
+	}
+	// Admission happens after every policy check and before any sandbox. A
+	// full scope returns a wait result instead of a rejection, so the workflow
+	// retries and the work item is never silently dropped.
+	if resolved.MaxConcurrentRuns > 0 {
+		claim, err := a.acquireScopeSlot(ctx, resolved.Scope, req.RunID, resolved.MaxConcurrentRuns)
+		if err != nil {
+			return ValidateOutput{}, fmt.Errorf("scope admission: %w", err)
+		}
+		if !claim.Granted {
+			out.Queued = true
+			out.QueueReason = fmt.Sprintf("scope %q is at its concurrency cap (%d active, limit %d)",
+				resolved.Scope, claim.Active, claim.Limit)
+			a.log.InfoContext(ctx, "run queued at scope concurrency cap",
+				slog.String("run.id", req.RunID),
+				slog.String("scope", resolved.Scope),
+				slog.Int("active", claim.Active),
+				slog.Int("limit", claim.Limit))
+			return out, nil
+		}
 	}
 	return out, nil
 }
@@ -1336,7 +1362,7 @@ func (a *Activities) FinalizeResult(ctx context.Context, in FinalizeInput) (Fina
 		CubeVersion:             a.cfg.Cube.Version,
 		SandboxTemplate:         in.SandboxTemplate,
 		SandboxID:               in.SandboxID,
-		VerificationProfile:     in.Request.VerificationProfile,
+		VerificationProfile:     resolvedVerificationProfile(in),
 		StartedAt:               in.StartedAt,
 		CompletedAt:             in.CompletedAt,
 		Duration:                in.CompletedAt.Sub(in.StartedAt),
@@ -1411,6 +1437,15 @@ func (a *Activities) FinalizeResult(ctx context.Context, in FinalizeInput) (Fina
 		slog.String("verification.result", string(manifest.VerificationResult)),
 		slog.String("cleanup.result", string(manifest.CleanupResult.Outcome)))
 	return FinalizeOutput{Manifest: manifest}, nil
+}
+
+// resolvedVerificationProfile prefers the scope-resolved profile over the raw
+// request field, so the manifest records the profile the run actually used.
+func resolvedVerificationProfile(in FinalizeInput) string {
+	if profile := strings.TrimSpace(in.Resources.VerificationProfile); profile != "" {
+		return profile
+	}
+	return in.Request.VerificationProfile
 }
 
 // WriteEnvironment records the execution environment for reproducibility.

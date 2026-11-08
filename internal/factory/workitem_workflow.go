@@ -45,26 +45,27 @@ const (
 	workItemStatusAcceptanceUnknown = "acceptance_unresolved"
 	workItemStatusRework            = "rework"
 
-	workItemWorkflowPrefix  = "factory-workitem-"
-	changeActivationPrefix  = "factory-change-"
-	workItemRunPrefix       = "wi-"
-	workItemChangePrefix    = "workitem-"
-	intakeDirName           = "intake"
-	maxWorkItemTaskBytes    = 64 << 10
-	maxIntakeFieldBytes     = 4096
-	intakeStateFileName     = "state.json"
-	intakeAuditFileName     = "audit.jsonl"
-	intakeStateLockFileName = "state.lock"
-	intakeRecordAccepted    = "accepted"
-	intakeRecordSucceeded   = "succeeded"
-	intakeRecordFailed      = "failed"
-	intakeRecordError       = "error"
-	intakeStatusDuplicate   = "duplicate"
-	intakeStatusStale       = "stale"
-	intakeStatusConflict    = "snapshot_conflict"
-	intakeStatusNoMapping   = "no_mapping"
-	intakeStatusRejected    = "rejected"
-	intakeStatusRunning     = "running"
+	workItemWorkflowPrefix     = "factory-workitem-"
+	changeActivationPrefix     = "factory-change-"
+	workItemRunPrefix          = "wi-"
+	workItemChangePrefix       = "workitem-"
+	intakeDirName              = "intake"
+	maxWorkItemTaskBytes       = 64 << 10
+	maxIntakeFieldBytes        = 4096
+	intakeStateFileName        = "state.json"
+	intakeAuditFileName        = "audit.jsonl"
+	intakeStateLockFileName    = "state.lock"
+	intakeRecordAccepted       = "accepted"
+	intakeRecordSucceeded      = "succeeded"
+	intakeRecordFailed         = "failed"
+	intakeRecordError          = "error"
+	intakeStatusDuplicate      = "duplicate"
+	intakeStatusStale          = "stale"
+	intakeStatusConflict       = "snapshot_conflict"
+	intakeStatusNoMapping      = "no_mapping"
+	intakeStatusScopeAmbiguous = "scope_ambiguous"
+	intakeStatusRejected       = "rejected"
+	intakeStatusRunning        = "running"
 )
 
 // WorkItemWorkflowInput is one intake delivery.
@@ -541,6 +542,8 @@ func intakeConditionReason(status string) string {
 		return "SnapshotChanged"
 	case intakeStatusNoMapping:
 		return "NoMapping"
+	case intakeStatusScopeAmbiguous:
+		return "ScopeAmbiguous"
 	case intakeStatusRejected:
 		return "Rejected"
 	default:
@@ -583,15 +586,38 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 		return WorkItemResolution{}, fmt.Errorf("work item intake: actor identity was not resolved through the forge")
 	}
 
-	resolved, err := a.resolvePipeline(connector, in.Pipeline, workItem.MappingFields())
+	fields := workItem.MappingFields()
+	scope, err := a.resolveScope(connector, in.Pipeline, fields)
 	if err != nil {
-		auditIntake(ctx, a, proposal, WorkItemResolution{
-			Status: intakeStatusNoMapping, Reason: err.Error(),
-			Connector: connector, Repository: "",
-		}, AuditOutcomeRejected)
-		return WorkItemResolution{
-			Status: intakeStatusNoMapping, Reason: err.Error(), Connector: connector,
-		}, nil
+		status := intakeStatusNoMapping
+		var ambiguous *AmbiguousScopeError
+		if errors.As(err, &ambiguous) {
+			status = intakeStatusScopeAmbiguous
+		}
+		resolution := WorkItemResolution{Status: status, Reason: err.Error(), Connector: connector}
+		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
+		return resolution, nil
+	}
+
+	resolved, err := a.resolvePipeline(connector, in.Pipeline, fields)
+	if err != nil {
+		status := intakeStatusNoMapping
+		var ambiguous *AmbiguousScopeError
+		if errors.As(err, &ambiguous) {
+			status = intakeStatusScopeAmbiguous
+		}
+		resolution := WorkItemResolution{Status: status, Reason: err.Error(), Connector: connector}
+		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
+		return resolution, nil
+	}
+	if resolved.Scope != scope {
+		resolution := WorkItemResolution{
+			Status: intakeStatusRejected, Connector: connector,
+			Reason: fmt.Sprintf("scope resolution disagreed: %q resolved from the work item, %q from the pipeline",
+				scope, resolved.Scope),
+		}
+		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
+		return resolution, nil
 	}
 
 	resolution := WorkItemResolution{
@@ -599,7 +625,7 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 		Pipeline:            resolved.Pipeline,
 		Repository:          resolved.Repository,
 		BaseBranch:          resolved.BaseBranch,
-		Scope:               resolved.Scope,
+		Scope:               scope,
 		VerificationProfile: resolved.VerificationProfile,
 		SnapshotHash:        proposal.WorkItemHash,
 	}
@@ -610,7 +636,7 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 		auditIntake(ctx, a, proposal, resolution, AuditOutcomeRejected)
 		return resolution, nil
 	}
-	harness, err := a.defaultHarness()
+	harness, err := a.defaultHarness(scope)
 	if err != nil {
 		resolution.Status = intakeStatusRejected
 		resolution.Reason = err.Error()
@@ -624,7 +650,7 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 		Task:                task,
 		AgentHarness:        harness,
 		VerificationProfile: resolved.VerificationProfile,
-		Scope:               resolved.Scope,
+		Scope:               scope,
 		ForgeConnector:      connector,
 		WorkItem: &WorkItemEvidence{
 			Connector:    connector,
@@ -634,6 +660,7 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 			SnapshotHash: proposal.WorkItemHash,
 			Repository:   resolved.Repository,
 			Source:       string(proposal.Source),
+			Actor:        actorEvidenceFor(actor, proposal.RepositoryPermission),
 		},
 	}
 	// Pipeline runs use the forge pull request as acceptance. The pre-publication
@@ -665,6 +692,12 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 	}
 	request.SandboxTemplate = resources.WorkspaceConfig.Template
 	request.AgentHarness = harness
+	request.Scope = resources.Scope
+	if resources.VerificationProfile != "" {
+		request.VerificationProfile = resources.VerificationProfile
+	}
+	resolution.Scope = resources.Scope
+	resolution.VerificationProfile = request.VerificationProfile
 
 	resolution.AgentHarness = harness
 	resolution.Task = task
@@ -690,11 +723,12 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 		Source:              string(proposal.Source),
 		DeliveryID:          proposal.DeliveryID,
 		ActorDescriptor:     actor.Descriptor,
+		ActorPermission:     proposal.RepositoryPermission,
 		ChangeID:            resolution.ChangeID,
 		RunID:               resolution.RunID,
 		ActivationID:        resolution.ActivationID,
 		BaseBranch:          resolved.BaseBranch,
-		VerificationProfile: resolved.VerificationProfile,
+		VerificationProfile: request.VerificationProfile,
 	})
 	if err != nil {
 		return WorkItemResolution{}, err
@@ -723,12 +757,18 @@ func (a *Activities) resolvePipeline(connector, pipeline string, fields forge.Wo
 	return a.cfg.ResolvePipelineForConnector(connector, fields)
 }
 
-func (a *Activities) defaultHarness() (string, error) {
-	names := a.harnesses.Names()
-	if len(names) == 0 {
-		return "", fmt.Errorf("no agent harness is registered on this worker")
+// resolveScope resolves the one operator scope a work item belongs to. The
+// pipeline lookup and the scope lookup use the same match rules, and the caller
+// rejects the work item when the two do not agree.
+func (a *Activities) resolveScope(connector, pipeline string, fields forge.WorkItemFields) (string, error) {
+	if name := strings.TrimSpace(pipeline); name != "" {
+		return a.cfg.ResolveScope(name, fields)
 	}
-	return names[0], nil
+	return a.cfg.ResolveScopeForConnector(connector, fields)
+}
+
+func (a *Activities) defaultHarness(scope string) (string, error) {
+	return a.cfg.DefaultHarness(scope, a.harnesses.Names())
 }
 
 // RecordWorkItemOutcome folds the child result into the durable intake record.
@@ -795,6 +835,7 @@ type intakeRecord struct {
 	Source              string    `json:"source,omitempty"`
 	DeliveryID          string    `json:"delivery_id,omitempty"`
 	ActorDescriptor     string    `json:"actor_descriptor,omitempty"`
+	ActorPermission     string    `json:"actor_permission,omitempty"`
 	ChangeID            string    `json:"change_id"`
 	RunID               string    `json:"run_id"`
 	ActivationID        string    `json:"activation_id"`
@@ -1137,18 +1178,30 @@ func auditIntake(ctx context.Context, a *Activities, proposal forge.Proposal, re
 	if err != nil {
 		return
 	}
+	runID := ""
+	if resolution.Accepted {
+		runID = resolution.RunID
+	}
 	err = appendIntakeAudit(store, AuditEntry{
-		Action:  AuditIntake,
-		Actor:   proposal.Actor.Descriptor,
-		Outcome: outcome,
+		Action:          AuditIntake,
+		RunID:           runID,
+		Actor:           proposal.Actor.Descriptor,
+		ActorKind:       ActorKindForge,
+		ActorPermission: proposal.RepositoryPermission,
+		Outcome:         outcome,
 		Detail: map[string]any{
-			"connector":     resolution.Connector,
-			"repository":    resolution.Repository,
-			"work_item_id":  proposal.WorkItem.ID,
-			"revision":      proposal.WorkItem.Revision,
-			"snapshot_hash": proposal.WorkItemHash,
-			"status":        resolution.Status,
-			"reason":        resolution.Reason,
+			"connector":             resolution.Connector,
+			"pipeline":              resolution.Pipeline,
+			"scope":                 resolution.Scope,
+			"repository":            resolution.Repository,
+			"work_item_id":          proposal.WorkItem.ID,
+			"revision":              proposal.WorkItem.Revision,
+			"snapshot_hash":         proposal.WorkItemHash,
+			"actor_id":              proposal.Actor.ID,
+			"actor_unique_name":     proposal.Actor.UniqueName,
+			"repository_permission": proposal.RepositoryPermission,
+			"status":                resolution.Status,
+			"reason":                resolution.Reason,
 		},
 	}, a.redactor)
 	if err != nil {

@@ -325,6 +325,8 @@ description = "repository test script"
 # model        = "default"
 # workspace    = "python"
 # budget       = "cheap"
+# verification_profile = "default"  # when set, the scope pins this gate profile
+# max_concurrent_runs  = 2          # 0 or absent means no scope-specific cap
 # review       = false        # overrides the global review gate
 
 # [review] — the human review gate. When enabled, a run pauses after the

@@ -579,6 +579,73 @@ func TestLoadConfigEvidenceSection(t *testing.T) {
 	}
 }
 
+// TestScopeConfigValidation pins the per-scope policy fields: an unknown
+// verification profile and an out-of-range concurrency cap fail at startup.
+func TestScopeConfigValidation(t *testing.T) {
+	t.Parallel()
+
+	base := func() Config {
+		cfg := hardenedDefaults()
+		cfg.Cube = cube.Config{
+			APIURL: "http://127.0.0.1:4000", TemplateID: "tpl",
+			IdleTimeout: tomlx.FromStd(time.Minute), RequestTimeout: tomlx.FromStd(time.Minute),
+		}
+		cfg.Scopes = map[string]ScopeConfig{"payments": {}}
+		return cfg
+	}
+	cases := []struct {
+		name    string
+		mutate  func(*Config)
+		wantErr string
+	}{
+		{
+			name: "valid cap and profile",
+			mutate: func(c *Config) {
+				c.Scopes["payments"] = ScopeConfig{VerificationProfile: "default", MaxConcurrentRuns: 2}
+			},
+		},
+		{
+			name: "unknown verification profile",
+			mutate: func(c *Config) {
+				c.Scopes["payments"] = ScopeConfig{VerificationProfile: "missing"}
+			},
+			wantErr: "unknown verification profile",
+		},
+		{
+			name: "negative concurrency cap",
+			mutate: func(c *Config) {
+				c.Scopes["payments"] = ScopeConfig{MaxConcurrentRuns: -1}
+			},
+			wantErr: "max_concurrent_runs",
+		},
+		{
+			name: "concurrency cap above the ceiling",
+			mutate: func(c *Config) {
+				c.Scopes["payments"] = ScopeConfig{MaxConcurrentRuns: maxScopeConcurrency + 1}
+			},
+			wantErr: "max_concurrent_runs",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := base()
+			tc.mutate(&cfg)
+			err := cfg.Validate()
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Validate: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("Validate() = %v, want an error mentioning %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestEvidenceConfigValidation(t *testing.T) {
 	t.Setenv("CUBE_API_URL", "http://127.0.0.1:4000")
 	t.Setenv("CUBE_TEMPLATE_ID", "tpl-test")

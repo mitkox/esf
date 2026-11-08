@@ -12,6 +12,7 @@ import (
 
 	"github.com/mitkox/esf/internal/evidence"
 	artifacts "github.com/mitkox/esf/internal/factoryartifacts"
+	"github.com/mitkox/esf/internal/notify"
 	"github.com/mitkox/esf/internal/secretfile"
 	"github.com/mitkox/esf/internal/verification"
 )
@@ -132,6 +133,17 @@ func (a *Activities) RecordEvidenceFailure(ctx context.Context, in RecordEvidenc
 	manifest.FactoryResult = StateEvidenceFailed
 	manifest.Error = a.redactor.Redact(in.Error)
 	manifest.Conditions = in.Conditions
+	changeID := strings.TrimSpace(manifest.ChangeID)
+	if changeID == "" {
+		changeID = manifest.RunID
+	}
+	if metrics := a.telemetry.Metrics(); metrics != nil {
+		metrics.RecordEvidenceFailure(ctx, "signing_failed")
+	}
+	if !manifestAlertRecorded(manifest, AlertEvidenceFailed) {
+		manifest = a.appendManifestAlert(ctx, manifest, a.raiseAlert(ctx, manifest.RunID, AlertEvidenceFailed, notify.SeverityCritical,
+			"evidence signing failed", map[string]string{"change": changeID, "error": manifest.Error}))
+	}
 	if err := a.writeJSON(store, ArtifactRun, manifest); err != nil {
 		return FinalizeOutput{}, err
 	}
@@ -283,4 +295,18 @@ func artifactDigest(store artifacts.Store, relPath string) (string, error) {
 	}
 	sum := sha256.Sum256(body)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+// manifestAlertRecorded reports whether this alert kind is already durable, so
+// a retried activity updates the manifest instead of appending a duplicate.
+func manifestAlertRecorded(manifest RunManifest, kind string) bool {
+	if manifest.Hardening == nil {
+		return false
+	}
+	for _, alert := range manifest.Hardening.Alerts {
+		if alert.Kind == kind {
+			return true
+		}
+	}
+	return false
 }

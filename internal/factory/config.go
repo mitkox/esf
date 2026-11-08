@@ -616,6 +616,14 @@ func (c Config) Validate() error {
 				problems = append(problems, fmt.Sprintf("scope %q: unknown harness %q", name, h))
 			}
 		}
+		if profile := strings.TrimSpace(scope.VerificationProfile); profile != "" {
+			if _, ok := c.Verification[profile]; !ok {
+				problems = append(problems, fmt.Sprintf("scope %q: unknown verification profile %q", name, profile))
+			}
+		}
+		if scope.MaxConcurrentRuns < 0 || scope.MaxConcurrentRuns > maxScopeConcurrency {
+			problems = append(problems, fmt.Sprintf("scope %q: max_concurrent_runs must be between 0 and %d", name, maxScopeConcurrency))
+		}
 	}
 	problems = append(problems, c.validateForge()...)
 	if c.Review.Timeout < 0 {

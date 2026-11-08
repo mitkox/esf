@@ -27,6 +27,12 @@ type Actor struct {
 	Descriptor  string
 }
 
+// Repository permissions reported by a forge.
+const (
+	// PermissionWrite means the actor may contribute to the mapped repository.
+	PermissionWrite = "write"
+)
+
 // Candidate is a reconciliation result: a re-fetched work item and the digest
 // of the exact bytes the forge returned.
 type Candidate struct {
@@ -46,6 +52,10 @@ type Proposal struct {
 	Actor         Actor
 	DeliveryID    string
 	ChangedFields []string
+	// RepositoryPermission is the permission the forge API reported for Actor
+	// on the mapped repository. It is evidence that authorization was resolved
+	// from the forge, never from a payload display string.
+	RepositoryPermission string
 }
 
 // Rejection is an intake event that was not proposed as a run.

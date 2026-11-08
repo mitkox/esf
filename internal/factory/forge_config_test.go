@@ -204,6 +204,27 @@ func TestConnectorConfigValidation(t *testing.T) {
 	}
 }
 
+// TestPipelineRuleMustMatchScopeVerificationProfile proves the startup check
+// catches a rule whose gate profile the scope it maps to would reject at run
+// time.
+func TestPipelineRuleMustMatchScopeVerificationProfile(t *testing.T) {
+	t.Parallel()
+
+	cfg := forgeTestConfig()
+	cfg.Verification["strict"] = cfg.Verification["default"]
+	cfg.Scopes["payments"] = ScopeConfig{VerificationProfile: "strict"}
+	cfg.Pipelines = map[string]PipelineConfig{
+		"bugfix": {
+			Connector: "azdo",
+			Rules:     []PipelineRule{forgeTestRule("Payments", "payments", "https://operator.example/payments", "main", "default")},
+		},
+	}
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "does not match scope") {
+		t.Fatalf("Validate() = %v, want a scope/profile mismatch", err)
+	}
+}
+
 func TestResolvePipelineUsesMostSpecificOperatorMapping(t *testing.T) {
 	t.Parallel()
 

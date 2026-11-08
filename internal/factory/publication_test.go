@@ -2,15 +2,20 @@ package factory
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	artifacts "github.com/mitkox/esf/internal/factoryartifacts"
 	"github.com/mitkox/esf/internal/forge"
+	"github.com/mitkox/esf/internal/notify"
 	"github.com/mitkox/esf/internal/sandbox"
 )
 
@@ -437,5 +442,60 @@ func TestWorkItemWorkflowForgeFailureIsVisible(t *testing.T) {
 	}
 	if change.Status == ChangeDone || change.Status == ChangeInReview {
 		t.Fatalf("change status = %s after a publication failure", change.Status)
+	}
+}
+
+func TestPublicationFailureAlertNamesClassAndChange(t *testing.T) {
+	var mu sync.Mutex
+	var received []notify.Event
+	webhook := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		var event notify.Event
+		if err := json.NewDecoder(request.Body).Decode(&event); err != nil {
+			t.Errorf("decode alert: %v", err)
+		}
+		mu.Lock()
+		received = append(received, event)
+		mu.Unlock()
+		response.WriteHeader(http.StatusNoContent)
+	}))
+	defer webhook.Close()
+
+	connector := publicationFake()
+	connector.PublishErr = errors.New("forge unavailable")
+	keyPath, _ := writeSigningKey(t)
+	harness := newWorkItemTestEnvironment(t, "",
+		withWorkItemConfig(func(cfg *Config) {
+			enableEvidenceSigning(keyPath)(cfg)
+			cfg.Hardening.AlertWebhookURL = webhook.URL
+		}),
+		withWorkItemConnector("azdo", connector),
+	)
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Bug", "Reproduction"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != workItemStatusPublicationFailed || len(outcome.Runs) != 1 {
+		t.Fatalf("outcome = %+v", outcome)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(received) != 1 {
+		t.Fatalf("alerts delivered = %d, want 1", len(received))
+	}
+	event := received[0]
+	if event.Kind != AlertPublicationFailed {
+		t.Fatalf("alert kind = %q", event.Kind)
+	}
+	if event.Detail["class"] != "forge_failed" {
+		t.Fatalf("alert class = %q (detail %+v)", event.Detail["class"], event.Detail)
+	}
+	if event.Detail["change"] != outcome.Runs[0].ChangeID {
+		t.Fatalf("alert change = %q, want %q", event.Detail["change"], outcome.Runs[0].ChangeID)
+	}
+	if event.RunID != outcome.Runs[0].RunID {
+		t.Fatalf("alert run = %q, want %q", event.RunID, outcome.Runs[0].RunID)
 	}
 }

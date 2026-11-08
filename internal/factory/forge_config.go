@@ -292,6 +292,11 @@ func (c Config) ruleProblems(rule PipelineRule) []string {
 		problems = append(problems, "verification_profile is required")
 	} else if _, ok := c.Verification[profile]; !ok {
 		problems = append(problems, fmt.Sprintf("unknown verification profile %q", profile))
+	} else if scopeConfig, ok := c.Scopes[scope]; ok {
+		if scopedProfile := strings.TrimSpace(scopeConfig.VerificationProfile); scopedProfile != "" && profile != scopedProfile {
+			problems = append(problems, fmt.Sprintf(
+				"verification_profile %q does not match scope %q (%q)", profile, scope, scopedProfile))
+		}
 	}
 	return problems
 }
@@ -311,6 +316,14 @@ func (c Config) scopeConfigured(name string) bool {
 }
 
 func (p PipelineConfig) resolve(pipeline string, fields forge.WorkItemFields) (ResolvedPipeline, error) {
+	// A work item must map to exactly one operator scope. This is checked over
+	// every matching rule, not only the most specific one, so a more specific
+	// rule cannot move work across a team boundary.
+	scope, err := p.resolveScope(pipeline, fields)
+	if err != nil {
+		return ResolvedPipeline{}, err
+	}
+
 	bestScore := -1
 	var matched []int
 	for i, rule := range p.Rules {
@@ -326,13 +339,16 @@ func (p PipelineConfig) resolve(pipeline string, fields forge.WorkItemFields) (R
 			matched = append(matched, i)
 		}
 	}
-	if bestScore < 0 {
-		return ResolvedPipeline{}, fmt.Errorf(
-			"pipeline %q: no mapping rule matches project %q, area %q, type %q, state %q",
-			pipeline, strings.TrimSpace(fields.Project), strings.TrimSpace(fields.Area), strings.TrimSpace(fields.Type), strings.TrimSpace(fields.State),
-		)
+	if len(matched) == 0 {
+		return ResolvedPipeline{}, fmt.Errorf("pipeline %q: no mapping rule matches the work item", pipeline)
 	}
 	target := p.Rules[matched[0]].target(pipeline, p.Connector)
+	if target.Scope != scope {
+		return ResolvedPipeline{}, fmt.Errorf(
+			"pipeline %q: the most specific rule resolves to scope %q but the work item matches scope %q",
+			pipeline, target.Scope, scope,
+		)
+	}
 	for _, index := range matched[1:] {
 		if p.Rules[index].target(pipeline, p.Connector) != target {
 			return ResolvedPipeline{}, fmt.Errorf(

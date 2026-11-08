@@ -205,6 +205,8 @@ Artifact layout:
   hardening/patch-scan.json      the behavior scan of the collected patch
   hardening/gate-integrity.json  whether the tree modified the gates it runs
   verification/{result.json,<gate>.stdout,<gate>.stderr}
+  evidence/bundle.json      signed change-evidence bundle
+  evidence/signature.json   detached signature sidecar
 ```
 
 Quick triage:
@@ -319,6 +321,168 @@ The agent's stop signal is `blocked.json` in the factory metadata directory
 (`/workspace/.factory/blocked.json`), containing `{"reason": "..."}` or plain
 text. Document it in the task text you give an agent, so it knows the honest
 exit exists.
+
+The console also serves the read-only connector view at
+`/api/v1/console/connectors`. It reports configured connectors, their pipelines
+and scopes, and the last recorded liveness observation. It never constructs a
+connector, reads a token file, or exposes a credential.
+
+## 6b. Connector, publication and evidence runbooks
+
+The work-item pipeline adds a forge connector and a host-side publisher. Both
+run outside every Cube sandbox: the connector holds a forge credential, and the
+publisher reads the signed evidence bundle from the artifact store. Neither
+credential is reachable from an agent.
+
+### Metrics and alerts
+
+The factory exports these instruments through the configured OTLP endpoint
+(`[observability]`), alongside the existing `factory_runs_*` instruments:
+
+| Instrument | Meaning |
+| --- | --- |
+| `factory_connector_last_successful_sweep_timestamp_seconds` | Unix time of the last reconciliation sweep that completed and saved its watermark |
+| `factory_connector_last_delivery_timestamp_seconds` | Unix time of the last authenticated webhook delivery |
+| `factory_connector_subscription_state` | One-hot forge subscription state, labelled `factory.subscription.state` (`active`, `disabled`, `probationary`, `unknown`) |
+| `factory_publication_failures_total` | Failed publication attempts, labelled `factory.failure.class` |
+| `factory_evidence_failures_total` | Evidence signing or verification failures, labelled `factory.failure.class` |
+| `factory_scope_queue_depth` | Pending work items per scope, labelled `factory.scope` |
+
+A degraded connector raises `connector.degraded`; publication failures raise
+`publication.failed` or `publication.tampered`; an evidence signing failure
+raises `evidence.failed`. Alerts are best-effort: a delivery failure is recorded
+under `hardening.alerts` in `run.json` (or the connector health snapshot) and
+never fails a run or a sweep. The read-only console shows the same connector
+state at `/api/v1/console/connectors`.
+
+### Connector outage or missed deliveries
+
+Symptom: no new runs, the last successful sweep stops advancing, the last
+delivery is older than that sweep, and the console or alert reports
+`degraded`/`no_delivery_since_sweep`.
+
+1. Confirm the connector process is running and can reach the forge base URL.
+2. Check the connector log for HTTP 401, 403, 429, and DNS/TLS errors. A failed
+   sweep deliberately does not advance
+   `factory_connector_last_successful_sweep_timestamp_seconds`.
+3. Do not re-register the webhook first. Reconciliation is the primary intake
+   path: the next successful sweep reads the durable watermark and recovers every
+   missed revision.
+4. After the forge is reachable, restart the connector worker if needed and
+   confirm the sweep timestamp advances. A webhook is an accelerator, not the
+   source of truth.
+
+### Disabled or probationary subscription
+
+Azure DevOps disables a service-hook subscription when its creator leaves the
+organization, when the subscription is idle for six months, or when a trial or
+probation ends. Other forges have equivalent disablement paths.
+
+Symptom: `factory_connector_subscription_state` reports `disabled` or
+`probationary`, and the connector health reason is `subscription_disabled` or
+`subscription_probationary` (alert severity critical).
+
+1. Re-enable or recreate the subscription with an operator-owned service
+   principal or app installation, not a personal account.
+2. Send the forge's test event and confirm
+   `factory_connector_last_delivery_timestamp_seconds` advances.
+3. Run a sweep and confirm the watermark advances. Missed events are recovered
+   from the work-item revisions feed; no work is lost while the subscription is
+   disabled.
+4. If the subscription cannot be re-enabled, leave reconciliation running and
+   record the reduced delivery path in the deployment notes.
+
+### Token expiry or rotation
+
+Symptom: the forge returns 401/403, sweeps stop, publication fails with
+`connector_unavailable`, or the connector health is degraded.
+
+1. Confirm the token file is an absolute path to a private regular file: no
+   symlink, owner-only permissions, non-empty bounded content. A path with a
+   missing or group-readable file fails closed at connector construction.
+2. Rotate the token with the forge, write the new value to the private file
+   atomically, and restart the connector worker. Never paste the value into
+   configuration, a command line, or a sandbox.
+3. Confirm one successful sweep and one delivery before considering the
+   rotation complete. Publication uses the same operator connector, so a stale
+   token also fails `publication.failed` with class `connector_unavailable`.
+
+A PAT whose owner leaves the organization is an expiry waiting to happen. Use a
+service principal or app installation, and keep the PAT path only as the
+documented fallback.
+
+### Publication throttle
+
+Symptom: `factory_publication_failures_total{factory.failure.class="forge_failed"}`
+increases, `publication.failed` alerts repeat, and the forge log shows HTTP 429.
+
+1. Let the publisher honour the forge's retry hint. Publication is idempotent by
+   change and revision: a retry updates the same branch and pull request instead
+   of creating a second one.
+2. Reduce concurrent intake for the affected scope; `factory_scope_queue_depth`
+   shows the queued work. Do not delete the branch or close the draft pull
+   request to force a retry.
+3. If the failure is `status_failed`, the pull request exists. Re-run the
+   publication retry to update the status; do not open a second pull request.
+4. If the forge reports a body-limit failure (`plan_failed`), the body cap is
+   smaller than the digest and summary. Correct the connector capability and
+   retry; never trim the digest.
+
+### Evidence verification failure
+
+Symptom: the run ends `EVIDENCE_FAILED`; `evidence.failed` alert;
+`factory_evidence_failures_total`; or publication fails with
+`evidence_missing`/`evidence_mismatch` and a `publication.tampered` alert. No
+pull request is published in any of these cases.
+
+1. Read `error` and `conditions` in `run.json`, then verify the bundle offline:
+
+   ```bash
+   ./bin/factory verify --bundle .factory/runs/<run-id>/evidence/bundle.json \
+     --key /etc/factory/evidence-public.pem
+   ```
+
+2. A missing or unreadable signing key is an operator configuration failure:
+   restore the key through the private-file rules and rerun the change. Do not
+   publish a run whose bundle is missing.
+3. A signature or digest mismatch is a security event. Preserve the run
+   directory, compare the bundle against `run.json`, and do not retry
+   publication until the cause is understood. The agent has no key and no
+   bundle-write path outside the sandbox.
+4. Evidence verification never falls back to the patch or agent output. A
+   failed verification stays failed.
+
+### Signing key rotation
+
+1. Generate a new ed25519 key pair on the factory host, outside every sandbox.
+2. Publish the new public key alongside the old one for the overlap period, so
+   bundles signed before the rotation still verify.
+3. Replace `[evidence] signing_key_file` atomically with the new PKCS#8 key,
+   keep the file owner-only, and restart the worker.
+4. Confirm the next successful run records `EvidenceSigned=True`, then verify a
+   new bundle with `factory verify --bundle ... --key ...`.
+5. Retire the old private key only after the retention period for bundles it
+   signed. Keep the old public key with the archived bundles. If a private key
+   was exposed, stop publication, rotate immediately, and treat every bundle
+   signed with the exposed key as untrusted.
+
+### Retention of evidence bundles and signatures
+
+`factory retention preview` and `factory retention apply` remain deliberately
+narrow: they select only orphaned `.artifact-*` temporary files left by
+interrupted atomic writes. Completed evidence is never eligible, including
+`run.json`, `changes.patch`, logs, change records, `evidence/bundle.json`, and
+`evidence/signature.json`.
+
+The bundle and its detached signature are the durable proof a developer or
+auditor checks, so keep them for at least as long as the run manifest, audit
+log, and the organization's review period. Include them in every artifact-store
+snapshot and restore drill. Deleting completed evidence requires a separate,
+reviewed retention policy; the factory has no automatic deletion.
+
+Delete an interrupted `.artifact-*` file only after confirming no active writer
+owns it. A bundle that is present but does not verify is a failure to
+investigate, not a file to prune.
 
 ## 7. How cleanup works
 

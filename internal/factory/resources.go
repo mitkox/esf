@@ -275,6 +275,12 @@ type ScopeConfig struct {
 	Workspace string `toml:"workspace"`
 	// Budget names a [budgets.<name>] entry.
 	Budget string `toml:"budget"`
+	// VerificationProfile narrows the verification gate profile a run in this
+	// scope may use. Empty inherits the deployment's profiles.
+	VerificationProfile string `toml:"verification_profile"`
+	// MaxConcurrentRuns caps how many runs this scope may have admitted at
+	// once. Zero leaves the deployment-wide worker ceiling as the only bound.
+	MaxConcurrentRuns int `toml:"max_concurrent_runs"`
 	// Review overrides the factory-wide review gate for this scope. Nil
 	// inherits the global setting.
 	Review *bool `toml:"review"`
@@ -288,6 +294,12 @@ type ScopeConfig struct {
 type ResolvedResources struct {
 	// Scope the run executes under. Empty means the default scope.
 	Scope string `json:"scope,omitempty"`
+	// VerificationProfile is the resolved gate profile after the scope
+	// narrowed the request's choice.
+	VerificationProfile string `json:"verification_profile,omitempty"`
+	// MaxConcurrentRuns is the scope's admission cap. Zero means the scope
+	// declares no cap beyond the deployment-wide worker ceiling.
+	MaxConcurrentRuns int `json:"max_concurrent_runs,omitempty"`
 	// RepositoriesAllowed is the effective repository allowlist after the scope
 	// narrowed the global one. It is recorded so a rejected repository can be
 	// explained from evidence rather than from the live config.
@@ -403,6 +415,24 @@ func (c Config) ResolveResources(req RunRequest) (ResolvedResources, error) {
 	if hasScope && len(scope.Harnesses) > 0 && !containsString(scope.Harnesses, req.AgentHarness) {
 		return ResolvedResources{}, fmt.Errorf("harness %q is not allowed in scope %q", req.AgentHarness, scopeName)
 	}
+
+	// Verification narrowing. A scope may pin the gate profile so two teams
+	// cannot share a deployment while one team's repository runs another team's
+	// gates. The scope can only narrow: a request for a different profile is
+	// rejected rather than silently replaced.
+	verificationProfile := strings.TrimSpace(req.VerificationProfile)
+	if hasScope {
+		scopedProfile := strings.TrimSpace(scope.VerificationProfile)
+		if scopedProfile != "" {
+			if verificationProfile != "" && verificationProfile != scopedProfile {
+				return ResolvedResources{}, fmt.Errorf(
+					"verification profile %q is not allowed in scope %q", verificationProfile, scopeName)
+			}
+			verificationProfile = scopedProfile
+		}
+		out.MaxConcurrentRuns = scope.MaxConcurrentRuns
+	}
+	out.VerificationProfile = verificationProfile
 
 	// Workspace. Resolve the EFFECTIVE preparation here, including factory
 	// defaults, so later activities never re-read mutable worker configuration.

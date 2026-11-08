@@ -517,13 +517,21 @@ func (a *Activities) failPublication(
 	if changeID == "" {
 		changeID = manifest.RunID
 	}
+	if metrics := a.telemetry.Metrics(); metrics != nil {
+		metrics.RecordPublicationFailure(ctx, class)
+		if strings.HasPrefix(class, "evidence_") {
+			metrics.RecordEvidenceFailure(ctx, class)
+		}
+	}
 	if changes, err := NewChangeStore(a.artifactFactory.Root()); err == nil {
 		if _, err := changes.RecordPullRequestFailure(changeID, time.Now().UTC()); err != nil {
 			a.log.WarnContext(ctx, "publication failure not recorded on the change", "change.id", changeID, "error", err)
 		}
 	}
 	manifest = a.appendManifestAlert(ctx, manifest, a.raiseAlert(ctx, manifest.RunID, alertKind, severity,
-		"publication failed: "+class, map[string]string{"class": class, "error": message}))
+		"publication failed: "+class, map[string]string{
+			"class": class, "change": changeID, "error": message,
+		}))
 	manifest.Conditions = SetCondition(manifest.Conditions, Condition{
 		Type: ConditionPublication, Status: ConditionFalse, Reason: class,
 		Message: message, LastTransitionTime: time.Now().UTC(),
@@ -578,22 +586,45 @@ func (a *Activities) appendManifestAlert(ctx context.Context, manifest RunManife
 }
 
 func (a *Activities) appendPublicationAudit(store artifacts.Store, manifest RunManifest, outcome, message string, detail map[string]any) error {
+	actor, permission := manifestActor(manifest)
+	if detail == nil {
+		detail = map[string]any{}
+	}
+	if permission != "" {
+		detail["repository_permission"] = permission
+	}
 	return AppendAudit(store, AuditEntry{
 		RunID: manifest.RunID, Action: AuditPublication, Outcome: outcome,
+		Actor: actor, ActorKind: actorKind(actor), ActorPermission: permission,
 		Detail: detail, Error: a.redactor.Redact(message),
 	}, a.redactor)
 }
 
 func (a *Activities) appendAcceptanceAudit(store artifacts.Store, manifest RunManifest, out ReadPublicationAcceptanceOutput) error {
+	actor, permission := manifestActor(manifest)
+	detail := map[string]any{
+		"pull_request": out.PullRequestID,
+		"decision":     out.Decision,
+		"merge_commit": out.MergeCommit,
+		"drift":        out.Drift,
+	}
+	if permission != "" {
+		detail["repository_permission"] = permission
+	}
 	return AppendAudit(store, AuditEntry{
 		RunID: manifest.RunID, Action: AuditAcceptance, Outcome: strings.ToUpper(out.Decision),
-		Detail: map[string]any{
-			"pull_request": out.PullRequestID,
-			"decision":     out.Decision,
-			"merge_commit": out.MergeCommit,
-			"drift":        out.Drift,
-		},
+		Actor: actor, ActorKind: actorKind(actor), ActorPermission: permission,
+		Detail: detail,
 	}, a.redactor)
+}
+
+// actorKind names the identity source without treating an empty actor as a
+// forge identity. An empty actor keeps AppendAudit's operator attribution.
+func actorKind(actor string) string {
+	if strings.TrimSpace(actor) == "" {
+		return ""
+	}
+	return ActorKindForge
 }
 
 func workItemRefForManifest(manifest RunManifest) forge.WorkItemRef {

@@ -68,6 +68,8 @@ const (
 	AlertPublicationTampered  = "publication.tampered"
 	AlertAcceptanceDrift      = "acceptance.drift"
 	AlertAcceptanceUnresolved = "acceptance.unresolved"
+	AlertConnectorDegraded    = "connector.degraded"
+	AlertEvidenceFailed       = "evidence.failed"
 )
 
 // newNotifier builds the configured notifier. An empty webhook URL yields a Nop

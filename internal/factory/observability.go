@@ -23,6 +23,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	"google.golang.org/grpc/credentials"
+
+	"github.com/mitkox/esf/internal/forge"
+	"github.com/mitkox/esf/internal/notify"
 )
 
 // Attribute keys used across factory spans.
@@ -45,6 +48,10 @@ const (
 	AttrAgentResult        = "agent.result"
 	AttrCleanupResult      = "cleanup.result"
 	AttrFactoryVersion     = "factory.version"
+	AttrConnector          = "factory.connector"
+	AttrScope              = "factory.scope"
+	AttrFailureClass       = "factory.failure.class"
+	AttrSubscriptionState  = "factory.subscription.state"
 )
 
 // Span names for the desired trace shape.
@@ -85,6 +92,15 @@ type Metrics struct {
 	AgentDurationSeconds  metric.Float64Histogram
 	VerifyDurationSeconds metric.Float64Histogram
 	SandboxLeaksTotal     metric.Int64Counter
+
+	// Connector and publication health instruments. Timestamps are Unix
+	// seconds and describe the last SUCCESSFUL observation, never an attempt.
+	ConnectorLastSuccessfulSweep metric.Int64Gauge
+	ConnectorLastDelivery        metric.Int64Gauge
+	ConnectorSubscriptionState   metric.Int64Gauge
+	PublicationFailuresTotal     metric.Int64Counter
+	EvidenceFailuresTotal        metric.Int64Counter
+	ScopeQueueDepth              metric.Int64Gauge
 }
 
 // NewTelemetry builds telemetry from configuration.
@@ -272,6 +288,32 @@ func newMetrics(provider metric.MeterProvider) (*Metrics, error) {
 		metric.WithDescription("Sandboxes that outlived their run")); err != nil {
 		return nil, err
 	}
+	if m.ConnectorLastSuccessfulSweep, err = meter.Int64Gauge("factory_connector_last_successful_sweep_timestamp_seconds",
+		metric.WithDescription("Unix time of the last successful connector reconciliation sweep"),
+		metric.WithUnit("s")); err != nil {
+		return nil, err
+	}
+	if m.ConnectorLastDelivery, err = meter.Int64Gauge("factory_connector_last_delivery_timestamp_seconds",
+		metric.WithDescription("Unix time of the last authenticated connector delivery"),
+		metric.WithUnit("s")); err != nil {
+		return nil, err
+	}
+	if m.ConnectorSubscriptionState, err = meter.Int64Gauge("factory_connector_subscription_state",
+		metric.WithDescription("One-hot forge event-subscription state (1 for the reported state, 0 otherwise)")); err != nil {
+		return nil, err
+	}
+	if m.PublicationFailuresTotal, err = meter.Int64Counter("factory_publication_failures_total",
+		metric.WithDescription("Publication attempts that failed, by failure class")); err != nil {
+		return nil, err
+	}
+	if m.EvidenceFailuresTotal, err = meter.Int64Counter("factory_evidence_failures_total",
+		metric.WithDescription("Evidence signing or verification failures, by failure class")); err != nil {
+		return nil, err
+	}
+	if m.ScopeQueueDepth, err = meter.Int64Gauge("factory_scope_queue_depth",
+		metric.WithDescription("Pending work items queued for one operator scope")); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 
@@ -289,4 +331,187 @@ func (m *Metrics) RecordRun(ctx context.Context, state RunState, duration time.D
 		m.RunsFailedTotal.Add(ctx, 1, opts...)
 	}
 	m.RunDurationSeconds.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
+}
+
+// RecordConnectorSweep records the timestamp of a SUCCESSFUL reconciliation
+// sweep. A failed sweep must not call this: an advanced timestamp would tell an
+// operator reconciliation is working when it is not. Nil-safe.
+func (m *Metrics) RecordConnectorSweep(ctx context.Context, connector string, at time.Time) {
+	if m == nil || at.IsZero() || strings.TrimSpace(connector) == "" {
+		return
+	}
+	m.ConnectorLastSuccessfulSweep.Record(ctx, at.UTC().Unix(),
+		metric.WithAttributes(attribute.String(AttrConnector, connector)))
+}
+
+// RecordConnectorDelivery records the timestamp of an authenticated delivery.
+// Nil-safe.
+func (m *Metrics) RecordConnectorDelivery(ctx context.Context, connector string, at time.Time) {
+	if m == nil || at.IsZero() || strings.TrimSpace(connector) == "" {
+		return
+	}
+	m.ConnectorLastDelivery.Record(ctx, at.UTC().Unix(),
+		metric.WithAttributes(attribute.String(AttrConnector, connector)))
+}
+
+// RecordSubscriptionState records the forge event-subscription state one-hot,
+// so a dashboard can alert on the state without encoding it into the value.
+// Nil-safe.
+func (m *Metrics) RecordSubscriptionState(ctx context.Context, connector string, state forge.SubscriptionState) {
+	if m == nil || strings.TrimSpace(connector) == "" {
+		return
+	}
+	state = forge.ParseSubscriptionState(string(state))
+	for _, candidate := range []forge.SubscriptionState{
+		forge.SubscriptionActive, forge.SubscriptionDisabled,
+		forge.SubscriptionProbationary, forge.SubscriptionUnknown,
+	} {
+		value := int64(0)
+		if state == candidate {
+			value = 1
+		}
+		m.ConnectorSubscriptionState.Record(ctx, value,
+			metric.WithAttributes(
+				attribute.String(AttrConnector, connector),
+				attribute.String(AttrSubscriptionState, string(candidate)),
+			))
+	}
+}
+
+// RecordPublicationFailure counts one publication failure by class. Nil-safe.
+func (m *Metrics) RecordPublicationFailure(ctx context.Context, class string) {
+	if m == nil {
+		return
+	}
+	m.PublicationFailuresTotal.Add(ctx, 1,
+		metric.WithAttributes(attribute.String(AttrFailureClass, failureClass(class))))
+}
+
+// RecordEvidenceFailure counts one evidence signing or verification failure by
+// class. Nil-safe.
+func (m *Metrics) RecordEvidenceFailure(ctx context.Context, class string) {
+	if m == nil {
+		return
+	}
+	m.EvidenceFailuresTotal.Add(ctx, 1,
+		metric.WithAttributes(attribute.String(AttrFailureClass, failureClass(class))))
+}
+
+// RecordScopeQueueDepth records the pending work-item count for one scope.
+// Nil-safe.
+func (m *Metrics) RecordScopeQueueDepth(ctx context.Context, scope string, depth int) {
+	scope = strings.TrimSpace(scope)
+	if m == nil || scope == "" {
+		return
+	}
+	if depth < 0 {
+		depth = 0
+	}
+	m.ScopeQueueDepth.Record(ctx, int64(depth),
+		metric.WithAttributes(attribute.String(AttrScope, scope)))
+}
+
+func failureClass(class string) string {
+	class = strings.TrimSpace(class)
+	if class == "" {
+		return "unknown"
+	}
+	return class
+}
+
+// ConnectorHealthInput is one connector liveness observation.
+type ConnectorHealthInput struct {
+	Connector           string         `json:"connector"`
+	LastSuccessfulSweep time.Time      `json:"last_successful_sweep,omitempty"`
+	LastDelivery        time.Time      `json:"last_delivery,omitempty"`
+	Subscription        string         `json:"subscription,omitempty"`
+	SubscriptionDetail  string         `json:"subscription_detail,omitempty"`
+	QueueDepth          map[string]int `json:"queue_depth,omitempty"`
+}
+
+// ConnectorHealthOutput is the computed health and the alert it produced.
+type ConnectorHealthOutput struct {
+	Health forge.ConnectorHealth `json:"health"`
+	// Alert is present when the observation was degraded. Delivery failure is
+	// recorded in the record and never fails this activity.
+	Alert *AlertRecord `json:"alert,omitempty"`
+	// SnapshotError reports that the durable console snapshot could not be
+	// written. Health observation itself still succeeded.
+	SnapshotError string `json:"snapshot_error,omitempty"`
+}
+
+// ReportConnectorHealth computes liveness, records the health instruments,
+// writes the durable console snapshot, and raises one alert when degraded.
+//
+// It is the hook a connector loop calls after each sweep/delivery observation.
+// Alert delivery is best-effort; the durable record carries the failure.
+func (a *Activities) ReportConnectorHealth(ctx context.Context, in ConnectorHealthInput) (ConnectorHealthOutput, error) {
+	connector := strings.TrimSpace(in.Connector)
+	if connector == "" {
+		return ConnectorHealthOutput{}, fmt.Errorf("connector health: connector is required")
+	}
+	observation := forge.HealthObservation{
+		Connector:           connector,
+		LastSuccessfulSweep: in.LastSuccessfulSweep,
+		LastDelivery:        in.LastDelivery,
+		Subscription:        forge.ParseSubscriptionState(in.Subscription),
+		SubscriptionDetail:  in.SubscriptionDetail,
+		QueueDepth:          in.QueueDepth,
+	}
+	health := forge.EvaluateHealth(time.Now().UTC(), observation)
+
+	if metrics := a.telemetry.Metrics(); metrics != nil {
+		metrics.RecordConnectorSweep(ctx, connector, in.LastSuccessfulSweep)
+		metrics.RecordConnectorDelivery(ctx, connector, in.LastDelivery)
+		metrics.RecordSubscriptionState(ctx, connector, health.Subscription)
+		for scope, depth := range in.QueueDepth {
+			metrics.RecordScopeQueueDepth(ctx, scope, depth)
+		}
+	}
+
+	out := ConnectorHealthOutput{Health: health}
+	if health.Degraded() {
+		severity := notify.SeverityWarning
+		if health.Subscription == forge.SubscriptionDisabled || health.Subscription == forge.SubscriptionProbationary {
+			severity = notify.SeverityCritical
+		}
+		record := a.raiseAlert(ctx, "", AlertConnectorDegraded, severity, healthAlertSummary(health), healthAlertDetail(health))
+		out.Alert = &record
+	}
+	if a.artifactFactory != nil {
+		if err := forge.SaveConnectorHealth(a.artifactFactory.Root(), health); err != nil {
+			out.SnapshotError = err.Error()
+			if a.redactor != nil {
+				out.SnapshotError = a.redactor.Redact(out.SnapshotError)
+			}
+			if a.log != nil {
+				a.log.WarnContext(ctx, "connector health snapshot not written",
+					"connector", connector, "error", out.SnapshotError)
+			}
+		}
+	}
+	return out, nil
+}
+
+func healthAlertSummary(health forge.ConnectorHealth) string {
+	return fmt.Sprintf("connector %s is %s: %s", health.Connector, health.Status, health.Detail)
+}
+
+func healthAlertDetail(health forge.ConnectorHealth) map[string]string {
+	detail := map[string]string{
+		"connector":    health.Connector,
+		"status":       string(health.Status),
+		"reason":       health.Reason,
+		"subscription": string(health.Subscription),
+	}
+	if health.SubscriptionDetail != "" {
+		detail["subscription_detail"] = health.SubscriptionDetail
+	}
+	if health.LastSuccessfulSweep != nil {
+		detail["last_successful_sweep"] = health.LastSuccessfulSweep.Format(time.RFC3339)
+	}
+	if health.LastDelivery != nil {
+		detail["last_delivery"] = health.LastDelivery.Format(time.RFC3339)
+	}
+	return detail
 }

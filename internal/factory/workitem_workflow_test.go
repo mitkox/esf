@@ -185,9 +185,10 @@ func workItemProposal(revision, title, body string) forge.Proposal {
 			WorkItem:     workItem,
 			WorkItemHash: digestText(title+"\x00"+body, 0),
 		},
-		Actor:         forge.Actor{ID: "aad-1", Descriptor: "aad.ada-lovelace", DisplayName: "Ada"},
-		DeliveryID:    "delivery-" + revision,
-		ChangedFields: []string{"System.State"},
+		Actor:                forge.Actor{ID: "aad-1", Descriptor: "aad.ada-lovelace", DisplayName: "Ada"},
+		DeliveryID:           "delivery-" + revision,
+		ChangedFields:        []string{"System.State"},
+		RepositoryPermission: forge.PermissionWrite,
 	}
 }
 
@@ -267,6 +268,9 @@ func TestWorkItemWorkflowStartsOneChildWithMappedRepository(t *testing.T) {
 	if manifest.Repository != workItemTestRepository {
 		t.Fatalf("manifest repository = %q, want the operator mapping", manifest.Repository)
 	}
+	if manifest.Scope != "payments" {
+		t.Fatalf("manifest scope = %q, want the resolved scope", manifest.Scope)
+	}
 	if manifest.RequestedRevision != "main" {
 		t.Fatalf("requested revision = %q, want the mapped base branch", manifest.RequestedRevision)
 	}
@@ -278,6 +282,13 @@ func TestWorkItemWorkflowStartsOneChildWithMappedRepository(t *testing.T) {
 	}
 	if manifest.WorkItem.SnapshotHash != proposal.WorkItemHash {
 		t.Fatalf("snapshot hash = %q, want %q", manifest.WorkItem.SnapshotHash, proposal.WorkItemHash)
+	}
+	if manifest.WorkItem.Actor == nil {
+		t.Fatal("manifest did not bind the forge-resolved actor to the run")
+	}
+	if manifest.WorkItem.Actor.Descriptor != proposal.Actor.Descriptor ||
+		manifest.WorkItem.Actor.RepositoryPermission != forge.PermissionWrite {
+		t.Fatalf("manifest actor = %#v, want the resolved actor with write permission", manifest.WorkItem.Actor)
 	}
 	if manifest.TaskHash != repository.HashTask(workItemTask(proposal.WorkItem)) {
 		t.Fatalf("task hash = %q, want the hash of the work-item task text", manifest.TaskHash)
@@ -563,6 +574,142 @@ func TestWorkItemWorkflowVersionReplay(t *testing.T) {
 				t.Fatalf("runs = %#v", outcome.Runs)
 			}
 		})
+	}
+}
+
+// TestWorkItemWorkflowWaitsForScopeSlot proves a work item at a full scope
+// waits for admission instead of being dropped, and starts its sandbox only
+// after the slot is released.
+func TestWorkItemWorkflowWaitsForScopeSlot(t *testing.T) {
+	artifactDir := t.TempDir()
+	store, err := openScopeSlotStore(artifactDir)
+	if err != nil {
+		t.Fatalf("openScopeSlotStore: %v", err)
+	}
+	if claim, err := store.Acquire(context.Background(), "payments", "other-run", 1, time.Now().UTC()); err != nil || !claim.Granted {
+		t.Fatalf("pre-acquire = %#v, %v", claim, err)
+	}
+
+	harness := newWorkItemTestEnvironment(t, artifactDir, withWorkItemConfig(func(cfg *Config) {
+		scope := cfg.Scopes["payments"]
+		scope.MaxConcurrentRuns = 1
+		cfg.Scopes["payments"] = scope
+	}))
+	released := false
+	harness.env.RegisterDelayedCallback(func() {
+		_ = store.Release(context.Background(), "payments", "other-run")
+		released = true
+	}, 100*time.Millisecond)
+
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Payment retry loop spins forever", "Reproduction"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if !released {
+		t.Fatal("the work item workflow never waited for the scope slot")
+	}
+	if outcome.Status != string(StateSucceeded) {
+		t.Fatalf("status = %q, want SUCCEEDED (conditions: %#v)", outcome.Status, outcome.Conditions)
+	}
+	if created := harness.fake.Created(); len(created) != 1 {
+		t.Fatalf("sandboxes created = %v, want one after admission", created)
+	}
+	if live := harness.fake.Live(); len(live) != 0 {
+		t.Fatalf("sandbox leaked: %v", live)
+	}
+}
+
+// TestWorkItemWorkflowRejectsAmbiguousScope proves a work item that maps to
+// two team scopes is rejected before a sandbox exists, even when one rule is
+// more specific than the other.
+func TestWorkItemWorkflowRejectsAmbiguousScope(t *testing.T) {
+	harness := newWorkItemTestEnvironment(t, "", withWorkItemConfig(func(cfg *Config) {
+		cfg.Scopes["identity"] = ScopeConfig{}
+		cfg.Pipelines["bugfix"] = PipelineConfig{
+			Connector: "azdo",
+			Rules: []PipelineRule{
+				{
+					Project:             "Payments",
+					Scope:               "payments",
+					Repository:          workItemTestRepository,
+					BaseBranch:          "main",
+					VerificationProfile: "default",
+				},
+				{
+					Project:             "Payments",
+					Type:                "Bug",
+					Scope:               "identity",
+					Repository:          workItemTestRepository,
+					BaseBranch:          "main",
+					VerificationProfile: "default",
+				},
+			},
+		}
+	}))
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Payment retry loop spins forever", "Reproduction"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != intakeStatusScopeAmbiguous {
+		t.Fatalf("status = %q, want scope_ambiguous", outcome.Status)
+	}
+	if len(harness.fake.Created()) != 0 {
+		t.Fatalf("ambiguous scope created sandboxes: %v", harness.fake.Created())
+	}
+	condition := conditionByType(t, outcome.Conditions, ConditionIntake)
+	if condition.Status != ConditionFalse || condition.Reason != "ScopeAmbiguous" {
+		t.Fatalf("intake condition = %#v", condition)
+	}
+}
+
+// TestWorkItemIntakeAuditBindsForgeActor proves the durable intake decision
+// carries the forge-resolved actor, the repository permission, and the run it
+// authorized. The actor is never taken from a payload display string.
+func TestWorkItemIntakeAuditBindsForgeActor(t *testing.T) {
+	harness := newWorkItemTestEnvironment(t, "")
+	proposal := workItemProposal("1", "Payment retry loop spins forever", "Reproduction")
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{Proposal: proposal})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if len(outcome.Runs) != 1 {
+		t.Fatalf("runs = %#v, want one child", outcome.Runs)
+	}
+	body, err := os.ReadFile(filepath.Join(harness.artifactDir, intakeDirName, intakeAuditFileName))
+	if err != nil {
+		t.Fatalf("read intake audit: %v", err)
+	}
+	var accepted *AuditEntry
+	for _, line := range strings.Split(strings.TrimSpace(string(body)), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var entry AuditEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("decode audit entry: %v", err)
+		}
+		if entry.Action == AuditIntake && entry.Outcome == "SUCCESS" {
+			accepted = &entry
+		}
+	}
+	if accepted == nil {
+		t.Fatalf("no accepted intake audit entry: %s", body)
+	}
+	if accepted.Actor != proposal.Actor.Descriptor {
+		t.Fatalf("audit actor = %q, want %q", accepted.Actor, proposal.Actor.Descriptor)
+	}
+	if accepted.ActorKind != ActorKindForge || accepted.ActorPermission != forge.PermissionWrite {
+		t.Fatalf("audit actor identity = %q/%q", accepted.ActorKind, accepted.ActorPermission)
+	}
+	if accepted.RunID != outcome.Runs[0].RunID {
+		t.Fatalf("audit run = %q, want %q", accepted.RunID, outcome.Runs[0].RunID)
+	}
+	if accepted.Detail["scope"] != "payments" || accepted.Detail["repository_permission"] != forge.PermissionWrite {
+		t.Fatalf("audit detail = %#v", accepted.Detail)
 	}
 }
 

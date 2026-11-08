@@ -982,6 +982,10 @@ func (s *Server) handleOperations(response http.ResponseWriter, request *http.Re
 	writeJSON(response, http.StatusOK, s.buildOperations(request.Context()))
 }
 
+func (s *Server) handleConnectors(response http.ResponseWriter, _ *http.Request) {
+	writeJSON(response, http.StatusOK, s.buildConnectors())
+}
+
 func (s *Server) handleCatalog(response http.ResponseWriter, _ *http.Request) {
 	writeJSON(response, http.StatusOK, s.buildCatalog())
 }

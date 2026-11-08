@@ -166,6 +166,9 @@ type WorkItemEvidence struct {
 	SnapshotHash string `json:"snapshot_hash"`
 	Repository   string `json:"repository"`
 	Source       string `json:"source,omitempty"`
+	// Actor is the forge-resolved identity that authorized this work item. It
+	// is nil for runs that did not come from a forge work item.
+	Actor *ActorEvidence `json:"actor,omitempty"`
 }
 
 // PullRequestIdentity is the forge pull request a change published.
