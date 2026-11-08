@@ -269,8 +269,8 @@ func (h *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Source:       forge.SourceWebhook,
 			WorkItem:     snapshot.WorkItem,
 			WorkItemHash: snapshot.WorkItemHash,
+			Actor:        actor,
 		},
-		Actor:         actor,
 		DeliveryID:    identity,
 		ChangedFields: changedFields,
 		// The proposal is evidence that the repository write check passed.

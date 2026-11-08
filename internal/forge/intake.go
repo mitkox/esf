@@ -49,10 +49,11 @@ type Candidate struct {
 //
 // It carries the operator-mapped work item, the API-resolved actor, and the
 // delivery identity used for deduplication. It never carries a clone or forge
-// credential.
+// credential. The actor comes from the embedded Candidate and is deliberately
+// declared only there: a second, shallower Actor field would shadow the
+// candidate's resolved identity during JSON encoding and silently drop it.
 type Proposal struct {
 	Candidate
-	Actor         Actor
 	DeliveryID    string
 	ChangedFields []string
 	// RepositoryPermission is the permission the forge API reported for Actor

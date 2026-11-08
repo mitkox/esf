@@ -29,12 +29,19 @@ var (
 	ErrRunNotFound = errors.New("run not found")
 	// ErrInvalidRequest means the submitted request cannot be honoured.
 	ErrInvalidRequest = errors.New("invalid run request")
+	// ErrRunConflict means the run identity is already executing a different
+	// request, so the submission cannot be treated as the same activation.
+	ErrRunConflict = errors.New("run conflict")
+	// ErrRunTerminal means the run identity is closed and cannot be restarted.
+	ErrRunTerminal = errors.New("run is terminal")
 )
 
 const (
 	codeUnauthorized    = "unauthorized"
 	codeInvalidRequest  = "invalid_request"
 	codeRunNotFound     = "run_not_found"
+	codeRunConflict     = "run_conflict"
+	codeRunTerminal     = "run_terminal"
 	codeRequestTooLarge = "request_too_large"
 	codeInternal        = "internal"
 )
@@ -117,6 +124,12 @@ func (s *Server) writeControllerError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusBadRequest, codeInvalidRequest, err.Error())
 	case errors.Is(err, ErrRunNotFound):
 		writeError(response, http.StatusNotFound, codeRunNotFound, "The run does not exist.")
+	case errors.Is(err, ErrRunConflict):
+		writeError(response, http.StatusConflict, codeRunConflict,
+			"The run identity is already executing a different request.")
+	case errors.Is(err, ErrRunTerminal):
+		writeError(response, http.StatusConflict, codeRunTerminal,
+			"The run is already closed and cannot be resubmitted.")
 	default:
 		writeError(response, http.StatusInternalServerError, codeInternal, "The execution API could not complete the request.")
 	}

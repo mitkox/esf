@@ -335,3 +335,39 @@ func TestInspectEvidenceAndCancelEndpoints(t *testing.T) {
 		t.Fatalf("cancelled status = %#v, err = %v", status, err)
 	}
 }
+
+type submitErrorController struct {
+	*fakeController
+	err error
+}
+
+func (c submitErrorController) Submit(context.Context, RunRequest) (RunStatus, error) {
+	return RunStatus{}, c.err
+}
+
+func TestSubmitMapsRunConflictAndTerminalTo409(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		err  error
+		code string
+	}{
+		{name: "conflict", err: ErrRunConflict, code: codeRunConflict},
+		{name: "terminal", err: ErrRunTerminal, code: codeRunTerminal},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			baseURL := startServer(t, submitErrorController{fakeController: newFakeController(), err: tc.err})
+			response, body := doRequest(t, http.MethodPost, baseURL+"/v1/runs", strings.NewReader(`{"run_id":"run-1"}`))
+			if response.StatusCode != http.StatusConflict {
+				t.Fatalf("status = %d, want %d: %s", response.StatusCode, http.StatusConflict, body)
+			}
+			if got := decodeError(t, body); got.Code != tc.code {
+				t.Fatalf("error code = %q, want %q", got.Code, tc.code)
+			}
+		})
+	}
+}

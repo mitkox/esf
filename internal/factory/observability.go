@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"os"
@@ -24,6 +25,7 @@ import (
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	"google.golang.org/grpc/credentials"
 
+	artifacts "github.com/mitkox/esf/internal/factoryartifacts"
 	"github.com/mitkox/esf/internal/forge"
 	"github.com/mitkox/esf/internal/notify"
 )
@@ -491,6 +493,39 @@ func (a *Activities) ReportConnectorHealth(ctx context.Context, in ConnectorHeal
 		}
 	}
 	return out, nil
+}
+
+// ConnectorHealthReporter records connector liveness for the connector
+// workload, which holds no sandbox provider, repository provider, or forge
+// credential beyond the adapters it already owns.
+type ConnectorHealthReporter struct {
+	activities *Activities
+}
+
+// NewConnectorHealthReporter builds an observability-only activity set. Only
+// ReportConnectorHealth is meaningful on it.
+func NewConnectorHealthReporter(artifactFactory artifacts.Factory, telemetry *Telemetry, logger *slog.Logger) (*ConnectorHealthReporter, error) {
+	if artifactFactory == nil {
+		return nil, fmt.Errorf("connector health: artifact factory is required")
+	}
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	return &ConnectorHealthReporter{activities: &Activities{
+		artifactFactory: artifactFactory,
+		telemetry:       telemetry,
+		redactor:        NewRedactor(),
+		log:             logger,
+	}}, nil
+}
+
+// Report records one observation, writes the durable console snapshot, and
+// exports the documented connector instruments.
+func (r *ConnectorHealthReporter) Report(ctx context.Context, in ConnectorHealthInput) (ConnectorHealthOutput, error) {
+	if r == nil || r.activities == nil {
+		return ConnectorHealthOutput{}, fmt.Errorf("connector health: reporter is not configured")
+	}
+	return r.activities.ReportConnectorHealth(ctx, in)
 }
 
 func healthAlertSummary(health forge.ConnectorHealth) string {

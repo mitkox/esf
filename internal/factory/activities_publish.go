@@ -21,10 +21,13 @@ type PublishChangeInput struct {
 
 // PublishChangeOutput is the durable outcome of one publication attempt.
 type PublishChangeOutput struct {
-	Disabled     bool   `json:"disabled,omitempty"`
-	EmptyPatch   bool   `json:"empty_patch,omitempty"`
-	Published    bool   `json:"published"`
-	GateFailed   bool   `json:"gate_failed,omitempty"`
+	Disabled   bool `json:"disabled,omitempty"`
+	EmptyPatch bool `json:"empty_patch,omitempty"`
+	Published  bool `json:"published"`
+	GateFailed bool `json:"gate_failed,omitempty"`
+	// Withdrawn reports that the authoritative work item was already closed
+	// before any remote write, so no branch or pull request was created.
+	Withdrawn    bool   `json:"withdrawn,omitempty"`
 	FailureClass string `json:"failure_class,omitempty"`
 	Failure      string `json:"failure,omitempty"`
 
@@ -48,15 +51,18 @@ type ReadPublicationAcceptanceInput struct {
 
 // ReadPublicationAcceptanceOutput records what the forge reported.
 type ReadPublicationAcceptanceOutput struct {
-	Read           bool              `json:"read"`
-	Decision       string            `json:"decision,omitempty"`
-	Acceptance     *AcceptanceRecord `json:"acceptance,omitempty"`
-	ChangeStatus   ChangeStatus      `json:"change_status,omitempty"`
-	Drift          bool              `json:"drift,omitempty"`
-	Note           string            `json:"note,omitempty"`
-	PullRequestID  string            `json:"pull_request_id,omitempty"`
-	PullRequestURL string            `json:"pull_request_url,omitempty"`
-	MergeCommit    string            `json:"merge_commit,omitempty"`
+	Read         bool              `json:"read"`
+	Decision     string            `json:"decision,omitempty"`
+	Acceptance   *AcceptanceRecord `json:"acceptance,omitempty"`
+	ChangeStatus ChangeStatus      `json:"change_status,omitempty"`
+	Drift        bool              `json:"drift,omitempty"`
+	// TimedOut reports that the bounded acceptance wait ended with the pull
+	// request still open.
+	TimedOut       bool   `json:"timed_out,omitempty"`
+	Note           string `json:"note,omitempty"`
+	PullRequestID  string `json:"pull_request_id,omitempty"`
+	PullRequestURL string `json:"pull_request_url,omitempty"`
+	MergeCommit    string `json:"merge_commit,omitempty"`
 }
 
 // PublishChange builds the evidenced patch into a deterministic host-side
@@ -134,6 +140,19 @@ func (a *Activities) PublishChange(ctx context.Context, in PublishChangeInput) (
 	if err := caps.Validate(); err != nil {
 		return a.failPublication(ctx, manifest, "connector_capabilities", err.Error(), AlertPublicationFailed, notify.SeverityWarning), nil
 	}
+	if manifest.WorkItem != nil {
+		state := strings.TrimSpace(manifest.WorkItem.State)
+		if reader, ok := connector.(forge.WorkItemStateReader); ok {
+			current, readErr := reader.ReadWorkItem(ctx, manifest.WorkItem.ID)
+			if readErr != nil {
+				return a.failPublication(ctx, manifest, "work_item_unavailable", readErr.Error(), AlertPublicationFailed, notify.SeverityWarning), nil
+			}
+			state = strings.TrimSpace(current.State)
+		}
+		if workItemWithdrawn(state) {
+			return a.withdrawPublication(ctx, manifest, state), nil
+		}
+	}
 
 	changeID := strings.TrimSpace(manifest.ChangeID)
 	if changeID == "" {
@@ -165,7 +184,7 @@ func (a *Activities) PublishChange(ctx context.Context, in PublishChangeInput) (
 		a.log.WarnContext(ctx, "publication attempt not audited", "run.id", manifest.RunID, "error", err)
 	}
 
-	branchResult, err := publisher.PublishBranch(ctx, forge.BranchPublication{
+	branchRequest := forge.BranchPublication{
 		Repository:  manifest.Repository,
 		RemoteURL:   manifest.Repository,
 		BaselineSHA: manifest.BaselineSHA,
@@ -177,18 +196,23 @@ func (a *Activities) PublishChange(ctx context.Context, in PublishChangeInput) (
 		AuthorEmail: "esf-factory+" + digestText(manifest.RunID, 16) + "@localhost",
 		CommitTime:  commitTime,
 		Patch:       patch,
-	})
+	}
+	// Build the commit locally first. Every publication gate must run before
+	// the commit can reach the forge: a protected path must never be pushed
+	// even once, because a push-triggered pipeline can execute it.
+	built, err := publisher.BuildBranch(ctx, branchRequest)
 	if err != nil {
 		return a.failPublication(ctx, manifest, "branch_failed", err.Error(), AlertPublicationFailed, notify.SeverityWarning), nil
 	}
-	if strings.TrimSpace(branchResult.Commit) == "" || strings.TrimSpace(branchResult.Tree) == "" {
+	defer publisher.DiscardBranch(built)
+	if strings.TrimSpace(built.Commit) == "" || strings.TrimSpace(built.Tree) == "" {
 		return a.failPublication(ctx, manifest, "branch_incomplete", "the forge branch result did not identify a commit and tree", AlertPublicationFailed, notify.SeverityWarning), nil
 	}
 	gate, err := EvaluatePublicationGates(PublicationGateInput{
-		ChangedPaths:          branchResult.ChangedPaths,
+		ChangedPaths:          built.ChangedPaths,
 		ProtectedPaths:        a.cfg.PublicationProtectedPaths(),
-		BaselineGitmodules:    branchResult.GitmodulesBaseline,
-		ResultGitmodules:      branchResult.GitmodulesResult,
+		BaselineGitmodules:    built.GitmodulesBaseline,
+		ResultGitmodules:      built.GitmodulesResult,
 		SubmoduleURLAllowlist: a.cfg.Hardening.SubmoduleURLAllowlist,
 	})
 	if err != nil {
@@ -204,8 +228,15 @@ func (a *Activities) PublishChange(ctx context.Context, in PublishChangeInput) (
 			AlertPublicationTampered, notify.SeverityCritical)
 		out.GateFailed = true
 		out.FailureClass = strings.Join(class, ",")
-		out.ChangedPaths = append([]string(nil), branchResult.ChangedPaths...)
+		out.ChangedPaths = append([]string(nil), built.ChangedPaths...)
 		return out, nil
+	}
+	branchResult, err := publisher.PushBranch(ctx, branchRequest, built)
+	if err != nil {
+		return a.failPublication(ctx, manifest, "branch_failed", err.Error(), AlertPublicationFailed, notify.SeverityWarning), nil
+	}
+	if strings.TrimSpace(branchResult.Commit) == "" || strings.TrimSpace(branchResult.Tree) == "" {
+		return a.failPublication(ctx, manifest, "branch_incomplete", "the forge branch result did not identify a commit and tree", AlertPublicationFailed, notify.SeverityWarning), nil
 	}
 
 	summary := fmt.Sprintf("Repository: <%s>\n\nFactory-verified patch rebuilt on baseline %s. %d deterministic gate(s) passed. Branch: %s.",
@@ -235,6 +266,10 @@ func (a *Activities) PublishChange(ctx context.Context, in PublishChangeInput) (
 		WorkItem:      plan.WorkItem,
 		Repository:    manifest.Repository,
 		PullRequestID: published.PullRequest.ID,
+		// The work-item comment is the developer-facing outcome; the status is
+		// the branch-policy signal. They are posted independently.
+		Comment: "ESF verification passed. Pull request: " + published.PullRequest.URL +
+			" Evidence bundle: " + bundleDigest,
 		Status: forge.Status{
 			Name:        forge.VerificationStatusName,
 			State:       forge.StatusSucceeded,
@@ -243,9 +278,11 @@ func (a *Activities) PublishChange(ctx context.Context, in PublishChangeInput) (
 		},
 	})
 	if statusErr != nil {
-		// The pull request exists, so record it before reporting the failure.
-		a.recordPublication(manifest, published.PullRequest, branchResult, branch, bundleDigest)
-		return a.failPublication(ctx, manifest, "status_failed", statusErr.Error(), AlertPublicationFailed, notify.SeverityWarning), nil
+		// The pull request exists and is the published result. A status post is
+		// a reporting concern: losing it must not move an otherwise published
+		// change back to OPEN or invite a duplicate publication on retry.
+		a.log.WarnContext(ctx, "publication report not fully delivered",
+			"run.id", manifest.RunID, "pull_request", published.PullRequest.ID, "error", statusErr)
 	}
 
 	record, err := a.recordPublication(manifest, published.PullRequest, branchResult, branch, bundleDigest)
@@ -504,6 +541,56 @@ func (a *Activities) ReadPublicationAcceptance(ctx context.Context, in ReadPubli
 	return out, nil
 }
 
+// withdrawPublication records a withdrawn work item without touching the
+// forge. It is distinct from a publication failure: nothing was attempted on
+// the remote because the authoritative work item no longer wants the change.
+func (a *Activities) withdrawPublication(ctx context.Context, manifest RunManifest, state string) PublishChangeOutput {
+	state = strings.TrimSpace(state)
+	message := fmt.Sprintf("the work item is %s; no branch or pull request was opened", state)
+	changeID := strings.TrimSpace(manifest.ChangeID)
+	if changeID == "" {
+		changeID = manifest.RunID
+	}
+	if changes, err := NewChangeStore(a.artifactFactory.Root()); err == nil {
+		if err := changes.Abandon(changeID, time.Now().UTC()); err != nil {
+			a.log.WarnContext(ctx, "withdrawn work item not recorded on the change", "change.id", changeID, "error", err)
+		}
+	}
+	manifest.Conditions = SetCondition(manifest.Conditions, Condition{
+		Type: ConditionPublication, Status: ConditionFalse, Reason: "Withdrawn",
+		Message: message, LastTransitionTime: time.Now().UTC(),
+	})
+	manifest.Conditions = SetCondition(manifest.Conditions, Condition{
+		Type: ConditionAcceptance, Status: ConditionUnknown, Reason: "Withdrawn",
+		Message: "the work item was withdrawn before publication", LastTransitionTime: time.Now().UTC(),
+	})
+	if store, err := a.artifactFactory.ForRun(manifest.RunID); err == nil {
+		if err := a.writeJSON(store, ArtifactRun, manifest); err != nil {
+			a.log.WarnContext(ctx, "withdrawal not recorded in the manifest", "run.id", manifest.RunID, "error", err)
+		}
+		if err := a.appendPublicationAudit(store, manifest, "WITHDRAWN", message, map[string]any{"state": state}); err != nil {
+			a.log.WarnContext(ctx, "withdrawal not audited", "run.id", manifest.RunID, "error", err)
+		}
+	}
+	return PublishChangeOutput{
+		Withdrawn:    true,
+		FailureClass: "work_item_withdrawn",
+		Failure:      message,
+	}
+}
+
+// workItemWithdrawn reports whether a forge state means the work item no
+// longer wants the change. The set is deliberately conservative: ambiguous
+// states such as Resolved still publish.
+func workItemWithdrawn(state string) bool {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "closed", "done", "removed", "completed", "cancelled", "canceled", "abandoned":
+		return true
+	default:
+		return false
+	}
+}
+
 func (a *Activities) failPublication(
 	ctx context.Context,
 	manifest RunManifest,
@@ -633,6 +720,7 @@ func workItemRefForManifest(manifest RunManifest) forge.WorkItemRef {
 	}
 	return forge.WorkItemRef{
 		ID: manifest.WorkItem.ID, Revision: manifest.WorkItem.Revision,
+		Project: manifest.WorkItem.Project,
 	}
 }
 

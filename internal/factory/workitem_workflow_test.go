@@ -184,8 +184,8 @@ func workItemProposal(revision, title, body string) forge.Proposal {
 			Source:       forge.SourceWebhook,
 			WorkItem:     workItem,
 			WorkItemHash: digestText(title+"\x00"+body, 0),
+			Actor:        forge.Actor{ID: "aad-1", Descriptor: "aad.ada-lovelace", DisplayName: "Ada"},
 		},
-		Actor:                forge.Actor{ID: "aad-1", Descriptor: "aad.ada-lovelace", DisplayName: "Ada"},
 		DeliveryID:           "delivery-" + revision,
 		ChangedFields:        []string{"System.State"},
 		RepositoryPermission: forge.PermissionWrite,
@@ -279,6 +279,9 @@ func TestWorkItemWorkflowStartsOneChildWithMappedRepository(t *testing.T) {
 	}
 	if manifest.WorkItem.Connector != "azdo" || manifest.WorkItem.ID != "42" || manifest.WorkItem.Revision != "1" {
 		t.Fatalf("manifest work item = %#v", manifest.WorkItem)
+	}
+	if manifest.WorkItem.Project != "Payments" || manifest.WorkItem.State != "Active" {
+		t.Fatalf("manifest work item identity = %#v, want the project and state", manifest.WorkItem)
 	}
 	if manifest.WorkItem.SnapshotHash != proposal.WorkItemHash {
 		t.Fatalf("snapshot hash = %q, want %q", manifest.WorkItem.SnapshotHash, proposal.WorkItemHash)
@@ -756,5 +759,55 @@ func TestIntakeStoreResumesSameDeliveryAndRejectsDifferentDelivery(t *testing.T)
 	conflict, err := store.Claim(context.Background(), changed)
 	if err != nil || conflict.Status != intakeStatusConflict {
 		t.Fatalf("changed snapshot = %#v, %v", conflict, err)
+	}
+}
+
+// TestSweepProposalResolvesAndStartsRunAfterJSONRoundTrip proves a
+// reconciliation proposal keeps the forge-resolved actor through Temporal's
+// JSON encoding. The sweep has no webhook payload, so the candidate's actor is
+// the only source of the identity the intake gate checks.
+func TestSweepProposalResolvesAndStartsRunAfterJSONRoundTrip(t *testing.T) {
+	harness := newWorkItemTestEnvironment(t, "")
+	base := workItemProposal("9", "Reconciled bug", "Recovered by sweep")
+	candidate := forge.Candidate{
+		Connector:    "azdo",
+		Source:       forge.SourceSweep,
+		WorkItem:     base.WorkItem,
+		WorkItemHash: base.WorkItemHash,
+		Actor:        base.Actor,
+	}
+	proposal := forge.Proposal{
+		Candidate:            candidate,
+		DeliveryID:           "sweep:" + candidate.WorkItem.Revision,
+		RepositoryPermission: forge.PermissionWrite,
+	}
+	encoded, err := json.Marshal(proposal)
+	if err != nil {
+		t.Fatalf("marshal proposal: %v", err)
+	}
+	var decoded forge.Proposal
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal proposal: %v", err)
+	}
+	if decoded.Actor.Descriptor != base.Actor.Descriptor {
+		t.Fatalf("actor descriptor after round trip = %q, want %q", decoded.Actor.Descriptor, base.Actor.Descriptor)
+	}
+
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{Proposal: decoded})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != string(StateSucceeded) {
+		t.Fatalf("status = %q (conditions: %#v)", outcome.Status, outcome.Conditions)
+	}
+	if len(outcome.Runs) != 1 {
+		t.Fatalf("runs = %#v, want one child started from the sweep", outcome.Runs)
+	}
+	manifest := readWorkItemRunManifest(t, harness.artifactDir, outcome.Runs[0].RunID)
+	if manifest.WorkItem == nil || manifest.WorkItem.Source != string(forge.SourceSweep) {
+		t.Fatalf("manifest work item = %#v, want the sweep source", manifest.WorkItem)
+	}
+	if manifest.WorkItem.Actor == nil || manifest.WorkItem.Actor.Descriptor != base.Actor.Descriptor {
+		t.Fatalf("manifest actor = %#v, want the sweep-resolved actor", manifest.WorkItem.Actor)
 	}
 }

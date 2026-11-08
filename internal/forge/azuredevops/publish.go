@@ -207,14 +207,11 @@ func BuildPublicationCommit(ctx context.Context, opts BuildPublicationOptions) (
 	return built, nil
 }
 
-// PublishBranch builds and pushes the deterministic branch for a publication.
-//
-// A branch whose pull request is open is never force-pushed: an update would
-// rewrite the revision a reviewer is looking at. When no pull request exists, a
-// stale branch is replaced with a lease that names the observed remote value.
-func (c *Client) PublishBranch(ctx context.Context, req forge.BranchPublication) (forge.BranchPublicationResult, error) {
+// BuildBranch builds the deterministic host-side commit without touching the
+// remote, so the factory can gate the built tree before any push.
+func (c *Client) BuildBranch(ctx context.Context, req forge.BranchPublication) (forge.BranchBuild, error) {
 	if c == nil {
-		return forge.BranchPublicationResult{}, errors.New("azuredevops: client is required")
+		return forge.BranchBuild{}, errors.New("azuredevops: client is required")
 	}
 	buildRemote := strings.TrimSpace(req.RemoteURL)
 	if buildRemote == "" {
@@ -233,7 +230,31 @@ func (c *Client) PublishBranch(ctx context.Context, req forge.BranchPublication)
 		CommitTime:    req.CommitTime,
 	})
 	if err != nil {
-		return forge.BranchPublicationResult{}, err
+		return forge.BranchBuild{}, err
+	}
+	return forge.BranchBuild{
+		Branch:             req.Branch,
+		Commit:             built.Commit,
+		Tree:               built.Tree,
+		ChangedPaths:       append([]string(nil), built.ChangedPaths...),
+		GitmodulesBaseline: append([]byte(nil), built.GitmodulesBaseline...),
+		GitmodulesResult:   append([]byte(nil), built.GitmodulesResult...),
+		Handle:             built,
+	}, nil
+}
+
+// PushBranch pushes a branch previously built by BuildBranch.
+//
+// A branch whose pull request is open is never force-pushed: an update would
+// rewrite the revision a reviewer is looking at. When no pull request exists, a
+// stale branch is replaced with a lease that names the observed remote value.
+func (c *Client) PushBranch(ctx context.Context, req forge.BranchPublication, build forge.BranchBuild) (forge.BranchPublicationResult, error) {
+	if c == nil {
+		return forge.BranchPublicationResult{}, errors.New("azuredevops: client is required")
+	}
+	built, ok := build.Handle.(*BuiltPublication)
+	if !ok || built == nil {
+		return forge.BranchPublicationResult{}, errors.New("azuredevops: branch build handle is invalid")
 	}
 	defer built.Close()
 
@@ -293,6 +314,24 @@ func (c *Client) PublishBranch(ctx context.Context, req forge.BranchPublication)
 		GitmodulesResult:   append([]byte(nil), built.GitmodulesResult...),
 		AlreadyPresent:     remoteSHA == built.Commit,
 	}, nil
+}
+
+// DiscardBranch releases a build that was not pushed.
+func (c *Client) DiscardBranch(build forge.BranchBuild) {
+	if built, ok := build.Handle.(*BuiltPublication); ok && built != nil {
+		_ = built.Close()
+	}
+}
+
+// PublishBranch builds and pushes the deterministic branch for a publication.
+// It is the convenience path for callers that have no gate between the two
+// steps; the factory itself always builds, gates, and then pushes.
+func (c *Client) PublishBranch(ctx context.Context, req forge.BranchPublication) (forge.BranchPublicationResult, error) {
+	build, err := c.BuildBranch(ctx, req)
+	if err != nil {
+		return forge.BranchPublicationResult{}, err
+	}
+	return c.PushBranch(ctx, req, build)
 }
 
 func validateBuildOptions(opts BuildPublicationOptions) error {

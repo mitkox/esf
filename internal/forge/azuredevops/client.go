@@ -221,6 +221,21 @@ func (c *Client) FetchWorkItem(ctx context.Context, id int64) (WorkItemSnapshot,
 	return snapshot, nil
 }
 
+// ReadWorkItem re-fetches the authoritative current state of one work item.
+// Publication uses it immediately before a remote write so a withdrawn work
+// item opens no branch or pull request.
+func (c *Client) ReadWorkItem(ctx context.Context, id string) (forge.WorkItem, error) {
+	parsed, err := strconv.ParseInt(strings.TrimSpace(id), 10, 64)
+	if err != nil || parsed <= 0 {
+		return forge.WorkItem{}, fmt.Errorf("azuredevops: work item id %q is not a positive integer", id)
+	}
+	snapshot, err := c.FetchWorkItem(ctx, parsed)
+	if err != nil {
+		return forge.WorkItem{}, err
+	}
+	return snapshot.WorkItem, nil
+}
+
 // RepositoryWrite reports whether the actor descriptor has the Git Contribute
 // permission on the repository.
 //

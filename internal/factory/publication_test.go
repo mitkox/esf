@@ -189,6 +189,12 @@ func TestWorkItemWorkflowProtectedPathGateBlocksPublication(t *testing.T) {
 	if publication.Status != ConditionFalse {
 		t.Fatalf("publication condition = %#v", publication)
 	}
+	if len(connector.Builds) != 1 {
+		t.Fatalf("publication builds = %d, want the gated build", len(connector.Builds))
+	}
+	if len(connector.Branches) != 0 {
+		t.Fatalf("a protected-path patch reached the remote: %#v", connector.Branches)
+	}
 	if len(connector.Publications) != 0 {
 		t.Fatalf("a gated change opened a pull request: %#v", connector.Publications)
 	}
@@ -497,5 +503,168 @@ func TestPublicationFailureAlertNamesClassAndChange(t *testing.T) {
 	}
 	if event.RunID != outcome.Runs[0].RunID {
 		t.Fatalf("alert run = %q, want %q", event.RunID, outcome.Runs[0].RunID)
+	}
+}
+
+func TestWorkItemWorkflowStatusFailureKeepsPublication(t *testing.T) {
+	connector := publicationFake()
+	connector.ReportErr = errors.New("status endpoint unavailable")
+	harness := publicationHarness(t, connector)
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Bug", "Reproduction"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != string(StateSucceeded) {
+		t.Fatalf("status = %q, want SUCCEEDED", outcome.Status)
+	}
+	publication := conditionByType(t, outcome.Conditions, ConditionPublication)
+	if publication.Status != ConditionTrue {
+		t.Fatalf("status failure moved the publication condition: %#v", publication)
+	}
+	if len(connector.Reports) != 1 {
+		t.Fatalf("reports = %d, want 1", len(connector.Reports))
+	}
+	if connector.Reports[0].WorkItem.Project != "Payments" {
+		t.Fatalf("report work item = %#v, want the project carried from the manifest", connector.Reports[0].WorkItem)
+	}
+	changes, err := NewChangeStore(harness.artifactDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	change, err := changes.Load(outcome.Runs[0].ChangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if change.Status == ChangeOpen || change.Status != ChangeDone {
+		t.Fatalf("change status = %s, want DONE after the merge", change.Status)
+	}
+	if change.PullRequest == nil || change.PullRequest.ID != "17" {
+		t.Fatalf("published pull request was not recorded: %#v", change.PullRequest)
+	}
+}
+
+func TestWorkItemWorkflowWithdrawnWorkItemPublishesNothing(t *testing.T) {
+	connector := publicationFake()
+	// The work item was active at intake and closed before publication. The
+	// activity must use the authoritative re-read, not the intake snapshot.
+	connector.WorkItemState = "Closed"
+	harness := publicationHarness(t, connector)
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Bug", "Reproduction"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != workItemStatusWithdrawn {
+		t.Fatalf("status = %q, want %s", outcome.Status, workItemStatusWithdrawn)
+	}
+	if len(connector.Builds) != 0 {
+		t.Fatalf("a withdrawn work item built a branch: %#v", connector.Builds)
+	}
+	if len(connector.Branches) != 0 {
+		t.Fatalf("a withdrawn work item pushed a branch: %#v", connector.Branches)
+	}
+	if len(connector.Publications) != 0 {
+		t.Fatalf("a withdrawn work item opened a pull request: %#v", connector.Publications)
+	}
+	publication := conditionByType(t, outcome.Conditions, ConditionPublication)
+	if publication.Status != ConditionFalse || publication.Reason != "Withdrawn" {
+		t.Fatalf("publication condition = %#v", publication)
+	}
+	changes, err := NewChangeStore(harness.artifactDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	change, err := changes.Load(outcome.Runs[0].ChangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if change.Status != ChangeAbandoned {
+		t.Fatalf("change status = %s, want ABANDONED", change.Status)
+	}
+	manifest := readWorkItemRunManifest(t, harness.artifactDir, outcome.Runs[0].RunID)
+	if manifest.PullRequest != nil {
+		t.Fatalf("withdrawn publication recorded a pull request: %#v", manifest.PullRequest)
+	}
+}
+
+func TestWorkItemWorkflowWaitsForLateMerge(t *testing.T) {
+	connector := publicationFake()
+	connector.AcceptanceResults = []forge.AcceptanceResult{
+		{PullRequest: forge.PullRequest{ID: "17"}, State: forge.AcceptanceOpen},
+		{
+			PullRequest: forge.PullRequest{ID: "17"},
+			State:       forge.AcceptanceMerged, MergeCommit: "merge-1", MergeTree: "tree-1",
+			ClosedBy: "ada",
+		},
+	}
+	harness := publicationHarness(t, connector)
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Bug", "Reproduction"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != string(StateSucceeded) {
+		t.Fatalf("status = %q (conditions: %#v)", outcome.Status, outcome.Conditions)
+	}
+	acceptance := conditionByType(t, outcome.Conditions, ConditionAcceptance)
+	if acceptance.Status != ConditionTrue || acceptance.Reason != "Merged" {
+		t.Fatalf("acceptance condition = %#v", acceptance)
+	}
+	if outcome.Acceptance == nil || outcome.Acceptance.State != forge.AcceptanceMerged {
+		t.Fatalf("outcome acceptance = %#v", outcome.Acceptance)
+	}
+	changes, err := NewChangeStore(harness.artifactDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	change, err := changes.Load(outcome.Runs[0].ChangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if change.Status != ChangeDone {
+		t.Fatalf("change status = %s, want DONE after the late merge", change.Status)
+	}
+	if len(connector.Acceptances) < 2 {
+		t.Fatalf("acceptance reads = %d, want at least 2", len(connector.Acceptances))
+	}
+}
+
+func TestWorkItemWorkflowAcceptanceTimesOut(t *testing.T) {
+	connector := publicationFake()
+	connector.AcceptanceResult = forge.AcceptanceResult{
+		PullRequest: forge.PullRequest{ID: "17"},
+		State:       forge.AcceptanceOpen,
+	}
+	harness := publicationHarness(t, connector)
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Bug", "Reproduction"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if outcome.Status != workItemStatusAcceptanceTimeout {
+		t.Fatalf("status = %q, want %s", outcome.Status, workItemStatusAcceptanceTimeout)
+	}
+	acceptance := conditionByType(t, outcome.Conditions, ConditionAcceptance)
+	if acceptance.Status != ConditionUnknown || acceptance.Reason != "TimedOut" {
+		t.Fatalf("acceptance condition = %#v", acceptance)
+	}
+	if outcome.PullRequest == nil || outcome.PullRequest.ID != "17" {
+		t.Fatalf("timeout lost the published pull request: %#v", outcome.PullRequest)
+	}
+	changes, err := NewChangeStore(harness.artifactDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	change, err := changes.Load(outcome.Runs[0].ChangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if change.Status == ChangeDone {
+		t.Fatal("a timed-out acceptance marked the change done")
 	}
 }

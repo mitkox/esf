@@ -96,6 +96,25 @@ type apiController struct {
 	config    factory.Config
 	artifacts artifacts.Factory
 	client    client.Client
+
+	// Seams for tests. Production leaves both nil and uses Temporal.
+	startWorkflow func(ctx context.Context, options client.StartWorkflowOptions, run factory.RunRequest) error
+	queryStatus   func(ctx context.Context, runID string) (factory.RunStatus, error)
+}
+
+func (c *apiController) executeWorkflow(ctx context.Context, options client.StartWorkflowOptions, run factory.RunRequest) error {
+	if c.startWorkflow != nil {
+		return c.startWorkflow(ctx, options, run)
+	}
+	_, err := c.client.ExecuteWorkflow(ctx, options, factory.SoftwareChangeWorkflow, run)
+	return err
+}
+
+func (c *apiController) lookupRunStatus(ctx context.Context, runID string) (factory.RunStatus, error) {
+	if c.queryStatus != nil {
+		return c.queryStatus(ctx, runID)
+	}
+	return factory.QueryRunStatus(ctx, c.client, factory.WorkflowIDForRun(runID), "")
 }
 
 func (c *apiController) runRequest(request api.RunRequest) (factory.RunRequest, error) {
@@ -137,7 +156,7 @@ func (c *apiController) Submit(ctx context.Context, request api.RunRequest) (api
 		return api.RunStatus{}, err
 	}
 	workflowID := factory.WorkflowIDForRun(run.RunID)
-	_, err = c.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	err = c.executeWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: c.config.Temporal.TaskQueue,
 		Memo:      factory.RunMemoFor(run),
@@ -146,10 +165,37 @@ func (c *apiController) Submit(ctx context.Context, request api.RunRequest) (api
 		// repeated submission idempotent.
 		WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 		WorkflowIDReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-	}, factory.SoftwareChangeWorkflow, run)
+	}, run)
 	if err != nil {
+		var started *serviceerror.WorkflowExecutionAlreadyStarted
+		if errors.As(err, &started) {
+			// With USE_EXISTING, an already-started result means the existing
+			// execution is closed: retention is over and restart is refused.
+			return api.RunStatus{}, fmt.Errorf("%w: run %s was already closed", api.ErrRunTerminal, run.RunID)
+		}
 		return api.RunStatus{}, fmt.Errorf("start run %s: %w", run.RunID, err)
 	}
+	// Report the run that actually owns the identity, never the newly
+	// submitted request. A reused activation may be executing different inputs;
+	// that is a conflict, not a silent restart.
+	status, statusErr := c.lookupRunStatus(ctx, run.RunID)
+	if statusErr == nil {
+		if status.Repository != "" && status.Repository != run.Repository {
+			return api.RunStatus{}, fmt.Errorf("%w: run %s is executing repository %q",
+				api.ErrRunConflict, run.RunID, status.Repository)
+		}
+		if status.Revision != "" && status.Revision != run.Revision {
+			return api.RunStatus{}, fmt.Errorf("%w: run %s is executing revision %q",
+				api.ErrRunConflict, run.RunID, status.Revision)
+		}
+		if status.TaskHash != "" && status.TaskHash != repository.HashTask(run.Task) {
+			return api.RunStatus{}, fmt.Errorf("%w: run %s is executing a different task",
+				api.ErrRunConflict, run.RunID)
+		}
+		return statusFromRun(status), nil
+	}
+	// The workflow is new and not yet queryable. This answer is a minimal
+	// acknowledgement; it carries no claim about the running execution.
 	return api.RunStatus{
 		RunID:               run.RunID,
 		WorkflowID:          workflowID,
@@ -246,6 +292,8 @@ func statusFromRun(status factory.RunStatus) api.RunStatus {
 		WorkflowID:         workflowID,
 		State:              string(status.State),
 		CurrentStep:        status.CurrentStep,
+		Repository:         status.Repository,
+		Revision:           status.Revision,
 		Scope:              status.Scope,
 		ChangeID:           status.ChangeID,
 		AgentResult:        string(status.AgentOutcome),

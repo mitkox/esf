@@ -291,11 +291,41 @@ type BranchPublicationResult struct {
 	AlreadyPresent     bool
 }
 
+// BranchBuild is a host-built publication commit that has not been pushed.
+//
+// It exists so every publication gate can run against the exact built tree
+// before the commit reaches the forge. Handle is adapter-owned cleanup state;
+// the factory never inspects or persists it.
+type BranchBuild struct {
+	Branch             string
+	Commit             string
+	Tree               string
+	ChangedPaths       []string
+	GitmodulesBaseline []byte
+	GitmodulesResult   []byte
+	Handle             any
+}
+
 // BranchPublisher is an optional connector capability: a forge adapter that
-// can create the branch a pull request needs. The factory falls back to no
-// publication when the connector does not implement it.
+// can build the branch a pull request needs and push it separately.
+//
+// The factory builds first, evaluates every publication gate against the built
+// tree, and only then calls PushBranch. A connector that cannot split the two
+// steps cannot enforce a pre-push gate and is not accepted as a publisher.
 type BranchPublisher interface {
-	PublishBranch(ctx context.Context, req BranchPublication) (BranchPublicationResult, error)
+	BuildBranch(ctx context.Context, req BranchPublication) (BranchBuild, error)
+	PushBranch(ctx context.Context, req BranchPublication, build BranchBuild) (BranchPublicationResult, error)
+	DiscardBranch(build BranchBuild)
+}
+
+// WorkItemStateReader is an optional connector capability: read the
+// authoritative current state of a work item by id.
+//
+// Publication re-reads the work item through this interface immediately before
+// a remote write, so a work item withdrawn after intake opens no branch or pull
+// request.
+type WorkItemStateReader interface {
+	ReadWorkItem(ctx context.Context, id string) (WorkItem, error)
 }
 
 // ApprovalVote is one reviewer vote read from the forge.

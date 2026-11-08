@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +42,41 @@ type Sweeper interface {
 // the order the sweeper returned them.
 type Deliverer func(ctx context.Context, candidate forge.Candidate) error
 
+// HealthEvent names the connector activity behind one health observation.
+type HealthEvent string
+
+const (
+	// HealthEventSweep is a reconciliation sweep attempt.
+	HealthEventSweep HealthEvent = "sweep"
+	// HealthEventDelivery is a webhook delivery or sweep delivery attempt.
+	HealthEventDelivery HealthEvent = "delivery"
+)
+
+// HealthObservation is one connector liveness update.
+//
+// LastSuccessfulSweep and LastDelivery are the last SUCCESSFUL observations,
+// never the current attempt: a failed sweep or delivery must leave the
+// timestamp unchanged. Event, Successful and Detail describe the attempt that
+// produced this update.
+type HealthObservation struct {
+	Connector           string
+	Event               HealthEvent
+	Successful          bool
+	Detail              string
+	LastSuccessfulSweep time.Time
+	LastDelivery        time.Time
+	Subscription        forge.SubscriptionState
+	SubscriptionDetail  string
+}
+
+// HealthObserver records one liveness update. An error is logged and never
+// stops the connector.
+type HealthObserver func(ctx context.Context, observation HealthObservation) error
+
+// SubscriptionReader reads the forge's event-subscription state. It is
+// called once per sweep so a silently disabled subscription becomes observable.
+type SubscriptionReader func(ctx context.Context) (forge.SubscriptionState, string)
+
 // Spec is one connector's webhook receiver and reconciliation loop.
 type Spec struct {
 	// Name identifies the connector in logs and errors.
@@ -59,6 +95,12 @@ type Spec struct {
 	WebhookHandler http.Handler
 	// TLSConfig enables native HTTPS. Nil serves plaintext loopback only.
 	TLSConfig *tls.Config
+	// Observe receives liveness updates after every sweep and delivery. Nil
+	// disables health observation.
+	Observe HealthObserver
+	// Subscription reads the forge subscription state for the observation. Nil
+	// reports unknown.
+	Subscription SubscriptionReader
 }
 
 // Options configures a runtime.
@@ -75,6 +117,25 @@ type Runtime struct {
 	logger    *slog.Logger
 	onListen  func(string, net.Addr, bool)
 	newTicker func(time.Duration) ticker
+	health    map[string]*connectorHealth
+	now       func() time.Time
+}
+
+// connectorHealth is the runtime-owned successful-observation state for one
+// connector. Webhook deliveries and sweeps run on separate goroutines, so the
+// fields are guarded.
+type connectorHealth struct {
+	mu                  sync.Mutex
+	lastSuccessfulSweep time.Time
+	lastDelivery        time.Time
+	subscription        forge.SubscriptionState
+	subscriptionDetail  string
+}
+
+func (h *connectorHealth) status() (time.Time, time.Time, forge.SubscriptionState, string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.lastSuccessfulSweep, h.lastDelivery, h.subscription, h.subscriptionDetail
 }
 
 // ticker is the small part of time.Ticker the sweep loop uses, so tests can
@@ -129,11 +190,17 @@ func New(specs []Spec, opts Options) (*Runtime, error) {
 		}
 		copied = append(copied, spec)
 	}
+	health := make(map[string]*connectorHealth, len(copied))
+	for _, spec := range copied {
+		health[spec.Name] = &connectorHealth{subscription: forge.SubscriptionUnknown}
+	}
 	return &Runtime{
 		specs:     copied,
 		logger:    logger,
 		onListen:  opts.OnListen,
 		newTicker: func(interval time.Duration) ticker { return wallTicker{time.NewTicker(interval)} },
+		health:    health,
+		now:       func() time.Time { return time.Now().UTC() },
 	}, nil
 }
 
@@ -176,7 +243,7 @@ func (r *Runtime) Run(ctx context.Context) error {
 			spec:     spec,
 			listener: listener,
 			server: &http.Server{
-				Handler:           spec.WebhookHandler,
+				Handler:           r.observeWebhook(spec, spec.WebhookHandler),
 				ReadHeaderTimeout: webhookReadHeaderTimeout,
 				ReadTimeout:       webhookReadTimeout,
 				WriteTimeout:      webhookWriteTimeout,
@@ -249,15 +316,23 @@ func (r *Runtime) runSweep(ctx context.Context, spec Spec) {
 				r.logger.WarnContext(ctx, "connector reconciliation sweep failed",
 					"connector", spec.Name, "error", err)
 			}
+			r.observe(ctx, spec, HealthEventSweep, false, "reconciliation sweep failed")
 		} else {
+			r.observe(ctx, spec, HealthEventSweep, true, "")
 			for _, candidate := range candidates {
-				if err := spec.Deliver(ctx, candidate); err != nil && ctx.Err() == nil {
-					r.logger.WarnContext(ctx, "connector intake delivery failed",
-						"connector", spec.Name,
-						"work_item_id", candidate.WorkItem.ID,
-						"revision", candidate.WorkItem.Revision,
-						"error", err)
+				if err := spec.Deliver(ctx, candidate); err != nil {
+					if ctx.Err() == nil {
+						r.logger.WarnContext(ctx, "connector intake delivery failed",
+							"connector", spec.Name,
+							"work_item_id", candidate.WorkItem.ID,
+							"revision", candidate.WorkItem.Revision,
+							"error", err)
+					}
+					r.observe(ctx, spec, HealthEventDelivery, false, "intake delivery failed")
 				}
+				// A sweep delivery is recovery, not a webhook delivery: it
+				// must not advance the last-delivery timestamp, or a dead
+				// subscription would look healthy while reconciliation works.
 			}
 		}
 		select {
@@ -265,5 +340,84 @@ func (r *Runtime) runSweep(ctx context.Context, spec Spec) {
 			return
 		case <-ticker.C():
 		}
+	}
+}
+
+// observeWebhook records the authenticated-delivery outcome after the handler
+// has answered. A 401 or 5xx is a failed delivery; a filtered or rejected
+// delivery still proves the subscription reached the receiver.
+func (r *Runtime) observeWebhook(spec Spec, next http.Handler) http.Handler {
+	if spec.Observe == nil {
+		return next
+	}
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		recorder := &webhookStatusRecorder{ResponseWriter: response, status: http.StatusOK}
+		next.ServeHTTP(recorder, request)
+		successful := recorder.status != http.StatusUnauthorized && recorder.status < http.StatusInternalServerError
+		detail := ""
+		if !successful {
+			detail = "webhook delivery failed with status " + strconv.Itoa(recorder.status)
+		}
+		r.observe(request.Context(), spec, HealthEventDelivery, successful, detail)
+	})
+}
+
+type webhookStatusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *webhookStatusRecorder) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+// observe updates the connector's successful-observation state and calls the
+// connector's observer. A nil observer disables observation.
+func (r *Runtime) observe(ctx context.Context, spec Spec, event HealthEvent, successful bool, detail string) {
+	if spec.Observe == nil {
+		return
+	}
+	tracker := r.health[spec.Name]
+	if tracker == nil {
+		return
+	}
+	var subscription forge.SubscriptionState
+	var subscriptionDetail string
+	if event == HealthEventSweep {
+		subscription = forge.SubscriptionUnknown
+		if spec.Subscription != nil {
+			state, stateDetail := spec.Subscription(ctx)
+			subscription, subscriptionDetail = forge.ParseSubscriptionState(string(state)), stateDetail
+		}
+		tracker.mu.Lock()
+		tracker.subscription, tracker.subscriptionDetail = subscription, subscriptionDetail
+		if successful {
+			tracker.lastSuccessfulSweep = r.now()
+		}
+		tracker.mu.Unlock()
+	}
+	lastSweep, lastDelivery, storedSubscription, storedDetail := tracker.status()
+	if event != HealthEventSweep {
+		tracker.mu.Lock()
+		if successful {
+			tracker.lastDelivery = r.now()
+		}
+		tracker.mu.Unlock()
+		lastSweep, lastDelivery, storedSubscription, storedDetail = tracker.status()
+	}
+	observation := HealthObservation{
+		Connector:           spec.Name,
+		Event:               event,
+		Successful:          successful,
+		Detail:              detail,
+		LastSuccessfulSweep: lastSweep,
+		LastDelivery:        lastDelivery,
+		Subscription:        storedSubscription,
+		SubscriptionDetail:  storedDetail,
+	}
+	if err := spec.Observe(ctx, observation); err != nil && ctx.Err() == nil {
+		r.logger.WarnContext(ctx, "connector health observation not recorded",
+			"connector", spec.Name, "error", err)
 	}
 }

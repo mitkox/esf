@@ -62,6 +62,12 @@ type RunStatus struct {
 	// Conditions are the per-step outcomes observed so far. A watcher can
 	// follow them without waiting for the final manifest.
 	Conditions []Condition `json:"conditions,omitempty"`
+	// Repository, Revision and TaskHash are the validated request identity.
+	// They let an API resubmission compare a new payload with the running
+	// activation instead of echoing the submitted request.
+	Repository string `json:"repository,omitempty"`
+	Revision   string `json:"revision,omitempty"`
+	TaskHash   string `json:"task_hash,omitempty"`
 }
 
 // workflowState is the deterministic state carried across workflow steps.
@@ -396,6 +402,9 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	s.resources = validated.Resources
 	s.reviewPorts = validated.Resources.PreviewPorts
 	s.status.Scope = validated.Resources.Scope
+	s.status.Repository = validated.Repository
+	s.status.Revision = validated.Revision
+	s.status.TaskHash = validated.TaskHash
 	req.Scope = validated.Resources.Scope
 	if validated.Resources.VerificationProfile != "" {
 		req.VerificationProfile = validated.Resources.VerificationProfile

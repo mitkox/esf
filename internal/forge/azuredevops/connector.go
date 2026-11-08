@@ -3,6 +3,7 @@ package azuredevops
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -41,64 +42,112 @@ func (c *Client) Report(ctx context.Context, req forge.ReportRequest) error {
 		return fmt.Errorf("azuredevops: report requires a work item or pull request")
 	}
 
+	// A comment is posted only when one was explicitly requested. The
+	// pull-request status is independent: a missing project or a failed comment
+	// must never suppress the verification status a branch policy requires.
+	var errs []error
 	comment := strings.TrimSpace(req.Comment)
-	if workItemID != "" && (comment != "" || req.Status.Description != "") {
-		if comment == "" {
-			comment = req.Status.Description
-		}
+	if workItemID != "" && comment != "" {
 		project := strings.TrimSpace(req.WorkItem.Project)
 		if project == "" {
-			return fmt.Errorf("azuredevops: work item project is required to post a comment")
-		}
-		endpoint := c.apiURL(project, "_apis", "wit", "workItems", workItemID, "comments")
-		query := endpoint.Query()
-		query.Set("api-version", "7.0-preview.3")
-		endpoint.RawQuery = query.Encode()
-		payload, err := json.Marshal(map[string]string{"text": comment})
-		if err != nil {
-			return err
-		}
-		if _, err := c.do(ctx, http.MethodPost, endpoint, payload, "application/json"); err != nil {
-			return err
+			errs = append(errs, fmt.Errorf("azuredevops: work item project is required to post a comment"))
+		} else {
+			endpoint := c.apiURL(project, "_apis", "wit", "workItems", workItemID, "comments")
+			query := endpoint.Query()
+			query.Set("api-version", "7.0-preview.3")
+			endpoint.RawQuery = query.Encode()
+			payload, err := json.Marshal(map[string]string{"text": comment})
+			if err != nil {
+				errs = append(errs, err)
+			} else if _, err := c.do(ctx, http.MethodPost, endpoint, payload, "application/json"); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 
 	if pullRequestID != "" {
 		repository := strings.TrimSpace(req.Repository)
 		if repository == "" {
-			return fmt.Errorf("azuredevops: repository is required to post a pull request status")
-		}
-		project, repo, err := c.repositoryCoordinates(repository)
-		if err != nil {
-			return err
-		}
-		endpoint := c.apiURL(project, "_apis", "git", "repositories", repo, "pullRequests", pullRequestID, "statuses")
-		query := endpoint.Query()
-		query.Set("api-version", apiVersion)
-		endpoint.RawQuery = query.Encode()
+			errs = append(errs, fmt.Errorf("azuredevops: repository is required to post a pull request status"))
+		} else if project, repo, err := c.repositoryCoordinates(repository); err != nil {
+			errs = append(errs, err)
+		} else {
+			endpoint := c.apiURL(project, "_apis", "git", "repositories", repo, "pullRequests", pullRequestID, "statuses")
+			query := endpoint.Query()
+			query.Set("api-version", apiVersion)
+			endpoint.RawQuery = query.Encode()
 
-		name := strings.TrimSpace(req.Status.Name)
-		if name == "" {
-			name = forge.VerificationStatusName
-		}
-		state := azureStatusState(req.Status.State)
-		payload, err := json.Marshal(map[string]any{
-			"state":       state,
-			"description": truncateText(req.Status.Description, 1000),
-			"context": map[string]string{
-				"name":  name,
-				"genre": statusGenre,
-			},
-			"targetUrl": req.Status.TargetURL,
-		})
-		if err != nil {
-			return err
-		}
-		if _, err := c.do(ctx, http.MethodPost, endpoint, payload, "application/json"); err != nil {
-			return err
+			name := strings.TrimSpace(req.Status.Name)
+			if name == "" {
+				name = forge.VerificationStatusName
+			}
+			state := azureStatusState(req.Status.State)
+			payload, err := json.Marshal(map[string]any{
+				"state":       state,
+				"description": truncateText(req.Status.Description, 1000),
+				"context": map[string]string{
+					"name":  name,
+					"genre": statusGenre,
+				},
+				"targetUrl": req.Status.TargetURL,
+			})
+			if err != nil {
+				errs = append(errs, err)
+			} else if _, err := c.do(ctx, http.MethodPost, endpoint, payload, "application/json"); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
-	return nil
+	return errors.Join(errs...)
+}
+
+// SubscriptionState reads the connector's Azure DevOps service-hook
+// subscription state for connector health. It reports only a bounded summary,
+// never a subscription body or credential.
+func (c *Client) SubscriptionState(ctx context.Context) (forge.SubscriptionState, string, error) {
+	endpoint := c.apiURL("_apis", "hooks", "subscriptions")
+	query := endpoint.Query()
+	query.Set("api-version", apiVersion)
+	endpoint.RawQuery = query.Encode()
+	body, err := c.get(ctx, endpoint)
+	if err != nil {
+		return forge.SubscriptionUnknown, "subscription state unavailable", err
+	}
+	var response struct {
+		Count int `json:"count"`
+		Value []struct {
+			Status string `json:"status"`
+		} `json:"value"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return forge.SubscriptionUnknown, "subscription state unreadable", fmt.Errorf("azuredevops: decode service hook subscriptions: %w", err)
+	}
+	active, disabled, probationary, other := 0, 0, 0, 0
+	for _, subscription := range response.Value {
+		switch strings.ToLower(strings.TrimSpace(subscription.Status)) {
+		case "enabled":
+			active++
+		case "disabled":
+			disabled++
+		case "probationary", "suspended", "errored":
+			probationary++
+		default:
+			other++
+		}
+	}
+	detail := fmt.Sprintf("%d subscription(s): %d enabled, %d disabled", len(response.Value), active, disabled)
+	switch {
+	case len(response.Value) == 0:
+		return forge.SubscriptionUnknown, "no service-hook subscription is registered", nil
+	case disabled > 0 && active == 0 && probationary == 0:
+		return forge.SubscriptionDisabled, detail, nil
+	case probationary > 0:
+		return forge.SubscriptionProbationary, detail, nil
+	case active > 0:
+		return forge.SubscriptionActive, detail, nil
+	default:
+		return forge.SubscriptionUnknown, detail + fmt.Sprintf(", %d other", other), nil
+	}
 }
 
 // Reconcile reads one page of the reporting revisions feed and re-fetches the

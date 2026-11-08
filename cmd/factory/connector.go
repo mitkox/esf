@@ -20,6 +20,7 @@ import (
 
 	"github.com/mitkox/esf/internal/connector"
 	"github.com/mitkox/esf/internal/factory"
+	artifacts "github.com/mitkox/esf/internal/factoryartifacts"
 	"github.com/mitkox/esf/internal/forge"
 	"github.com/mitkox/esf/internal/forge/azuredevops"
 	"github.com/mitkox/esf/internal/httpsecurity"
@@ -74,7 +75,24 @@ sandbox.
 				dataDir:   cfg.Storage.DataDir,
 				logger:    logger,
 			}
-			specs, err := buildConnectorRuntime(cfg, sink)
+			artifactLimit := cfg.Limits.ArtifactBytes
+			if artifactLimit <= 0 {
+				artifactLimit = artifacts.DefaultMaxArtifactBytes
+			}
+			artifactFactory, err := artifacts.NewLocalWithLimit(cfg.Storage.DataDir, artifactLimit)
+			if err != nil {
+				return fmt.Errorf("connector health: %w", err)
+			}
+			telemetry, err := factory.NewTelemetry(ctx, cfg.Observability)
+			if err != nil {
+				return fmt.Errorf("connector telemetry: %w", err)
+			}
+			defer func() { _ = telemetry.Shutdown(context.Background()) }()
+			healthReporter, err := factory.NewConnectorHealthReporter(artifactFactory, telemetry, logger)
+			if err != nil {
+				return err
+			}
+			specs, err := buildConnectorRuntime(cfg, sink, healthReporter)
 			if err != nil {
 				return err
 			}
@@ -101,7 +119,7 @@ sandbox.
 // It reads every credential through Config.Connector and builds the adapter
 // through the same path the worker uses, so a connector cannot be configured
 // differently in the two workloads.
-func buildConnectorRuntime(cfg factory.Config, sink forge.IntakeSink) ([]connector.Spec, error) {
+func buildConnectorRuntime(cfg factory.Config, sink forge.IntakeSink, healthReporter *factory.ConnectorHealthReporter) ([]connector.Spec, error) {
 	names := make([]string, 0, len(cfg.Connectors))
 	for name := range cfg.Connectors {
 		names = append(names, name)
@@ -156,6 +174,14 @@ func buildConnectorRuntime(cfg factory.Config, sink forge.IntakeSink) ([]connect
 			WebhookListen:  listen,
 			WebhookHandler: webhook,
 			TLSConfig:      tlsConfig,
+			Observe:        connectorHealthObserver(healthReporter),
+			Subscription: func(ctx context.Context) (forge.SubscriptionState, string) {
+				state, detail, err := azure.SubscriptionState(ctx)
+				if err != nil {
+					return forge.SubscriptionUnknown, "subscription state unavailable"
+				}
+				return state, detail
+			},
 		})
 	}
 	return specs, nil
@@ -197,6 +223,24 @@ func sweepDeliverer(cfg factory.Config, name string, azure *azuredevops.Client, 
 			DeliveryID:           "sweep:" + candidate.WorkItem.Revision,
 			RepositoryPermission: forge.PermissionWrite,
 		})
+	}
+}
+
+// connectorHealthObserver adapts the connector runtime's liveness observations
+// to the factory health reporter that feeds the console snapshot and metrics.
+func connectorHealthObserver(reporter *factory.ConnectorHealthReporter) connector.HealthObserver {
+	if reporter == nil {
+		return nil
+	}
+	return func(ctx context.Context, observation connector.HealthObservation) error {
+		_, err := reporter.Report(ctx, factory.ConnectorHealthInput{
+			Connector:           observation.Connector,
+			LastSuccessfulSweep: observation.LastSuccessfulSweep,
+			LastDelivery:        observation.LastDelivery,
+			Subscription:        string(observation.Subscription),
+			SubscriptionDetail:  observation.SubscriptionDetail,
+		})
+		return err
 	}
 }
 

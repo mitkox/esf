@@ -38,11 +38,26 @@ const (
 	// histories recorded before those steps replay without them.
 	workItemPublicationVersion = "workitem-publication-v1"
 
+	// workItemAcceptancePollVersion gates the bounded acceptance wait. A
+	// history recorded with a single acceptance read must replay without the
+	// poll timers it never scheduled.
+	workItemAcceptancePollVersion = "workitem-acceptance-poll-v1"
+
+	// workItemAcceptancePollInterval is the workflow timer between forge reads.
+	// The poll uses workflow time so replay re-creates the same timers.
+	workItemAcceptancePollInterval = 15 * time.Minute
+
+	// workItemAcceptanceMaxWait bounds how long one workflow waits for a
+	// developer to merge or close the pull request.
+	workItemAcceptanceMaxWait = 24 * time.Hour
+
 	// Status values below are outcome names, not run states. They make a
 	// publication failure distinguishable from a verification failure.
 	workItemStatusPublicationFailed = "publication_failed"
 	workItemStatusAcceptanceDrift   = "acceptance_drift"
 	workItemStatusAcceptanceUnknown = "acceptance_unresolved"
+	workItemStatusAcceptanceTimeout = "acceptance_timeout"
+	workItemStatusWithdrawn         = "work_item_withdrawn"
 	workItemStatusRework            = "rework"
 	workItemStatusError             = "error"
 
@@ -59,6 +74,7 @@ const (
 	intakeRecordAccepted       = "accepted"
 	intakeRecordSucceeded      = "succeeded"
 	intakeRecordFailed         = "failed"
+	intakeRecordWithdrawn      = "withdrawn"
 	intakeRecordError          = "error"
 	intakeStatusDuplicate      = "duplicate"
 	intakeStatusStale          = "stale"
@@ -285,6 +301,9 @@ func WorkItemWorkflow(ctx workflow.Context, in WorkItemWorkflowInput) (WorkItemO
 						"run_id", resolved.RunID, "error", publicationErr)
 				}
 				switch {
+				case publication.Withdrawn:
+					outcome.Status = workItemStatusWithdrawn
+					recordStatus = intakeRecordWithdrawn
 				case publication.Failure != "":
 					outcome.Status = workItemStatusPublicationFailed
 					if publication.GateFailed {
@@ -294,6 +313,8 @@ func WorkItemWorkflow(ctx workflow.Context, in WorkItemWorkflowInput) (WorkItemO
 				case publicationErr != nil && outcome.PullRequest == nil:
 					outcome.Status = workItemStatusPublicationFailed
 					recordStatus = intakeRecordFailed
+				case acceptance != nil && acceptance.TimedOut:
+					outcome.Status = workItemStatusAcceptanceTimeout
 				case acceptance != nil && acceptance.Drift:
 					outcome.Status = workItemStatusAcceptanceDrift
 					recordStatus = intakeRecordFailed
@@ -412,14 +433,16 @@ func drainWorkItemSignals(signals workflow.ReceiveChannel, pending *[]forge.Prop
 }
 
 // publishAndReadAcceptance runs the host-side publication, then observes the
-// forge merge state once. It does not wait for a developer: a later sweep can
-// read acceptance again from the durable publication record.
+// forge merge state with a bounded workflow-timer poll. The wait is durable and
+// replay-safe: the same timers are scheduled on replay, and a history recorded
+// before the poll version keeps its single read.
 func publishAndReadAcceptance(
 	ctx workflow.Context,
 	acts *Activities,
 	manifest RunManifest,
 	outcome *WorkItemOutcome,
 ) (PublishChangeOutput, *ReadPublicationAcceptanceOutput, error) {
+	pollAcceptance := workflow.GetVersion(ctx, workItemAcceptancePollVersion, workflow.DefaultVersion, 1) != workflow.DefaultVersion
 	opts := workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Minute,
 		// Publication is idempotent by branch and pull request. The forge
@@ -438,6 +461,12 @@ func publishAndReadAcceptance(
 		return PublishChangeOutput{}, nil, publicationErr
 	}
 	switch {
+	case publication.Withdrawn:
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionPublication, ConditionFalse, "Withdrawn",
+			publication.Failure)
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "Withdrawn",
+			"the work item was withdrawn before publication")
+		return publication, nil, nil
 	case publication.Disabled:
 		setWorkItemCondition(ctx, &outcome.Conditions, ConditionPublication, ConditionUnknown, "NotConfigured",
 			"evidence signing is not configured, so publication is disabled")
@@ -477,9 +506,8 @@ func publishAndReadAcceptance(
 			MaximumAttempts:    3,
 		},
 	}
-	var acceptance ReadPublicationAcceptanceOutput
-	if err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, acceptanceOpts), acts.ReadPublicationAcceptance,
-		ReadPublicationAcceptanceInput{RunID: manifest.RunID}).Get(ctx, &acceptance); err != nil {
+	acceptance, err := readAcceptanceBounded(ctx, acts, acceptanceOpts, manifest.RunID, pollAcceptance)
+	if err != nil {
 		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "ReadFailed", err.Error())
 		return publication, nil, err
 	}
@@ -489,6 +517,11 @@ func publishAndReadAcceptance(
 		return publication, &acceptance, nil
 	}
 	outcome.Acceptance = acceptance.Acceptance
+	if acceptance.TimedOut {
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "TimedOut",
+			"the pull request stayed open for the maximum acceptance wait")
+		return publication, &acceptance, nil
+	}
 	switch acceptance.Decision {
 	case string(publicationDecisionAccepted), string(publicationDecisionAlreadyApplied):
 		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionTrue, "Merged",
@@ -499,6 +532,9 @@ func publishAndReadAcceptance(
 		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionFalse, "ServiceClosed", acceptance.Note)
 	case string(publicationDecisionDrift):
 		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionFalse, "Drift", acceptance.Note)
+	case string(publicationDecisionIgnoredStale):
+		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "Superseded",
+			"the pull request was superseded before acceptance")
 	case string(publicationDecisionPending):
 		setWorkItemCondition(ctx, &outcome.Conditions, ConditionAcceptance, ConditionUnknown, "PendingPublication", acceptance.Note)
 	default:
@@ -506,6 +542,67 @@ func publishAndReadAcceptance(
 			"the pull request is still open")
 	}
 	return publication, &acceptance, nil
+}
+
+// readAcceptanceBounded polls the forge merge state on workflow timers until a
+// terminal decision or the maximum acceptance wait. It is deterministic: every
+// wait is a workflow timer, never a wall-clock sleep.
+func readAcceptanceBounded(
+	ctx workflow.Context,
+	acts *Activities,
+	opts workflow.ActivityOptions,
+	runID string,
+	poll bool,
+) (ReadPublicationAcceptanceOutput, error) {
+	read := func() (ReadPublicationAcceptanceOutput, error) {
+		var out ReadPublicationAcceptanceOutput
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, opts), acts.ReadPublicationAcceptance,
+			ReadPublicationAcceptanceInput{RunID: runID}).Get(ctx, &out)
+		return out, err
+	}
+	first, err := read()
+	if err != nil {
+		return ReadPublicationAcceptanceOutput{}, err
+	}
+	if !poll {
+		return first, nil
+	}
+	deadline := workflow.Now(ctx).Add(workItemAcceptanceMaxWait)
+	out := first
+	for {
+		if acceptanceTerminal(out) || out.TimedOut {
+			return out, nil
+		}
+		if !workflow.Now(ctx).Before(deadline) {
+			out.TimedOut = true
+			return out, nil
+		}
+		if err := workflow.NewTimer(ctx, workItemAcceptancePollInterval).Get(ctx, nil); err != nil {
+			return out, err
+		}
+		out, err = read()
+		if err != nil {
+			return ReadPublicationAcceptanceOutput{}, err
+		}
+	}
+}
+
+// acceptanceTerminal reports whether a read ends the acceptance wait.
+func acceptanceTerminal(out ReadPublicationAcceptanceOutput) bool {
+	if !out.Read {
+		return true
+	}
+	switch out.Decision {
+	case string(publicationDecisionAccepted),
+		string(publicationDecisionAlreadyApplied),
+		string(publicationDecisionClosedHuman),
+		string(publicationDecisionClosedService),
+		string(publicationDecisionDrift),
+		string(publicationDecisionIgnoredStale):
+		return true
+	default:
+		return false
+	}
 }
 
 // finishWorkItemOutcome records the publication and acceptance conditions that
@@ -658,6 +755,8 @@ func (a *Activities) ResolveWorkItemIntake(ctx context.Context, in WorkItemResol
 			Pipeline:     resolved.Pipeline,
 			ID:           workItem.ID,
 			Revision:     workItem.Revision,
+			Project:      workItem.Project,
+			State:        workItem.State,
 			SnapshotHash: proposal.WorkItemHash,
 			Repository:   resolved.Repository,
 			Source:       string(proposal.Source),

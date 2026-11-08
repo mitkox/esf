@@ -159,10 +159,18 @@ type PreviewLink struct {
 // the exact forge bytes the run was derived from. The work-item body itself is
 // not copied here; the task artifact carries the bytes that were hashed.
 type WorkItemEvidence struct {
-	Connector    string `json:"connector"`
-	Pipeline     string `json:"pipeline,omitempty"`
-	ID           string `json:"id"`
-	Revision     string `json:"revision"`
+	Connector string `json:"connector"`
+	Pipeline  string `json:"pipeline,omitempty"`
+	ID        string `json:"id"`
+	Revision  string `json:"revision"`
+	// Project is the forge project that owns the work item. Status reporting
+	// needs it to address the work-item comment API; older records do not carry
+	// it and remain readable.
+	Project string `json:"project,omitempty"`
+	// State is the authoritative work-item state observed at intake. Publication
+	// re-reads the live state, and this value is the fallback for connectors
+	// that cannot re-read it.
+	State        string `json:"state,omitempty"`
 	SnapshotHash string `json:"snapshot_hash"`
 	Repository   string `json:"repository"`
 	Source       string `json:"source,omitempty"`

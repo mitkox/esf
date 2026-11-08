@@ -183,3 +183,126 @@ func TestRuntimeRejectsInvalidSpecs(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeReportsSweepAndFailedDeliveryHealth(t *testing.T) {
+	t.Parallel()
+
+	observations := make(chan HealthObservation, 8)
+	runtime, err := New([]Spec{{
+		Name:          "azdo",
+		SweepInterval: time.Minute,
+		Sweeper: fakeSweeper(func(context.Context) ([]forge.Candidate, error) {
+			return []forge.Candidate{{Connector: "azdo", WorkItem: forge.WorkItem{ID: "42", Revision: "1"}}}, nil
+		}),
+		Deliver: func(context.Context, forge.Candidate) error {
+			return context.DeadlineExceeded
+		},
+		WebhookListen:  "127.0.0.1:0",
+		WebhookHandler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}),
+		Subscription: func(context.Context) (forge.SubscriptionState, string) {
+			return forge.SubscriptionActive, "1 subscription enabled"
+		},
+		Observe: func(_ context.Context, observation HealthObservation) error {
+			observations <- observation
+			return nil
+		},
+	}}, Options{Logger: quietLogger()})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	runtime.newTicker = func(time.Duration) ticker { return &fakeTicker{ch: make(chan time.Time, 1)} }
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+
+	sweep := <-observations
+	if sweep.Event != HealthEventSweep || !sweep.Successful {
+		t.Fatalf("first observation = %#v, want a successful sweep", sweep)
+	}
+	if sweep.LastSuccessfulSweep.IsZero() {
+		t.Fatal("a successful sweep did not advance the sweep timestamp")
+	}
+	if sweep.Subscription != forge.SubscriptionActive || sweep.SubscriptionDetail == "" {
+		t.Fatalf("sweep subscription = %q/%q", sweep.Subscription, sweep.SubscriptionDetail)
+	}
+	delivery := <-observations
+	if delivery.Event != HealthEventDelivery || delivery.Successful {
+		t.Fatalf("second observation = %#v, want a failed delivery", delivery)
+	}
+	if !delivery.LastDelivery.IsZero() {
+		t.Fatal("a failed delivery advanced the delivery timestamp")
+	}
+	if delivery.Detail == "" {
+		t.Fatal("a failed delivery carried no detail")
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runtime did not stop after cancellation")
+	}
+}
+
+func TestRuntimeReportsFailedWebhookDeliveryHealth(t *testing.T) {
+	t.Parallel()
+
+	observations := make(chan HealthObservation, 8)
+	addresses := make(chan net.Addr, 1)
+	runtime, err := New([]Spec{{
+		Name:          "azdo",
+		SweepInterval: time.Hour,
+		Sweeper:       fakeSweeper(func(context.Context) ([]forge.Candidate, error) { return nil, nil }),
+		Deliver:       func(context.Context, forge.Candidate) error { return nil },
+		WebhookListen: "127.0.0.1:0",
+		WebhookHandler: http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+			response.WriteHeader(http.StatusBadGateway)
+		}),
+		Observe: func(_ context.Context, observation HealthObservation) error {
+			observations <- observation
+			return nil
+		},
+	}}, Options{
+		Logger: quietLogger(),
+		OnListen: func(_ string, address net.Addr, _ bool) {
+			addresses <- address
+		},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+	address := <-addresses
+	response, err := http.Post("http://"+address.String()+"/hooks/azuredevops", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		cancel()
+		t.Fatalf("POST: %v", err)
+	}
+	response.Body.Close()
+
+	for {
+		observation := <-observations
+		if observation.Event != HealthEventDelivery {
+			continue
+		}
+		if observation.Successful {
+			cancel()
+			t.Fatalf("a 502 webhook was observed as successful: %#v", observation)
+		}
+		break
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runtime did not stop after cancellation")
+	}
+}

@@ -184,3 +184,108 @@ func TestReportPostsCommentAndPullRequestStatus(t *testing.T) {
 		t.Fatalf("comment path = %q, status path = %q", commentPath, statusPath)
 	}
 }
+
+func TestReportPostsPullRequestStatusWithoutCommentOrProject(t *testing.T) {
+	t.Parallel()
+
+	var statusPosted bool
+	server := newForgeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/pullRequests/17/statuses") && r.Method == http.MethodPost {
+			statusPosted = true
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{}`))
+			return
+		}
+		http.NotFound(w, r)
+	})
+	client := newTestClient(t, server.URL()+"/acme", RetryPolicy{MaxAttempts: 1})
+	err := client.Report(context.Background(), forge.ReportRequest{
+		// An older manifest carries no project. The status must still post.
+		WorkItem:      forge.WorkItemRef{ID: "42"},
+		Repository:    server.URL() + "/acme/Payments/_git/payments",
+		PullRequestID: "17",
+		Status: forge.Status{
+			Name:        forge.VerificationStatusName,
+			State:       forge.StatusSucceeded,
+			Description: "verified",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Report: %v", err)
+	}
+	if !statusPosted {
+		t.Fatal("the verification status was not posted")
+	}
+	if count := server.CountPath("/acme/_apis/wit/workItems/42/comments"); count != 0 {
+		t.Fatalf("comment posted without an explicit comment: %d", count)
+	}
+}
+
+func TestReportPostsStatusWhenCommentProjectIsMissing(t *testing.T) {
+	t.Parallel()
+
+	var statusPosted bool
+	server := newForgeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/pullRequests/17/statuses") && r.Method == http.MethodPost {
+			statusPosted = true
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{}`))
+			return
+		}
+		http.NotFound(w, r)
+	})
+	client := newTestClient(t, server.URL()+"/acme", RetryPolicy{MaxAttempts: 1})
+	err := client.Report(context.Background(), forge.ReportRequest{
+		WorkItem:      forge.WorkItemRef{ID: "42"},
+		Repository:    server.URL() + "/acme/Payments/_git/payments",
+		PullRequestID: "17",
+		Comment:       "Evidence verified.",
+		Status:        forge.Status{Name: forge.VerificationStatusName, State: forge.StatusSucceeded},
+	})
+	if err == nil || !strings.Contains(err.Error(), "project is required") {
+		t.Fatalf("Report error = %v, want the missing-project comment error", err)
+	}
+	if !statusPosted {
+		t.Fatal("a failed comment suppressed the pull-request status")
+	}
+}
+
+func TestSubscriptionStateMapsServiceHooks(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		body   string
+		state  forge.SubscriptionState
+		detail string
+	}{
+		{name: "active", body: `{"count":1,"value":[{"status":"enabled"}]}`, state: forge.SubscriptionActive},
+		{name: "disabled", body: `{"count":1,"value":[{"status":"disabled"}]}`, state: forge.SubscriptionDisabled},
+		{name: "probationary", body: `{"count":1,"value":[{"status":"suspended"}]}`, state: forge.SubscriptionProbationary},
+		{name: "empty", body: `{"count":0,"value":[]}`, state: forge.SubscriptionUnknown},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			server := newForgeServer(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/acme/_apis/hooks/subscriptions" {
+					http.NotFound(w, r)
+					return
+				}
+				writeFixture(w, []byte(tc.body))
+			})
+			client := newTestClient(t, server.URL()+"/acme", RetryPolicy{MaxAttempts: 1})
+			state, detail, err := client.SubscriptionState(context.Background())
+			if err != nil {
+				t.Fatalf("SubscriptionState: %v", err)
+			}
+			if state != tc.state {
+				t.Fatalf("state = %q, want %q", state, tc.state)
+			}
+			if strings.TrimSpace(detail) == "" {
+				t.Fatal("subscription detail is empty")
+			}
+		})
+	}
+}

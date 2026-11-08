@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,8 +11,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/mitkox/esf/internal/connector"
 	"github.com/mitkox/esf/internal/factory"
+	artifacts "github.com/mitkox/esf/internal/factoryartifacts"
 	"github.com/mitkox/esf/internal/forge"
 	"github.com/mitkox/esf/internal/forge/azuredevops"
 )
@@ -116,7 +120,7 @@ func TestConnectorWebhookAuthenticatesAndBoundsOverListener(t *testing.T) {
 		},
 	}
 	sink := &recordingIntakeSink{}
-	specs, err := buildConnectorRuntime(cfg, sink)
+	specs, err := buildConnectorRuntime(cfg, sink, nil)
 	if err != nil {
 		t.Fatalf("buildConnectorRuntime: %v", err)
 	}
@@ -163,5 +167,99 @@ func TestConnectorWebhookAuthenticatesAndBoundsOverListener(t *testing.T) {
 	}
 	if proposals, rejections := sink.counts(); proposals != 0 || rejections != 0 {
 		t.Fatalf("proposals = %d, rejections = %d, want none", proposals, rejections)
+	}
+}
+
+type connectorSweeperFunc func(context.Context) ([]forge.Candidate, error)
+
+func (f connectorSweeperFunc) Sweep(ctx context.Context) ([]forge.Candidate, error) { return f(ctx) }
+
+// TestConnectorHealthObserverWritesSweepSnapshot runs the real connector
+// runtime and the production health adapter, then reads the durable snapshot
+// the console and metrics consume.
+func TestConnectorHealthObserverWritesSweepSnapshot(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	artifactFactory, err := artifacts.NewLocal(dir)
+	if err != nil {
+		t.Fatalf("NewLocal: %v", err)
+	}
+	telemetry, err := factory.NewTelemetry(context.Background(), factory.ObservabilityConfig{})
+	if err != nil {
+		t.Fatalf("NewTelemetry: %v", err)
+	}
+	defer telemetry.Shutdown(context.Background())
+	reporter, err := factory.NewConnectorHealthReporter(artifactFactory, telemetry, nil)
+	if err != nil {
+		t.Fatalf("NewConnectorHealthReporter: %v", err)
+	}
+	observe := connectorHealthObserver(reporter)
+	observed := make(chan struct{}, 1)
+	runtime, err := connector.New([]connector.Spec{{
+		Name:          "azdo",
+		SweepInterval: time.Hour,
+		Sweeper: connectorSweeperFunc(func(context.Context) ([]forge.Candidate, error) {
+			return nil, nil
+		}),
+		Deliver:       func(context.Context, forge.Candidate) error { return nil },
+		WebhookListen: "127.0.0.1:0",
+		WebhookHandler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		}),
+		Subscription: func(context.Context) (forge.SubscriptionState, string) {
+			return forge.SubscriptionActive, "1 subscription enabled"
+		},
+		Observe: func(ctx context.Context, observation connector.HealthObservation) error {
+			err := observe(ctx, observation)
+			if observation.Event == connector.HealthEventSweep && observation.Successful {
+				select {
+				case observed <- struct{}{}:
+				default:
+				}
+			}
+			return err
+		},
+	}}, connector.Options{Logger: slog.New(slog.DiscardHandler)})
+	if err != nil {
+		t.Fatalf("connector.New: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.Run(ctx) }()
+	select {
+	case <-observed:
+	case err := <-done:
+		cancel()
+		t.Fatalf("runtime exited before the first sweep: %v", err)
+	case <-time.After(5 * time.Second):
+		cancel()
+		t.Fatal("the first sweep was not observed")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runtime did not stop")
+	}
+
+	snapshot, err := forge.LoadHealthSnapshot(dir)
+	if err != nil {
+		t.Fatalf("LoadHealthSnapshot: %v", err)
+	}
+	if len(snapshot.Connectors) != 1 || snapshot.Connectors[0].Connector != "azdo" {
+		t.Fatalf("snapshot = %#v, want one azdo connector", snapshot)
+	}
+	health := snapshot.Connectors[0]
+	if health.LastSuccessfulSweep == nil {
+		t.Fatal("the completed sweep was not recorded")
+	}
+	if health.Subscription != forge.SubscriptionActive {
+		t.Fatalf("subscription = %q, want active", health.Subscription)
+	}
+	if health.Status != forge.HealthDegraded || health.Reason != "no_delivery_since_sweep" {
+		t.Fatalf("health = %#v, want the degraded no-delivery state", health)
 	}
 }

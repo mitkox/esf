@@ -115,11 +115,14 @@ rather than ignored, and the body is capped at 1 MiB.
 | `parent_run_id` | no | Parent run for a retry or follow-up attempt. |
 
 Submission is idempotent for one `run_id`: a repeated submission reuses the
-running workflow and a closed workflow is not restarted. The `202` response
-acknowledges the activation; poll status for execution state.
+running workflow and a closed workflow is not restarted. Reusing a run identity
+with a different repository, revision, or task returns `409` with code
+`run_conflict`; resubmitting a closed run returns `409` with code `run_terminal`.
+The `202` response acknowledges the activation and reports the existing run's
+state; poll status for execution state.
 
-The response is a run status object. `state` is `REQUESTED` until the workflow
-reports its first in-flight state.
+The response is the existing run's status when it is already queryable; a newly
+started run that is not yet queryable is reported as `REQUESTED`.
 
 ## Run status
 
@@ -129,7 +132,7 @@ reports its first in-flight state.
 | --- | --- |
 | `run_id` | The run identity. |
 | `workflow_id` | The durable workflow identity. |
-| `state` | One of `REQUESTED`, `RUNNING`, `PAUSED`, `AGENT_FAILED`, `VERIFICATION_FAILED`, `SUCCEEDED`, `CANCELLED`, `INFRASTRUCTURE_FAILED`, `INVALID_REQUEST`, `BLOCKED`, `QUARANTINED`, `GATE_TAMPERED`, `EGRESS_UNVERIFIED`, `REJECTED`. |
+| `state` | One of `REQUESTED`, `RUNNING`, `PAUSED`, `AGENT_FAILED`, `VERIFICATION_FAILED`, `EVIDENCE_FAILED`, `SUCCEEDED`, `CANCELLED`, `INFRASTRUCTURE_FAILED`, `INVALID_REQUEST`, `BLOCKED`, `QUARANTINED`, `GATE_TAMPERED`, `EGRESS_UNVERIFIED`, `REJECTED`. |
 | `current_step` | The step currently executing or last recorded. |
 | `repository`, `revision` | The repository and revision the run was submitted for. |
 | `scope`, `change_id` | The resolved tenancy scope and work-item lineage, when present. |
@@ -213,6 +216,8 @@ Error bodies are one JSON object:
 | `401` | `unauthorized` | The bearer token is missing, malformed or wrong. |
 | `404` | `run_not_found` | The named run does not exist. |
 | `404` | `not_found` | The path is not an API endpoint. |
+| `409` | `run_conflict` | The run identity is executing a different request. |
+| `409` | `run_terminal` | The run identity is closed and cannot be restarted. |
 | `413` | `request_too_large` | The submission body exceeds 1 MiB. |
 | `500` | `internal` | The API could not complete the request. |
 
