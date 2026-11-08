@@ -74,7 +74,7 @@ func PrepareChangeRun(cfg Config, sub Submission) (RunRequest, error) {
 	// name. Refuse an identity the store cannot address before starting work
 	// that every later read would fail to find.
 	if err := artifacts.ValidateSegment(run.RunID); err != nil {
-		return RunRequest{}, fmt.Errorf("run_id %q must be one URL path segment", run.RunID)
+		return RunRequest{}, fmt.Errorf("run_id %q is not a usable artifact path segment: %w", run.RunID, err)
 	}
 	return run, nil
 }

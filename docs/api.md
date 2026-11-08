@@ -119,8 +119,9 @@ running workflow and a closed workflow is not restarted. Reusing a run identity
 with a different repository, revision, or task returns `409` with code
 `run_conflict`; resubmitting a closed run returns `409` with code `run_terminal`.
 
-A `run_id` must be addressable as one URL path segment: it cannot contain `/` or
-`\`, and `.` or `..` is rejected. Such a submission returns `400` with code
+A `run_id` must be one URL path segment: it cannot contain `/` or `\`, cannot be
+`.` or `..`, cannot contain a NUL byte, and must be at most 255 bytes (the
+artifact store's filesystem name limit). A violation returns `400` with code
 `invalid_request` before any workflow starts.
 
 The `202` response acknowledges the activation and reports the existing run's
@@ -245,7 +246,7 @@ Error bodies are one JSON object:
 | --- | --- | --- |
 | `400` | `invalid_request` | The body, field or cursor cannot be honoured. |
 | `401` | `unauthorized` | The bearer token is missing, malformed or wrong. |
-| `404` | `run_not_found` | The named run does not exist. |
+| `404` | `run_not_found` | The run does not exist, or its durable manifest is not written yet. |
 | `404` | `not_found` | The path is not an API endpoint. |
 | `409` | `run_conflict` | The run identity is executing a different request. |
 | `409` | `run_terminal` | The run identity is closed and cannot be restarted. |
@@ -263,6 +264,7 @@ It carries the API's wire types and turns non-2xx responses into typed errors:
 ```go
 import (
 	"context"
+	"time"
 
 	"github.com/mitkox/esf/internal/apiclient"
 )
@@ -289,6 +291,16 @@ if err != nil {
 	return err
 }
 _ = events
+
+// Evidence exists only after the run finishes and writes run.json: poll status
+// until a terminal state before requesting it.
+for status.State == "REQUESTED" || status.State == "RUNNING" || status.State == "PAUSED" {
+	time.Sleep(time.Second)
+	status, err = client.Status(ctx, status.RunID)
+	if err != nil {
+		return err
+	}
+}
 
 evidence, err := client.Evidence(ctx, status.RunID)
 if err != nil {
