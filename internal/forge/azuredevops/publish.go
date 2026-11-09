@@ -70,6 +70,11 @@ type BuildPublicationOptions struct {
 	AuthorName    string
 	AuthorEmail   string
 	CommitTime    time.Time
+	// CloneEnv is the environment for the baseline clone only. The connector
+	// supplies an authenticated environment here so a private repository can be
+	// cloned; it must not reach the non-network git steps, which keep the
+	// sanitized environment. When empty the sanitized environment is used.
+	CloneEnv []string
 	// WorkDir is an optional caller-owned directory. When empty a temporary
 	// directory is created and removed by Close.
 	WorkDir string
@@ -127,7 +132,11 @@ func BuildPublicationCommit(ctx context.Context, opts BuildPublicationOptions) (
 
 	repoDir := filepath.Join(workDir, "repository")
 	env := sanitizedGitEnv(workDir)
-	if _, err := runGit(ctx, workDir, env, nil, "clone", "--quiet", "--no-checkout", "--no-recurse-submodules", opts.RepositoryURL, repoDir); err != nil {
+	cloneEnv := opts.CloneEnv
+	if len(cloneEnv) == 0 {
+		cloneEnv = env
+	}
+	if _, err := runGit(ctx, workDir, cloneEnv, nil, "clone", "--quiet", "--no-checkout", "--no-recurse-submodules", opts.RepositoryURL, repoDir); err != nil {
 		return cleanup(fmt.Errorf("azuredevops: clone baseline: %w", err))
 	}
 	checkoutEnv := append(append([]string(nil), env...),
@@ -209,6 +218,10 @@ func BuildPublicationCommit(ctx context.Context, opts BuildPublicationOptions) (
 
 // BuildBranch builds the deterministic host-side commit without touching the
 // remote, so the factory can gate the built tree before any push.
+//
+// The host process clones a private repository itself, so the baseline clone
+// uses the connector credential; the sandbox egress injection does not apply
+// here. Every later git step keeps the sanitized environment.
 func (c *Client) BuildBranch(ctx context.Context, req forge.BranchPublication) (forge.BranchBuild, error) {
 	if c == nil {
 		return forge.BranchBuild{}, errors.New("azuredevops: client is required")
@@ -217,6 +230,11 @@ func (c *Client) BuildBranch(ctx context.Context, req forge.BranchPublication) (
 	if buildRemote == "" {
 		buildRemote = req.Repository
 	}
+	env, cleanup, err := c.gitAuthEnv()
+	if err != nil {
+		return forge.BranchBuild{}, err
+	}
+	defer cleanup()
 	built, err := BuildPublicationCommit(ctx, BuildPublicationOptions{
 		RepositoryURL: buildRemote,
 		BaselineSHA:   req.BaselineSHA,
@@ -228,6 +246,7 @@ func (c *Client) BuildBranch(ctx context.Context, req forge.BranchPublication) (
 		AuthorName:    req.AuthorName,
 		AuthorEmail:   req.AuthorEmail,
 		CommitTime:    req.CommitTime,
+		CloneEnv:      env,
 	})
 	if err != nil {
 		return forge.BranchBuild{}, err

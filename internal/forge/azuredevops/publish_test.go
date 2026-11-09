@@ -173,6 +173,84 @@ func TestPublishBranchPushesDeterministicCommit(t *testing.T) {
 	}
 }
 
+// TestBuildBranchSuppliesCredentialToCloneOnly proves the host-side baseline
+// clone receives the connector's authenticated environment while every later
+// local git step keeps the sanitized environment.
+func TestBuildBranchSuppliesCredentialToCloneOnly(t *testing.T) {
+	_, remoteDir, baseline, patch := publicationFixture(t)
+
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatalf("resolve git: %v", err)
+	}
+	if !filepath.IsAbs(realGit) {
+		if realGit, err = filepath.Abs(realGit); err != nil {
+			t.Fatalf("absolute git path: %v", err)
+		}
+	}
+	shimDir := t.TempDir()
+	logPath := filepath.Join(shimDir, "git-calls.log")
+	shim := "#!/bin/sh\n" +
+		"printf '%s\\t%s\\t%s\\t%s\\n' \"$*\" \"${GIT_ASKPASS-}\" \"${ESF_GIT_PASSWORD:+set}\" \"$([ -x \"${GIT_ASKPASS-}\" ] && echo 1 || echo 0)\" >> '" + logPath + "'\n" +
+		"exec '" + realGit + "' \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(shimDir, "git"), []byte(shim), 0o755); err != nil {
+		t.Fatalf("write git shim: %v", err)
+	}
+	t.Setenv("PATH", shimDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	client := newTestClient(t, "https://dev.azure.com/acme", RetryPolicy{MaxAttempts: 1})
+	commitTime, err := time.Parse(time.RFC3339, testPublicationTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	build, err := client.BuildBranch(context.Background(), forge.BranchPublication{
+		Repository:  "https://dev.azure.com/acme/Payments/_git/payments",
+		RemoteURL:   remoteDir,
+		BaselineSHA: baseline,
+		Patch:       patch,
+		Branch:      "esf/change-a1",
+		ChangeID:    "change",
+		Attempt:     1,
+		AuthorName:  "ESF Factory",
+		AuthorEmail: "esf@localhost",
+		CommitTime:  commitTime,
+	})
+	if err != nil {
+		t.Fatalf("BuildBranch: %v", err)
+	}
+	client.DiscardBranch(build)
+
+	recorded, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read git shim log: %v", err)
+	}
+	var sawClone, sawLocal bool
+	for _, line := range strings.Split(strings.TrimSuffix(string(recorded), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) != 4 {
+			t.Fatalf("unexpected git shim record %q", line)
+		}
+		args, askpass, password, askpassExecutable := fields[0], fields[1], fields[2], fields[3]
+		if !strings.HasPrefix(args, "clone ") {
+			sawLocal = true
+			if askpass != "/bin/false" || password != "" {
+				t.Fatalf("local git step %q gained the connector credential: GIT_ASKPASS=%q ESF_GIT_PASSWORD=%q", args, askpass, password)
+			}
+			continue
+		}
+		sawClone = true
+		if password != "set" || askpassExecutable != "1" {
+			t.Fatalf("clone lacks a live connector askpass: GIT_ASKPASS=%q ESF_GIT_PASSWORD=%q askpassExecutable=%q", askpass, password, askpassExecutable)
+		}
+	}
+	if !sawClone || !sawLocal {
+		t.Fatalf("shim saw clone=%v local=%v\n%s", sawClone, sawLocal, recorded)
+	}
+}
+
 func TestPublishHonoursRetryAfter(t *testing.T) {
 	t.Parallel()
 	var attempts int
