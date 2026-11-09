@@ -153,6 +153,139 @@ func TestPublicationGatesSubmoduleAllowlist(t *testing.T) {
 	}
 }
 
+func TestPublicationGatesSubmoduleSectionCase(t *testing.T) {
+	t.Parallel()
+
+	// Git config section names are case-insensitive, so a capitalized section
+	// must not hide an added submodule URL from the allowlist gate.
+	result, err := EvaluatePublicationGates(PublicationGateInput{
+		ChangedPaths:     []string{".gitmodules"},
+		ResultGitmodules: []byte("[Submodule \"untrusted\"]\n\tpath = untrusted\n\turl = https://example.test/untrusted.git\n"),
+	})
+	if err != nil {
+		t.Fatalf("EvaluatePublicationGates: %v", err)
+	}
+	if result.Passed {
+		t.Fatal("a submodule added under a capitalized section passed")
+	}
+	assertSubmoduleViolation(t, result)
+
+	// The baseline is parsed with the same case-insensitive section name, so a
+	// removed mixed-case section is still judged against the allowlist.
+	result, err = EvaluatePublicationGates(PublicationGateInput{
+		ChangedPaths:       []string{".gitmodules"},
+		BaselineGitmodules: []byte("[SuBmOdUlE \"shared\"]\n\tpath = shared\n\turl = https://example.test/shared.git\n"),
+	})
+	if err != nil {
+		t.Fatalf("EvaluatePublicationGates baseline: %v", err)
+	}
+	if result.Passed {
+		t.Fatal("a submodule removed from a mixed-case section passed")
+	}
+	assertSubmoduleViolation(t, result)
+
+	// Submodule names themselves stay case-sensitive: Shared and shared are
+	// distinct entries even when both carry the same URL.
+	result, err = EvaluatePublicationGates(PublicationGateInput{
+		ChangedPaths:       []string{".gitmodules"},
+		BaselineGitmodules: []byte("[submodule \"Shared\"]\n\tpath = shared\n\turl = https://example.test/shared.git\n"),
+		ResultGitmodules:   []byte("[submodule \"shared\"]\n\tpath = shared\n\turl = https://example.test/shared.git\n"),
+	})
+	if err != nil {
+		t.Fatalf("EvaluatePublicationGates renamed: %v", err)
+	}
+	if result.Passed {
+		t.Fatal("a submodule name change differing only by case passed")
+	}
+	assertSubmoduleViolation(t, result)
+}
+
+func TestPublicationGatesSubmoduleSectionSpellings(t *testing.T) {
+	t.Parallel()
+
+	t.Run("tab separated section", func(t *testing.T) {
+		// Git accepts any run of whitespace between the section type and the
+		// quoted subsection name, so a tab must not hide an added submodule URL.
+		result, err := EvaluatePublicationGates(PublicationGateInput{
+			ChangedPaths:     []string{".gitmodules"},
+			ResultGitmodules: []byte("[submodule\t\"untrusted\"]\n\tpath = untrusted\n\turl = https://example.test/untrusted.git\n"),
+		})
+		if err != nil {
+			t.Fatalf("EvaluatePublicationGates: %v", err)
+		}
+		if result.Passed {
+			t.Fatal("a submodule added under a tab-separated section passed")
+		}
+		assertSubmoduleViolation(t, result)
+	})
+
+	t.Run("legacy dotted section", func(t *testing.T) {
+		// Git also accepts the legacy dotted form, where the subsection name is
+		// part of the section type.
+		result, err := EvaluatePublicationGates(PublicationGateInput{
+			ChangedPaths:     []string{".gitmodules"},
+			ResultGitmodules: []byte("[submodule.untrusted]\n\tpath = untrusted\n\turl = https://example.test/untrusted.git\n"),
+		})
+		if err != nil {
+			t.Fatalf("EvaluatePublicationGates: %v", err)
+		}
+		if result.Passed {
+			t.Fatal("a submodule added under the legacy dotted section passed")
+		}
+		assertSubmoduleViolation(t, result)
+	})
+
+	t.Run("malformed section fails closed", func(t *testing.T) {
+		// A header that resembles a submodule section but cannot be parsed must
+		// stop the gate instead of being skipped.
+		if _, err := EvaluatePublicationGates(PublicationGateInput{
+			ChangedPaths:     []string{".gitmodules"},
+			ResultGitmodules: []byte("[submodule\"untrusted\"]\n\tpath = untrusted\n\turl = https://example.test/untrusted.git\n"),
+		}); err == nil {
+			t.Fatal("a malformed submodule section header passed the gate")
+		}
+	})
+
+	t.Run("utf-8 bom before section", func(t *testing.T) {
+		// Git ignores a UTF-8 BOM at the start of the file, so the first section
+		// must still be parsed.
+		result, err := EvaluatePublicationGates(PublicationGateInput{
+			ChangedPaths:     []string{".gitmodules"},
+			ResultGitmodules: []byte("\xef\xbb\xbf[submodule \"untrusted\"]\n\tpath = untrusted\n\turl = https://example.test/untrusted.git\n"),
+		})
+		if err != nil {
+			t.Fatalf("EvaluatePublicationGates: %v", err)
+		}
+		if result.Passed {
+			t.Fatal("a submodule added after a UTF-8 BOM passed")
+		}
+		assertSubmoduleViolation(t, result)
+	})
+
+	t.Run("non-submodule section ignored", func(t *testing.T) {
+		result, err := EvaluatePublicationGates(PublicationGateInput{
+			ChangedPaths:     []string{".gitmodules"},
+			ResultGitmodules: []byte("[credential]\n\thelper = store\n"),
+		})
+		if err != nil {
+			t.Fatalf("EvaluatePublicationGates: %v", err)
+		}
+		if !result.Passed {
+			t.Fatalf("a non-submodule section was rejected: %#v", result.Violations)
+		}
+	})
+}
+
+func assertSubmoduleViolation(t *testing.T, result PublicationGateResult) {
+	t.Helper()
+	for _, violation := range result.Violations {
+		if violation.Class == PublicationViolationSubmodule && violation.Path == ".gitmodules" {
+			return
+		}
+	}
+	t.Fatalf("violations = %#v, want a %q violation for .gitmodules", result.Violations, PublicationViolationSubmodule)
+}
+
 func TestPublicationGatesBaselineNotPatchText(t *testing.T) {
 	t.Parallel()
 	// A deleted protected file appears only as a removal in a patch. The tree

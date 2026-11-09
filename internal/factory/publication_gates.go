@@ -499,6 +499,8 @@ func evaluateSubmoduleChanges(baseline, result []byte, allowlist []string) ([]Pu
 }
 
 func parseGitmodules(body []byte) (map[string]string, error) {
+	// Git ignores a UTF-8 byte-order mark at the start of a config file.
+	body = bytes.TrimPrefix(body, []byte("\xef\xbb\xbf"))
 	urls := map[string]string{}
 	if len(bytes.TrimSpace(body)) == 0 {
 		return urls, nil
@@ -511,19 +513,16 @@ func parseGitmodules(body []byte) (map[string]string, error) {
 		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
 			continue
 		}
-		if strings.HasPrefix(line, "[submodule ") {
-			closing := strings.LastIndex(line, "]")
-			if closing < 0 {
-				return nil, fmt.Errorf("malformed submodule section %q", line)
-			}
-			current = strings.Trim(strings.TrimSpace(line[len("[submodule "):closing]), `"`)
-			if current == "" {
-				return nil, fmt.Errorf("submodule section has no name")
-			}
-			continue
-		}
 		if strings.HasPrefix(line, "[") {
-			current = ""
+			name, submodule, err := parseGitmodulesSectionHeader(line)
+			if err != nil {
+				return nil, err
+			}
+			if submodule {
+				current = name
+			} else {
+				current = ""
+			}
 			continue
 		}
 		if current == "" {
@@ -543,6 +542,113 @@ func parseGitmodules(body []byte) (map[string]string, error) {
 		return nil, err
 	}
 	return urls, nil
+}
+
+// parseGitmodulesSectionHeader reports whether a section header names a
+// submodule and returns its name. Git treats the section type case-insensitively,
+// accepts any whitespace before a quoted subsection name, and also accepts the
+// legacy dotted form. A header that resembles a submodule section but cannot be
+// parsed is an error so the publication gate fails closed instead of skipping
+// the section.
+func parseGitmodulesSectionHeader(line string) (string, bool, error) {
+	rest := line[1:]
+	end := 0
+	for end < len(rest) && rest[end] != ']' && !isGitmodulesSpace(rest[end]) {
+		end++
+	}
+	sectionType := rest[:end]
+	lowerType := strings.ToLower(sectionType)
+	switch {
+	case lowerType == "submodule":
+		name, err := parseGitmodulesQuotedSection(rest, end, line)
+		return name, true, err
+	case strings.HasPrefix(lowerType, "submodule."):
+		if end == len(rest) || rest[end] != ']' {
+			return "", false, fmt.Errorf("malformed submodule section %q", line)
+		}
+		name := sectionType[len("submodule."):]
+		if name == "" {
+			return "", false, fmt.Errorf("submodule section has no name")
+		}
+		if !gitmodulesSectionTrailingAllowed(rest[end+1:]) {
+			return "", false, fmt.Errorf("unsupported content after submodule section header %q", line)
+		}
+		return name, true, nil
+	case strings.HasPrefix(lowerType, `submodule"`):
+		// Git rejects a quoted subsection that is not separated from the section
+		// type by whitespace; refuse it rather than treating it as another
+		// section and skipping its URL.
+		return "", false, fmt.Errorf("malformed submodule section %q", line)
+	default:
+		return "", false, nil
+	}
+}
+
+func parseGitmodulesQuotedSection(rest string, typeEnd int, line string) (string, error) {
+	if typeEnd == len(rest) {
+		return "", fmt.Errorf("malformed submodule section %q", line)
+	}
+	if rest[typeEnd] == ']' {
+		return "", fmt.Errorf("submodule section has no name")
+	}
+	start := typeEnd
+	for start < len(rest) && isGitmodulesSpace(rest[start]) {
+		start++
+	}
+	if start == len(rest) || rest[start] != '"' {
+		return "", fmt.Errorf("malformed submodule section %q", line)
+	}
+	name, afterQuoted, ok := scanGitmodulesQuotedName(rest[start:])
+	if !ok {
+		return "", fmt.Errorf("malformed submodule section %q", line)
+	}
+	after := start + afterQuoted
+	if after == len(rest) || rest[after] != ']' {
+		return "", fmt.Errorf("malformed submodule section %q", line)
+	}
+	if name == "" {
+		return "", fmt.Errorf("submodule section has no name")
+	}
+	if !gitmodulesSectionTrailingAllowed(rest[after+1:]) {
+		return "", fmt.Errorf("unsupported content after submodule section header %q", line)
+	}
+	return name, nil
+}
+
+// scanGitmodulesQuotedName decodes the double-quoted subsection name at the
+// start of text. Git drops a backslash before any other character, so the
+// decoded name matches the subsection Git would use.
+func scanGitmodulesQuotedName(text string) (string, int, bool) {
+	var name strings.Builder
+	for i := 1; i < len(text); i++ {
+		switch text[i] {
+		case '\\':
+			if i+1 >= len(text) {
+				return "", 0, false
+			}
+			i++
+			name.WriteByte(text[i])
+		case '"':
+			return name.String(), i + 1, true
+		default:
+			name.WriteByte(text[i])
+		}
+	}
+	return "", 0, false
+}
+
+func gitmodulesSectionTrailingAllowed(trailing string) bool {
+	trailing = strings.TrimSpace(trailing)
+	return trailing == "" || strings.HasPrefix(trailing, "#") || strings.HasPrefix(trailing, ";")
+}
+
+func isGitmodulesSpace(b byte) bool {
+	switch b {
+	case ' ', '\t', '\r', '\n', '\v', '\f':
+		return true
+	default:
+		return false
+	}
 }
 
 func submoduleURLAllowed(value string, allowlist []string) bool {
