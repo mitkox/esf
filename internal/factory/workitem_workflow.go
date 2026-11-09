@@ -387,6 +387,29 @@ func resolveWorkItemIntake(
 	return resolved, err
 }
 
+// workItemChildOptions is the child start contract for one pipeline activation.
+//
+// The child runs under the standard run workflow identity so the console, the
+// live status lookup, and the halt/cancel controls address it like any other
+// run; under the activation identity they discard it as an unknown workflow.
+// The memo is the same summary a directly started run carries, so a filtered
+// halt sees the pipeline child too. ActivationID remains the durable intake
+// claim and audit identity, not a workflow identity.
+func workItemChildOptions(resolved WorkItemResolution) workflow.ChildWorkflowOptions {
+	workflowID := resolved.ActivationID
+	if runID := strings.TrimSpace(resolved.Request.RunID); runID != "" {
+		workflowID = WorkflowIDForRun(runID)
+	}
+	// An accepted resolution always carries a run ID. Without one the child
+	// keeps the activation identity rather than an identity no control reads.
+	return workflow.ChildWorkflowOptions{
+		WorkflowID:            workflowID,
+		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WaitForCancellation:   true,
+		Memo:                  RunMemoFor(resolved.Request),
+	}
+}
+
 // runWorkItemChild starts the existing change workflow as a child and consumes
 // revision signals while it runs.
 //
@@ -401,11 +424,7 @@ func runWorkItemChild(
 	signals workflow.ReceiveChannel,
 	pending *[]forge.Proposal,
 ) (RunManifest, error) {
-	opts := workflow.ChildWorkflowOptions{
-		WorkflowID:            resolved.ActivationID,
-		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		WaitForCancellation:   true,
-	}
+	opts := workItemChildOptions(resolved)
 	childCtx := workflow.WithChildOptions(ctx, opts)
 	future := workflow.ExecuteChildWorkflow(childCtx, SoftwareChangeWorkflow, resolved.Request)
 

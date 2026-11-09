@@ -18,6 +18,9 @@ import (
 	"github.com/mitkox/esf/internal/sandbox"
 	"github.com/mitkox/esf/internal/tomlx"
 	"github.com/mitkox/esf/internal/verification"
+	enumspb "go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 
@@ -338,6 +341,95 @@ func TestWorkItemWorkflowStartsOneChildWithMappedRepository(t *testing.T) {
 	}
 	if live := harness.fake.Live(); len(live) != 0 {
 		t.Fatalf("sandbox leaked: %v", live)
+	}
+}
+
+// TestWorkItemChildOptionsUseRunWorkflowIdentity proves the pipeline child is
+// started under the identity every run control addresses, with the same
+// filterable memo a directly started run carries. An accepted resolution always
+// has a run ID; a resolution without one keeps the activation identity rather
+// than starting a child no control can address.
+func TestWorkItemChildOptionsUseRunWorkflowIdentity(t *testing.T) {
+	runID := WorkItemRunID("azdo", workItemTestRepository, "42", "1")
+	activationID := ChangeActivationWorkflowID("azdo", workItemTestRepository, "42", "1")
+	resolved := WorkItemResolution{
+		RunID:        runID,
+		ActivationID: activationID,
+		Request: RunRequest{
+			RunID:        runID,
+			Repository:   workItemTestRepository,
+			AgentHarness: "test-agent",
+			Scope:        "payments",
+		},
+	}
+
+	options := workItemChildOptions(resolved)
+	if want := WorkflowIDForRun(runID); options.WorkflowID != want {
+		t.Fatalf("child workflow ID = %q, want the run identity %q", options.WorkflowID, want)
+	}
+	if options.WorkflowID == activationID {
+		t.Fatalf("child kept the activation identity %q", activationID)
+	}
+	if options.WorkflowIDReusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE {
+		t.Fatalf("reuse policy = %v, want REJECT_DUPLICATE", options.WorkflowIDReusePolicy)
+	}
+	memo, ok := options.Memo[RunMemoKey].(RunMemo)
+	if !ok {
+		t.Fatalf("child memo = %#v, want the run memo under %q", options.Memo, RunMemoKey)
+	}
+	wantMemo := RunMemo{Harness: "test-agent", Scope: "payments", Repository: workItemTestRepository}
+	if memo != wantMemo {
+		t.Fatalf("child memo = %+v, want %+v", memo, wantMemo)
+	}
+
+	withoutRun := resolved
+	withoutRun.RunID = ""
+	withoutRun.Request.RunID = ""
+	if options := workItemChildOptions(withoutRun); options.WorkflowID != activationID {
+		t.Fatalf("child without a run ID = %q, want the activation identity %q", options.WorkflowID, activationID)
+	}
+}
+
+// TestWorkItemWorkflowChildIsDiscoverableAsRun proves a pipeline activation's
+// child is started under the standard run workflow identity, so ListOpenRuns
+// and the halt/cancel controls see it instead of discarding it as an unknown
+// workflow.
+func TestWorkItemWorkflowChildIsDiscoverableAsRun(t *testing.T) {
+	harness := newWorkItemTestEnvironment(t, "")
+	var childWorkflowID string
+	harness.env.SetOnChildWorkflowStartedListener(func(info *workflow.Info, _ workflow.Context, _ converter.EncodedValues) {
+		childWorkflowID = info.WorkflowExecution.ID
+	})
+
+	outcome, err := runWorkItemWorkflow(t, harness.env, WorkItemWorkflowInput{
+		Proposal: workItemProposal("1", "Payment retry loop spins forever", "Reproduction"),
+	})
+	if err != nil {
+		t.Fatalf("work item workflow: %v", err)
+	}
+	if len(outcome.Runs) != 1 {
+		t.Fatalf("runs = %#v, want one child", outcome.Runs)
+	}
+	runID := outcome.Runs[0].RunID
+	wantWorkflowID := WorkflowIDForRun(runID)
+	if childWorkflowID != wantWorkflowID {
+		t.Fatalf("child workflow ID = %q, want the run identity %q", childWorkflowID, wantWorkflowID)
+	}
+
+	// The console and halt path list executions by the standard identity and
+	// filter on the run memo, so the started child must appear through the same
+	// code path.
+	execution := openRunInfo(t, runID, RunMemo{
+		Harness: "test-agent", Scope: "payments", Repository: workItemTestRepository,
+	})
+	execution.Execution.WorkflowId = childWorkflowID
+	c := &listClient{pages: [][]*workflowpb.WorkflowExecutionInfo{{execution}}}
+	runs, err := ListOpenRuns(context.Background(), c, HaltFilter{Harness: "test-agent", Scope: "payments"})
+	if err != nil {
+		t.Fatalf("ListOpenRuns: %v", err)
+	}
+	if len(runs) != 1 || runs[0].RunID != runID || runs[0].WorkflowID != wantWorkflowID {
+		t.Fatalf("open runs = %+v, want the pipeline child as run %q", runs, runID)
 	}
 }
 
