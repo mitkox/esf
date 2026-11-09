@@ -17,7 +17,7 @@ import (
 	"github.com/mitkox/esf/internal/factory"
 )
 
-const testToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+const testToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" //gitleaks:allow
 
 // writeTokenFile writes a bearer token with the requested permissions.
 func writeTokenFile(t *testing.T, mode os.FileMode) string {

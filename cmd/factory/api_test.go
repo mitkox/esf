@@ -210,7 +210,7 @@ func TestAPISubmitMapsSharedRequestFields(t *testing.T) {
 	}
 }
 
-const apiTestToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+const apiTestToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" //gitleaks:allow
 
 // newAPITestController returns the production controller over a temporary
 // artifact store. Test seams stand in for Temporal; a manifest written to the

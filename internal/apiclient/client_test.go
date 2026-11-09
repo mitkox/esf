@@ -14,7 +14,7 @@ import (
 	"github.com/mitkox/esf/internal/apiclient"
 )
 
-const testToken = "0123456789abcdef0123456789abcdef"
+const testToken = "0123456789abcdef0123456789abcdef" //gitleaks:allow
 
 func testTime() time.Time {
 	return time.Date(2026, 11, 7, 10, 0, 0, 0, time.UTC)
