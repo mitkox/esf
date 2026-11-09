@@ -1,0 +1,9 @@
+{
+  "id": "repo-payments",
+  "name": "payments",
+  "project": {
+    "id": "project-payments",
+    "name": "Payments"
+  },
+  "url": "https://dev.azure.com/acme/Payments/_apis/git/repositories/payments"
+}

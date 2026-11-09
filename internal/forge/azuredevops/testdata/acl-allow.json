@@ -1,0 +1,20 @@
+{
+  "count": 1,
+  "value": [
+    {
+      "inheritPermissions": true,
+      "token": "repoV2/project-payments/repo-payments",
+      "acesDictionary": {
+        "aad.ada-lovelace": {
+          "descriptor": "aad.ada-lovelace",
+          "allow": 4,
+          "deny": 0,
+          "extendedInfo": {
+            "effectiveAllow": 4,
+            "effectiveDeny": 0
+          }
+        }
+      }
+    }
+  ]
+}

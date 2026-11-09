@@ -39,6 +39,32 @@ const (
 	AuditResume AuditAction = "resume"
 	// AuditReviewDecision records a human decision sent to a paused run.
 	AuditReviewDecision AuditAction = "review-decision"
+	// AuditIntake records a work-item intake decision: accepted, duplicate,
+	// stale, conflicting, or unmapped. Rejections have no run of their own, so
+	// they are appended to the intake audit trail instead of a run artifact.
+	AuditIntake AuditAction = "intake"
+	// AuditPublication records a host-side branch, pull request, and status
+	// attempt. It never carries a forge credential.
+	AuditPublication AuditAction = "publication"
+	// AuditAcceptance records an observed forge merge state.
+	AuditAcceptance AuditAction = "acceptance"
+)
+
+// Audit outcome names for decisions whose result is not SUCCESS or FAILED.
+const (
+	// AuditOutcomeRejected records an audited no-run decision.
+	AuditOutcomeRejected = "REJECTED"
+	// AuditOutcomeDuplicate records a delivery that converged on an existing
+	// intake record.
+	AuditOutcomeDuplicate = "DUPLICATE"
+)
+
+// Actor kinds distinguish the two identities the audit trail can carry.
+const (
+	// ActorKindOperator is the host user running an operator command.
+	ActorKindOperator = "operator"
+	// ActorKindForge is a forge identity resolved by the forge API.
+	ActorKindForge = "forge"
 )
 
 // AuditEntry is one privileged action.
@@ -51,10 +77,14 @@ type AuditEntry struct {
 	// RunID and SandboxID identify the target.
 	RunID     string `json:"run_id"`
 	SandboxID string `json:"sandbox_id,omitempty"`
-	// Actor is the operating-system user that invoked the action. It is a
-	// best-effort attribution, not authentication: ESF assumes the CLI runs
-	// under an operator identity.
+	// Actor is the operating-system user that invoked an operator action, or
+	// the forge-resolved identity that authorized a pipeline action.
 	Actor string `json:"actor"`
+	// ActorKind distinguishes an operator identity from a forge-resolved actor.
+	ActorKind string `json:"actor_kind,omitempty"`
+	// ActorPermission records the repository permission the forge resolved. It
+	// is evidence, never an authorization decision.
+	ActorPermission string `json:"actor_permission,omitempty"`
 	// Outcome is SUCCESS, FAILED or SKIPPED.
 	Outcome string `json:"outcome"`
 	// Detail carries action-specific, non-secret context (a port, an argv
@@ -82,6 +112,9 @@ func AppendAudit(store artifacts.Store, entry AuditEntry, redactors ...*Redactor
 	}
 	if entry.Actor == "" {
 		entry.Actor = currentActor()
+		if entry.ActorKind == "" {
+			entry.ActorKind = ActorKindOperator
+		}
 	}
 	if entry.Outcome == "" {
 		entry.Outcome = "SUCCESS"

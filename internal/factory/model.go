@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/mitkox/esf/internal/forge"
 	"github.com/mitkox/esf/internal/threatmon"
 )
 
@@ -83,6 +84,11 @@ const (
 	// StateRejected means every gate passed but a human reviewer rejected the
 	// change. A human decision is a gate, so it cannot coexist with SUCCEEDED.
 	StateRejected RunState = "REJECTED"
+	// StateEvidenceFailed means the change passed every gate but its signed
+	// evidence could not be produced. It is distinct from a build failure: the
+	// code may be good, but the claim about it is missing, so no publication
+	// may follow.
+	StateEvidenceFailed RunState = "EVIDENCE_FAILED"
 )
 
 // Valid reports whether s is a known state.
@@ -90,7 +96,8 @@ func (s RunState) Valid() bool {
 	switch s {
 	case StateRequested, StateRunning, StatePaused, StateAgentFailed, StateVerificationFailed,
 		StateSucceeded, StateCancelled, StateInfrastructureFailed, StateInvalidRequest,
-		StateBlocked, StateQuarantined, StateGateTampered, StateEgressUnverified, StateRejected:
+		StateBlocked, StateQuarantined, StateGateTampered, StateEgressUnverified, StateRejected,
+		StateEvidenceFailed:
 		return true
 	default:
 		return false
@@ -143,6 +150,71 @@ type CleanupResult struct {
 type PreviewLink struct {
 	Port int    `json:"port"`
 	URL  string `json:"url"`
+}
+
+// WorkItemEvidence is the forge origin of a pipeline-driven run.
+//
+// It is deliberately a record of facts resolved by an activity: the connector,
+// operator pipeline, mapped repository, work-item revision, and the digest of
+// the exact forge bytes the run was derived from. The work-item body itself is
+// not copied here; the task artifact carries the bytes that were hashed.
+type WorkItemEvidence struct {
+	Connector string `json:"connector"`
+	Pipeline  string `json:"pipeline,omitempty"`
+	ID        string `json:"id"`
+	Revision  string `json:"revision"`
+	// Project is the forge project that owns the work item. Status reporting
+	// needs it to address the work-item comment API; older records do not carry
+	// it and remain readable.
+	Project string `json:"project,omitempty"`
+	// State is the authoritative work-item state observed at intake. Publication
+	// re-reads the live state, and this value is the fallback for connectors
+	// that cannot re-read it.
+	State        string `json:"state,omitempty"`
+	SnapshotHash string `json:"snapshot_hash"`
+	Repository   string `json:"repository"`
+	Source       string `json:"source,omitempty"`
+	// Actor is the forge-resolved identity that authorized this work item. It
+	// is nil for runs that did not come from a forge work item.
+	Actor *ActorEvidence `json:"actor,omitempty"`
+}
+
+// PullRequestIdentity is the forge pull request a change published.
+//
+// It is added to the manifest by the publication step, outside the sandbox, so
+// the run remains the authoritative record of where its result went.
+type PullRequestIdentity struct {
+	ID         string `json:"id"`
+	URL        string `json:"url,omitempty"`
+	Repository string `json:"repository,omitempty"`
+	Branch     string `json:"branch,omitempty"`
+	Draft      bool   `json:"draft,omitempty"`
+	// Commit and Tree identify the host-built source revision. They are the
+	// tree acceptance must match before a merge can mark the change done.
+	Commit string `json:"commit,omitempty"`
+	Tree   string `json:"tree,omitempty"`
+	// BundleDigest is the signed evidence bundle carried by the pull request.
+	BundleDigest string `json:"bundle_digest,omitempty"`
+}
+
+// AcceptanceRecord is the forge-native merge state read for a pull request.
+//
+// ESF never merges or approves: the state is an observation, recorded so a
+// merged pull request is never confused with a successful run.
+type AcceptanceRecord struct {
+	State       forge.AcceptanceState `json:"state"`
+	MergeCommit string                `json:"merge_commit,omitempty"`
+	MergeTree   string                `json:"merge_tree,omitempty"`
+	// SourceCommit is the merge-source commit the forge reported, kept for
+	// audit. Acceptance does not depend on it when the record is older.
+	SourceCommit string    `json:"source_commit,omitempty"`
+	Note         string    `json:"note,omitempty"`
+	ReadAt       time.Time `json:"read_at,omitempty"`
+	// Votes and the actors below are observations, not permissions: ESF never
+	// approves or merges a pull request.
+	Votes             []forge.ApprovalVote `json:"votes,omitempty"`
+	AutoCompleteSetBy string               `json:"auto_complete_set_by,omitempty"`
+	ClosedBy          string               `json:"closed_by,omitempty"`
 }
 
 // RunManifest is the durable record of one factory run.
@@ -244,6 +316,15 @@ type RunManifest struct {
 	CleanupResult      CleanupResult `json:"cleanup_result"`
 	// Intake is operator-visible advice and never changes FactoryResult.
 	Intake *IntakeResult `json:"intake,omitempty"`
+	// WorkItem is the forge origin of a pipeline-driven run. It is absent for
+	// CLI and API runs that were not created from a work item.
+	WorkItem *WorkItemEvidence `json:"work_item,omitempty"`
+	// PullRequest is the forge pull request this change published, recorded by
+	// the host-side publication step after the run passed every gate.
+	PullRequest *PullRequestIdentity `json:"pull_request,omitempty"`
+	// Acceptance is the forge-native merge state of PullRequest. It is observed,
+	// never decided, by the factory.
+	Acceptance *AcceptanceRecord `json:"acceptance,omitempty"`
 
 	// ── Evidence pointers (store-relative) ──────────────────────────────────
 	Artifacts string `json:"artifacts"`
@@ -314,6 +395,12 @@ const (
 	// ArtifactGateIntegrity records whether the agent modified the
 	// deterministic gates it is judged by.
 	ArtifactGateIntegrity = "hardening/gate-integrity.json"
+	// ArtifactEvidenceBundle is the signed DSSE change-evidence envelope. It is
+	// written by the host after the manifest is durable, never by an agent.
+	ArtifactEvidenceBundle = "evidence/bundle.json"
+	// ArtifactEvidenceSignature is the detached copy of the bundle signature,
+	// for consumers that publish the signature separately from the envelope.
+	ArtifactEvidenceSignature = "evidence/signature.json"
 )
 
 // RunRequest is the input to a factory run.
@@ -363,6 +450,14 @@ type RunRequest struct {
 	// ParentRunID records the run this one reworks, when a review asked for
 	// changes. It is lineage evidence, never an authority.
 	ParentRunID string `json:"parent_run_id,omitempty"`
+
+	// WorkItem is the forge origin of a pipeline-driven run. It is resolved by
+	// an activity before the run starts and is never a caller-selected input.
+	WorkItem *WorkItemEvidence `json:"work_item,omitempty"`
+	// ForgeConnector names the operator-configured connector whose clone
+	// credential is injected at the Cube egress boundary. It is a name, never a
+	// credential, and it is empty for runs that do not use a forge.
+	ForgeConnector string `json:"forge_connector,omitempty"`
 
 	// Timeouts.
 	AgentTimeout        time.Duration `json:"agent_timeout"`

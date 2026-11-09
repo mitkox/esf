@@ -1,4 +1,4 @@
-{{- if and .Values.factory.enabled (not .Values.factory.storage.existingClaim) }}
+{{- if and (not .Values.factory.storage.existingClaim) (or .Values.factory.enabled .Values.api.enabled .Values.connector.enabled) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

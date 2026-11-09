@@ -9,11 +9,14 @@ the patch and evidence on the factory host.
 Task → Temporal → CubeSandbox → coding agent → verification → patch + evidence
 ```
 
-The `factory` CLI is the control plane and the security boundary. It accepts
-only an approved repository, an exact revision and task text; it never accepts
-an executable, a host path or an environment override. The factory exposes no
-general-purpose control-plane HTTP API and no web UI. One narrow surface is
-separate: the private sf turn service described below.
+The `factory` CLI is the operator control plane and the security boundary. It
+accepts only an approved repository, an exact revision and task text; it never
+accepts an executable, a host path or an environment override. The versioned
+public execution API is the external submission surface; the first-party
+work-item pipeline is the reference in-process consumer of the same submission
+contract. Both normalize and validate a run request through one shared
+constructor, and a conformance test enforces that equivalence. One narrow
+surface is separate: the private sf turn service described below.
 
 ## The factory layer
 

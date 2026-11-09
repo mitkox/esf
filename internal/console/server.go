@@ -192,6 +192,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/v1/console/reviews", s.requireAuth(http.HandlerFunc(s.handleReviews)))
 	mux.Handle("GET /api/v1/console/security", s.requireAuth(http.HandlerFunc(s.handleSecurity)))
 	mux.Handle("GET /api/v1/console/operations", s.requireAuth(http.HandlerFunc(s.handleOperations)))
+	mux.Handle("GET /api/v1/console/connectors", s.requireAuth(http.HandlerFunc(s.handleConnectors)))
 	mux.Handle("GET /api/v1/console/catalog", s.requireAuth(http.HandlerFunc(s.handleCatalog)))
 	mux.Handle("GET /api/v1/console/search", s.requireAuth(http.HandlerFunc(s.handleSearch)))
 	// Unknown API paths must be JSON 404s, not the SPA shell.

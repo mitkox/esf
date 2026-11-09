@@ -1,0 +1,697 @@
+package factory
+
+import (
+	"fmt"
+	"net"
+	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/mitkox/esf/internal/forge"
+	"github.com/mitkox/esf/internal/forge/azuredevops"
+	"github.com/mitkox/esf/internal/httpsecurity"
+	"github.com/mitkox/esf/internal/sandbox"
+	"github.com/mitkox/esf/internal/tomlx"
+)
+
+const (
+	// DefaultConnectorWebhookListen keeps the webhook receiver on loopback
+	// unless the operator explicitly binds another address.
+	DefaultConnectorWebhookListen = "127.0.0.1:8091"
+	// DefaultConnectorSweepInterval is how often reconciliation runs when the
+	// operator does not configure an interval.
+	DefaultConnectorSweepInterval = time.Minute
+)
+
+// ConnectorConfig declares one host-side forge adapter.
+//
+// The token is a reference to an operator-owned private file, never a value.
+// Configuration validation checks the reference's shape; constructing the
+// adapter reads the file through the private-file rules and fails closed when it
+// is missing, writable by another user, a symlink, or otherwise unsafe.
+type ConnectorConfig struct {
+	Kind      string `toml:"kind"`
+	BaseURL   string `toml:"base_url"`
+	TokenFile string `toml:"token_file"`
+
+	// WebhookUsername and WebhookSecretFile authenticate inbound service
+	// hooks. They are a dedicated inbound credential, separate from TokenFile,
+	// which remains the outbound credential.
+	WebhookUsername   string `toml:"webhook_username"`
+	WebhookSecretFile string `toml:"webhook_secret_file"`
+	// WebhookListen is the connector's inbound webhook address. Empty binds
+	// the loopback default; a non-loopback address requires native TLS.
+	WebhookListen string `toml:"webhook_listen"`
+	// WebhookTLSCertFile and WebhookTLSKeyFile enable native HTTPS for the
+	// webhook listener. Both are required together.
+	WebhookTLSCertFile string `toml:"webhook_tls_cert_file"`
+	WebhookTLSKeyFile  string `toml:"webhook_tls_key_file"`
+	// SweepInterval is the reconciliation cadence. Empty uses the default.
+	SweepInterval tomlx.Duration `toml:"sweep_interval"`
+}
+
+// WebhookListenAddress returns the configured address or the loopback default.
+func (c ConnectorConfig) WebhookListenAddress() string {
+	if listen := strings.TrimSpace(c.WebhookListen); listen != "" {
+		return listen
+	}
+	return DefaultConnectorWebhookListen
+}
+
+// WebhookTLSConfigured reports whether both TLS files are configured.
+func (c ConnectorConfig) WebhookTLSConfigured() bool {
+	return strings.TrimSpace(c.WebhookTLSCertFile) != "" && strings.TrimSpace(c.WebhookTLSKeyFile) != ""
+}
+
+// WebhookConfigured reports whether the connector serves a webhook receiver.
+//
+// A connector with no listener address and no inbound credential is
+// sweep-only: it reconciles work items and never binds an inbound socket.
+func (c ConnectorConfig) WebhookConfigured() bool {
+	return strings.TrimSpace(c.WebhookListen) != "" ||
+		c.WebhookTLSConfigured() ||
+		strings.TrimSpace(c.WebhookUsername) != "" ||
+		strings.TrimSpace(c.WebhookSecretFile) != ""
+}
+
+// SweepIntervalOrDefault returns the configured interval or the default.
+func (c ConnectorConfig) SweepIntervalOrDefault() time.Duration {
+	if c.SweepInterval > 0 {
+		return c.SweepInterval.Std()
+	}
+	return DefaultConnectorSweepInterval
+}
+
+// PipelineConfig is one operator-only work-item mapping.
+//
+// Rules are matched against the forge attributes in WorkItemFields. A rule
+// supplies exactly one scope, repository, base branch, and verification
+// profile; no payload field can select any of them.
+type PipelineConfig struct {
+	Connector string         `toml:"connector"`
+	Rules     []PipelineRule `toml:"rules"`
+}
+
+// PipelineRule maps matching forge attributes to one target.
+//
+// Empty match fields are wildcards. A rule with more non-empty match fields is
+// more specific. Two equally specific matching rules that resolve to different
+// targets are ambiguous and fail resolution.
+type PipelineRule struct {
+	Project string `toml:"project"`
+	Area    string `toml:"area"`
+	Label   string `toml:"label"`
+	Type    string `toml:"type"`
+	State   string `toml:"state"`
+
+	Scope               string `toml:"scope"`
+	Repository          string `toml:"repository"`
+	BaseBranch          string `toml:"base_branch"`
+	VerificationProfile string `toml:"verification_profile"`
+}
+
+// ResolvedPipeline is the operator-owned target for one work item.
+type ResolvedPipeline struct {
+	Pipeline            string `json:"pipeline"`
+	Connector           string `json:"connector"`
+	Scope               string `json:"scope"`
+	Repository          string `json:"repository"`
+	BaseBranch          string `json:"base_branch"`
+	VerificationProfile string `json:"verification_profile"`
+}
+
+// Connector resolves a connector's configuration and reads its credential.
+//
+// It is the only path that turns a token-file reference into a credential. A
+// credential that is not a private regular file fails construction rather than
+// being used.
+func (c Config) Connector(name string) (forge.ConnectorSettings, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return forge.ConnectorSettings{}, fmt.Errorf("connector name is required")
+	}
+	connector, ok := c.Connectors[name]
+	if !ok {
+		return forge.ConnectorSettings{}, fmt.Errorf("connector %q is not configured", name)
+	}
+	if problems := connector.problems(); len(problems) > 0 {
+		return forge.ConnectorSettings{}, fmt.Errorf("connector %q: %s", name, strings.Join(problems, "; "))
+	}
+	credential, err := forge.ReadCredential(strings.TrimSpace(connector.TokenFile))
+	if err != nil {
+		return forge.ConnectorSettings{}, fmt.Errorf("connector %q: token_file: %w", name, err)
+	}
+	return forge.ConnectorSettings{
+		Name:       name,
+		Kind:       connector.kind(),
+		BaseURL:    strings.TrimSpace(connector.BaseURL),
+		Credential: credential,
+	}, nil
+}
+
+// ConnectorWebhook is the resolved inbound credential for one connector's
+// webhook receiver.
+type ConnectorWebhook struct {
+	Username   string
+	Credential forge.Credential
+}
+
+// ConnectorWebhook resolves a connector's dedicated webhook credential.
+//
+// It reads webhook_secret_file through the same private-file rules as the
+// outbound token, and it never falls back to token_file: inbound
+// authentication must not be able to authorize a forge write.
+func (c Config) ConnectorWebhook(name string) (ConnectorWebhook, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ConnectorWebhook{}, fmt.Errorf("connector name is required")
+	}
+	connector, ok := c.Connectors[name]
+	if !ok {
+		return ConnectorWebhook{}, fmt.Errorf("connector %q is not configured", name)
+	}
+	if problems := connector.problems(); len(problems) > 0 {
+		return ConnectorWebhook{}, fmt.Errorf("connector %q: %s", name, strings.Join(problems, "; "))
+	}
+	username := strings.TrimSpace(connector.WebhookUsername)
+	secretFile := strings.TrimSpace(connector.WebhookSecretFile)
+	if username == "" || secretFile == "" {
+		return ConnectorWebhook{}, fmt.Errorf("connector %q: webhook_username and webhook_secret_file are required", name)
+	}
+	credential, err := forge.ReadCredential(secretFile)
+	if err != nil {
+		return ConnectorWebhook{}, fmt.Errorf("connector %q: webhook_secret_file: %w", name, err)
+	}
+	return ConnectorWebhook{Username: username, Credential: credential}, nil
+}
+
+// NewForgeConnector constructs the host-side adapter for one operator
+// connector. The credential is read here and never enters workflow history or
+// a sandbox environment.
+func (c Config) NewForgeConnector(name string) (forge.Connector, error) {
+	settings, err := c.Connector(name)
+	if err != nil {
+		return nil, err
+	}
+	switch settings.Kind {
+	case forge.KindAzureDevOps:
+		return azuredevops.NewClient(azuredevops.Config{
+			Name:       settings.Name,
+			BaseURL:    settings.BaseURL,
+			Credential: settings.Credential,
+		})
+	default:
+		return nil, fmt.Errorf("connector %q: kind %q has no host-side adapter", name, settings.Kind)
+	}
+}
+
+// ResolvePipeline maps one work item through an operator-configured pipeline.
+//
+// The mapping input is WorkItemFields, which contains only the forge attributes
+// a rule may match. A payload cannot add a repository, revision, executable,
+// credential, or host path to the resolution.
+func (c Config) ResolvePipeline(name string, fields forge.WorkItemFields) (ResolvedPipeline, error) {
+	pipeline, ok := c.Pipelines[name]
+	if !ok {
+		return ResolvedPipeline{}, fmt.Errorf("pipeline %q is not configured", name)
+	}
+	if problems := c.pipelineProblems(pipeline); len(problems) > 0 {
+		return ResolvedPipeline{}, fmt.Errorf("pipeline %q: %s", name, strings.Join(problems, "; "))
+	}
+	return pipeline.resolve(name, fields)
+}
+
+// ResolvePipelineForConnector maps a work item through the unique pipeline
+// declared for a connector.
+//
+// An intake event names its connector but not an operator pipeline, so the
+// operator configuration is the only source of that mapping. Exactly one
+// pipeline may match; zero or several is a configuration error rather than a
+// guess.
+func (c Config) ResolvePipelineForConnector(connector string, fields forge.WorkItemFields) (ResolvedPipeline, error) {
+	connector = strings.TrimSpace(connector)
+	if connector == "" {
+		return ResolvedPipeline{}, fmt.Errorf("connector name is required")
+	}
+	var matches []ResolvedPipeline
+	var failures []string
+	for _, name := range sortedForgeNames(c.Pipelines) {
+		pipeline := c.Pipelines[name]
+		if strings.TrimSpace(pipeline.Connector) != connector {
+			continue
+		}
+		resolved, err := c.ResolvePipeline(name, fields)
+		if err != nil {
+			failures = append(failures, err.Error())
+			continue
+		}
+		matches = append(matches, resolved)
+	}
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		if len(failures) > 0 {
+			return ResolvedPipeline{}, fmt.Errorf("no operator pipeline maps connector %q: %s", connector, strings.Join(failures, "; "))
+		}
+		return ResolvedPipeline{}, fmt.Errorf("no operator pipeline is configured for connector %q", connector)
+	default:
+		names := make([]string, 0, len(matches))
+		for _, match := range matches {
+			names = append(names, match.Pipeline)
+		}
+		return ResolvedPipeline{}, fmt.Errorf("connector %q maps to multiple pipelines (%s); the mapping is ambiguous", connector, strings.Join(names, ", "))
+	}
+}
+
+// validateForge accumulates connector and pipeline problems for Config.Validate.
+func (c Config) validateForge() []string {
+	var problems []string
+	listeners := map[string]string{}
+	for _, name := range sortedForgeNames(c.Connectors) {
+		if strings.TrimSpace(name) == "" {
+			problems = append(problems, "connector names must not be empty")
+			continue
+		}
+		connector := c.Connectors[name]
+		if connectorProblems := connector.problems(); len(connectorProblems) > 0 {
+			problems = append(problems, fmt.Sprintf("connector %q: %s", name, strings.Join(connectorProblems, "; ")))
+		}
+		listen := connector.WebhookListenAddress()
+		if connector.WebhookConfigured() {
+			if previous, ok := listeners[listen]; ok {
+				problems = append(problems, fmt.Sprintf("connectors %q and %q both bind webhook_listen %q; assign each connector a distinct address", previous, name, listen))
+			} else {
+				listeners[listen] = name
+			}
+		}
+	}
+	for _, name := range sortedForgeNames(c.Pipelines) {
+		if strings.TrimSpace(name) == "" {
+			problems = append(problems, "pipeline names must not be empty")
+			continue
+		}
+		if pipelineProblems := c.pipelineProblems(c.Pipelines[name]); len(pipelineProblems) > 0 {
+			problems = append(problems, fmt.Sprintf("pipeline %q: %s", name, strings.Join(pipelineProblems, "; ")))
+		}
+	}
+	return problems
+}
+
+func (c ConnectorConfig) kind() forge.Kind {
+	return forge.Kind(strings.ToLower(strings.TrimSpace(c.Kind)))
+}
+
+func (c ConnectorConfig) problems() []string {
+	var problems []string
+	if !c.kind().Valid() {
+		problems = append(problems, fmt.Sprintf("kind %q is not supported", strings.TrimSpace(c.Kind)))
+	}
+	if err := validateForgeBaseURL(c.BaseURL); err != nil {
+		problems = append(problems, err.Error())
+	}
+	tokenFile := strings.TrimSpace(c.TokenFile)
+	if tokenFile == "" {
+		problems = append(problems, "token_file is required")
+	} else if !filepath.IsAbs(tokenFile) {
+		problems = append(problems, "token_file must be an absolute path")
+	}
+	problems = append(problems, c.webhookAuthProblems()...)
+	if tlsConfigured := c.WebhookTLSConfigured(); (strings.TrimSpace(c.WebhookTLSCertFile) == "") != (strings.TrimSpace(c.WebhookTLSKeyFile) == "") {
+		problems = append(problems, "webhook_tls_cert_file and webhook_tls_key_file must be set together")
+	} else if err := httpsecurity.ValidateListen(c.WebhookListenAddress(), tlsConfigured); err != nil {
+		problems = append(problems, "webhook_listen: "+err.Error())
+	}
+	if c.SweepInterval < 0 {
+		problems = append(problems, "sweep_interval must not be negative")
+	}
+	return problems
+}
+
+// webhookAuthProblems checks the dedicated inbound credential. A connector
+// without a listener and without an inbound credential is sweep-only and does
+// not need one. The inbound secret must not also be the outbound token file:
+// the write-capable token must never authorize an inbound delivery.
+func (c ConnectorConfig) webhookAuthProblems() []string {
+	username := strings.TrimSpace(c.WebhookUsername)
+	secretFile := strings.TrimSpace(c.WebhookSecretFile)
+	listenerConfigured := strings.TrimSpace(c.WebhookListen) != "" || c.WebhookTLSConfigured()
+	var problems []string
+	switch {
+	case username == "" && secretFile == "":
+		if listenerConfigured {
+			problems = append(problems, "webhook_username and webhook_secret_file are required when a webhook listener is configured")
+		}
+	case username == "":
+		problems = append(problems, "webhook_username is required with webhook_secret_file")
+	case secretFile == "":
+		problems = append(problems, "webhook_secret_file is required with webhook_username")
+	default:
+		if strings.ContainsAny(username, ":\x00\r\n") {
+			problems = append(problems, "webhook_username must not contain ':' or control characters")
+		}
+		if !filepath.IsAbs(secretFile) {
+			problems = append(problems, "webhook_secret_file must be an absolute path")
+		}
+		// Both references need not exist yet, so compare their cleaned absolute
+		// forms first, and compare file identity when both exist: a hard link is
+		// a regular file, so the credential reader accepts it and only this
+		// check can reject the alias. The reader rejects a symlink when it opens
+		// either file. An identical-content copy is a separate file and cannot
+		// be detected at validation time.
+		if tokenFile := strings.TrimSpace(c.TokenFile); filepath.IsAbs(secretFile) && filepath.IsAbs(tokenFile) {
+			if sameCredentialFile(tokenFile, secretFile) {
+				problems = append(problems, "webhook_secret_file must not name the same file as token_file")
+			}
+		}
+	}
+	return problems
+}
+
+// sameCredentialFile reports whether two credential references name one file.
+// References that do not exist yet can only be compared by their cleaned
+// absolute paths; existing files are also compared by identity.
+func sameCredentialFile(first, second string) bool {
+	firstPath, firstErr := filepath.Abs(first)
+	secondPath, secondErr := filepath.Abs(second)
+	if firstErr == nil && secondErr == nil && firstPath == secondPath {
+		return true
+	}
+	firstInfo, firstErr := os.Stat(first)
+	if firstErr != nil {
+		return false
+	}
+	secondInfo, secondErr := os.Stat(second)
+	if secondErr != nil {
+		return false
+	}
+	return os.SameFile(firstInfo, secondInfo)
+}
+
+// pipelineProblems checks one pipeline against the rest of the configuration.
+// It deliberately does not read the connector credential: submission must not
+// need a forge secret.
+func (c Config) pipelineProblems(p PipelineConfig) []string {
+	var problems []string
+	connectorName := strings.TrimSpace(p.Connector)
+	if connectorName == "" {
+		problems = append(problems, "connector is required")
+	} else if connector, ok := c.Connectors[connectorName]; !ok {
+		problems = append(problems, fmt.Sprintf("unknown connector %q", connectorName))
+	} else if connectorProblems := connector.problems(); len(connectorProblems) > 0 {
+		problems = append(problems, fmt.Sprintf("connector %q: %s", connectorName, strings.Join(connectorProblems, "; ")))
+	}
+	if len(p.Rules) == 0 {
+		problems = append(problems, "at least one mapping rule is required")
+		return problems
+	}
+
+	type seenRule struct {
+		index  int
+		target ResolvedPipeline
+	}
+	seen := map[string]seenRule{}
+	for i, rule := range p.Rules {
+		for _, problem := range c.ruleProblems(rule) {
+			problems = append(problems, fmt.Sprintf("rule %d: %s", i+1, problem))
+		}
+		target := rule.target("", p.Connector)
+		key := rule.selectorKey()
+		if previous, ok := seen[key]; ok {
+			if previous.target != target {
+				problems = append(problems, fmt.Sprintf("rules %d and %d are ambiguous: identical match criteria map to different targets", previous.index+1, i+1))
+			}
+			continue
+		}
+		seen[key] = seenRule{index: i, target: target}
+	}
+	return problems
+}
+
+func (c Config) ruleProblems(rule PipelineRule) []string {
+	var problems []string
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{"project", rule.Project},
+		{"area", rule.Area},
+		{"label", rule.Label},
+		{"type", rule.Type},
+		{"state", rule.State},
+	} {
+		if strings.ContainsAny(field.value, "\x00\r\n\t") {
+			problems = append(problems, field.name+" must not contain control characters")
+		}
+	}
+
+	scope := strings.TrimSpace(rule.Scope)
+	if scope == "" {
+		problems = append(problems, "scope is required")
+	} else if !c.scopeConfigured(scope) {
+		problems = append(problems, fmt.Sprintf("unknown scope %q", scope))
+	}
+	if strings.TrimSpace(rule.Repository) == "" {
+		problems = append(problems, "repository is required")
+	} else if strings.ContainsAny(rule.Repository, "\x00\r\n") {
+		problems = append(problems, "repository must not contain control characters")
+	}
+	if err := validatePipelineBaseBranch(rule.BaseBranch); err != nil {
+		problems = append(problems, err.Error())
+	}
+	profile := strings.TrimSpace(rule.VerificationProfile)
+	if profile == "" {
+		problems = append(problems, "verification_profile is required")
+	} else if _, ok := c.Verification[profile]; !ok {
+		problems = append(problems, fmt.Sprintf("unknown verification profile %q", profile))
+	} else if scopeConfig, ok := c.Scopes[scope]; ok {
+		if scopedProfile := strings.TrimSpace(scopeConfig.VerificationProfile); scopedProfile != "" && profile != scopedProfile {
+			problems = append(problems, fmt.Sprintf(
+				"verification_profile %q does not match scope %q (%q)", profile, scope, scopedProfile))
+		}
+	}
+	return problems
+}
+
+// scopeConfigured mirrors resource resolution: the default scope is always
+// available even when it has no explicit [scopes.default] table.
+func (c Config) scopeConfigured(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	if name == DefaultScope {
+		return true
+	}
+	_, ok := c.Scopes[name]
+	return ok
+}
+
+func (p PipelineConfig) resolve(pipeline string, fields forge.WorkItemFields) (ResolvedPipeline, error) {
+	// A work item must map to exactly one operator scope. This is checked over
+	// every matching rule, not only the most specific one, so a more specific
+	// rule cannot move work across a team boundary.
+	scope, err := p.resolveScope(pipeline, fields)
+	if err != nil {
+		return ResolvedPipeline{}, err
+	}
+
+	bestScore := -1
+	var matched []int
+	for i, rule := range p.Rules {
+		score, ok := rule.match(fields)
+		if !ok {
+			continue
+		}
+		switch {
+		case score > bestScore:
+			bestScore = score
+			matched = []int{i}
+		case score == bestScore:
+			matched = append(matched, i)
+		}
+	}
+	if len(matched) == 0 {
+		return ResolvedPipeline{}, fmt.Errorf("pipeline %q: no mapping rule matches the work item", pipeline)
+	}
+	target := p.Rules[matched[0]].target(pipeline, p.Connector)
+	if target.Scope != scope {
+		return ResolvedPipeline{}, fmt.Errorf(
+			"pipeline %q: the most specific rule resolves to scope %q but the work item matches scope %q",
+			pipeline, target.Scope, scope,
+		)
+	}
+	for _, index := range matched[1:] {
+		if p.Rules[index].target(pipeline, p.Connector) != target {
+			return ResolvedPipeline{}, fmt.Errorf(
+				"pipeline %q: rules %s are equally specific and map to different targets",
+				pipeline, ruleNumbers(matched),
+			)
+		}
+	}
+	return target, nil
+}
+
+func (r PipelineRule) match(fields forge.WorkItemFields) (int, bool) {
+	score := 0
+	for _, pair := range []struct {
+		rule  string
+		value string
+	}{
+		{r.Project, fields.Project},
+		{r.Area, fields.Area},
+		{r.Type, fields.Type},
+		{r.State, fields.State},
+	} {
+		expected := strings.TrimSpace(pair.rule)
+		if expected == "" {
+			continue
+		}
+		if expected != strings.TrimSpace(pair.value) {
+			return 0, false
+		}
+		score++
+	}
+	if label := strings.TrimSpace(r.Label); label != "" {
+		found := false
+		for _, value := range fields.Labels {
+			if strings.TrimSpace(value) == label {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return 0, false
+		}
+		score++
+	}
+	return score, true
+}
+
+func (r PipelineRule) target(pipeline, connector string) ResolvedPipeline {
+	return ResolvedPipeline{
+		Pipeline:            strings.TrimSpace(pipeline),
+		Connector:           strings.TrimSpace(connector),
+		Scope:               strings.TrimSpace(r.Scope),
+		Repository:          strings.TrimSpace(r.Repository),
+		BaseBranch:          strings.TrimSpace(r.BaseBranch),
+		VerificationProfile: strings.TrimSpace(r.VerificationProfile),
+	}
+}
+
+func (r PipelineRule) selectorKey() string {
+	return strings.Join([]string{
+		strings.TrimSpace(r.Project),
+		strings.TrimSpace(r.Area),
+		strings.TrimSpace(r.Label),
+		strings.TrimSpace(r.Type),
+		strings.TrimSpace(r.State),
+	}, "\x00")
+}
+
+func ruleNumbers(indexes []int) string {
+	parts := make([]string, len(indexes))
+	for i, index := range indexes {
+		parts[i] = fmt.Sprintf("%d", index+1)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func validateForgeBaseURL(raw string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fmt.Errorf("base_url is required")
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return fmt.Errorf("base_url must be an absolute URL without userinfo, query, or fragment")
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "https":
+		return nil
+	case "http":
+		host := parsed.Hostname()
+		if strings.EqualFold(host, "localhost") {
+			return nil
+		}
+		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			return nil
+		}
+		return fmt.Errorf("base_url must use HTTPS or HTTP on a loopback host")
+	default:
+		return fmt.Errorf("base_url must use HTTPS")
+	}
+}
+
+func validatePipelineBaseBranch(branch string) error {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return fmt.Errorf("base_branch is required")
+	}
+	if strings.HasPrefix(branch, "-") {
+		return fmt.Errorf("base_branch must not begin with '-'")
+	}
+	if strings.ContainsAny(branch, " \t\r\n\x00") {
+		return fmt.Errorf("base_branch must not contain whitespace or control characters")
+	}
+	if strings.Contains(branch, "..") {
+		return fmt.Errorf("base_branch must not contain '..'")
+	}
+	if len(branch) > 255 {
+		return fmt.Errorf("base_branch is unreasonably long")
+	}
+	return nil
+}
+
+func sortedForgeNames[V any](m map[string]V) []string {
+	names := make([]string, 0, len(m))
+	for name := range m {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// connectorCloneEgressRules builds the sandbox egress rules that let a private
+// forge repository clone at the Cube boundary without a credential in the
+// sandbox.
+//
+// The rules are constructed in an activity at sandbox-creation time, never in
+// workflow code and never from a payload. The returned rules carry the injected
+// Authorization value and must not be persisted into evidence or workflow
+// history.
+func (c Config) connectorCloneEgressRules(connectorName, repositoryURL string) ([]sandbox.NetworkRule, error) {
+	connectorName = strings.TrimSpace(connectorName)
+	repositoryURL = strings.TrimSpace(repositoryURL)
+	if connectorName == "" {
+		return nil, fmt.Errorf("forge connector name is required for clone egress")
+	}
+	if repositoryURL == "" {
+		return nil, fmt.Errorf("repository is required for forge clone egress")
+	}
+	settings, err := c.Connector(connectorName)
+	if err != nil {
+		return nil, err
+	}
+	switch settings.Kind {
+	case forge.KindAzureDevOps:
+		connectorConfig := c.Connectors[connectorName]
+		client, err := azuredevops.NewClient(azuredevops.Config{
+			Name:       settings.Name,
+			BaseURL:    settings.BaseURL,
+			Credential: settings.Credential,
+			Clone: azuredevops.CloneCredential{
+				SecretFile: strings.TrimSpace(connectorConfig.TokenFile),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return client.CloneEgressRulesForRepository(repositoryURL)
+	default:
+		return nil, fmt.Errorf("connector %q does not declare clone egress", connectorName)
+	}
+}

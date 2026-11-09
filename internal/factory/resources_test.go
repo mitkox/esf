@@ -43,12 +43,14 @@ func resourceConfig() Config {
 	cfg.Scopes = map[string]ScopeConfig{
 		DefaultScope: {},
 		"payments": {
-			Repositories: []string{"https://github.com/acme/payments"},
-			Harnesses:    []string{"opencode2"},
-			Egress:       "locked",
-			Model:        "fast",
-			Workspace:    "python",
-			Budget:       "cheap",
+			Repositories:        []string{"https://github.com/acme/payments"},
+			Harnesses:           []string{"opencode2"},
+			Egress:              "locked",
+			Model:               "fast",
+			Workspace:           "python",
+			Budget:              "cheap",
+			VerificationProfile: "default",
+			MaxConcurrentRuns:   2,
 		},
 	}
 	cfg.Harnesses = map[string]HarnessConfig{
@@ -88,6 +90,12 @@ func TestResolveResourcesAppliesScopeDefaults(t *testing.T) {
 	}
 	if resolved.Budget != "cheap" {
 		t.Fatalf("budget = %q, want cheap", resolved.Budget)
+	}
+	if resolved.VerificationProfile != "default" {
+		t.Fatalf("verification profile = %q, want the scope's profile", resolved.VerificationProfile)
+	}
+	if resolved.MaxConcurrentRuns != 2 {
+		t.Fatalf("max concurrent runs = %d, want the scope's cap", resolved.MaxConcurrentRuns)
 	}
 	if resolved.Egress.AllowInternet == nil || *resolved.Egress.AllowInternet {
 		t.Fatal("egress allow_internet = nil or true, want an explicit false")

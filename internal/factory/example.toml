@@ -95,6 +95,11 @@ trip_severity = "HIGH"
 # Set true only when the repository legitimately owns gate changes.
 allow_gate_self_modification = false
 
+# Publication rejects a .gitmodules URL change unless both the old and the new
+# URL match an entry here. A trailing "*" matches a URL prefix. Empty permits no
+# submodule URL change, which is the hardened default.
+# submodule_url_allowlist = ["https://dev.azure.com/acme/shared/_git/*"]
+
 # Security alerts. Empty disables delivery; every alert is still recorded in the
 # run's evidence. The token is a path, never a value.
 # alert_webhook_url = "https://hooks.example.org/esf"
@@ -128,6 +133,48 @@ allowed = []
 # operator control. Register the fixture path before running factory-run-demo.sh.
 local_paths = []
 # local_paths = ["/srv/esf/fixtures/factory-e2e"]
+
+# ── Forge connectors and work-item pipelines ────────────────────────────────
+# A connector is a host-side adapter for one forge platform. It is constructed
+# by the worker, never inside a Cube sandbox, so a forge credential never
+# reaches agent code. The token is a private-file reference, not a value.
+#
+# [connectors.azuredevops]
+# kind       = "azuredevops"
+# base_url   = "https://dev.azure.com/acme"
+# token_file = "/run/credentials/factory-worker.service/azuredevops-token"
+# # The webhook receiver authenticates forge service hooks with its own
+# # credential, never the outbound token, which can write to the repository.
+# webhook_username = "factory"
+# webhook_secret_file = "/run/credentials/factory-connector.service/webhook-secret"
+# # The connector workload binds each webhook receiver on loopback by default.
+# # A non-loopback address requires native TLS. Give every connector its own
+# # address when more than one is configured.
+# webhook_listen = "127.0.0.1:8091"
+# webhook_tls_cert_file = "/run/credentials/factory-connector.service/tls.crt"
+# webhook_tls_key_file = "/run/credentials/factory-connector.service/tls.key"
+# # Reconciliation cadence; the default is 1m.
+# sweep_interval = "1m"
+#
+# A pipeline is the ONLY place a work item learns its repository, scope, base
+# branch, and verification profile. Work-item payloads can match rules but can
+# never supply those targets. A rule with more non-empty match fields wins; two
+# equally specific rules with different targets are rejected as ambiguous, and a
+# work item that matches no rule is rejected.
+#
+# [pipelines.bugfix]
+# connector = "azuredevops"
+#
+# [[pipelines.bugfix.rules]]
+# project              = "Payments"
+# area                 = "Payments\\Bugs"
+# label                = "esf"
+# type                 = "Bug"
+# state                = "Active"
+# scope                = "payments"
+# repository           = "https://dev.azure.com/acme/payments/_git/payments"
+# base_branch          = "main"
+# verification_profile = "default"
 
 # ── Agent harnesses ──────────────────────────────────────────────────────────
 # The harness name is what a request may select. The executable and arguments
@@ -290,6 +337,8 @@ description = "repository test script"
 # model        = "default"
 # workspace    = "python"
 # budget       = "cheap"
+# verification_profile = "default"  # when set, the scope pins this gate profile
+# max_concurrent_runs  = 2          # 0 or absent means no scope-specific cap
 # review       = false        # overrides the global review gate
 
 # [review] — the human review gate. When enabled, a run pauses after the

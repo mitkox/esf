@@ -1,17 +1,22 @@
 // Command factory is the software factory's command-line entry point.
 //
-// The MVP deliberately has no web UI. Operators drive the factory with:
+// The CLI is the operator's control plane. The versioned execution API accepts
+// the same three caller inputs, but the CLI is where operators submit, inspect,
+// review, cancel and verify work.
 //
 //	factory run      submit a task and optionally wait for the verified patch
 //	factory status   inspect a run
 //	factory logs     show a run's evidence
 //	factory worker   run the Temporal worker
+//	factory connector run forge connector intake
+//	factory api      serve the public execution API
+//	factory verify   verify a signed evidence bundle offline
 //	factory doctor   verify Cube, Temporal and configuration before running
 //	factory sandboxes list Cube sandboxes to find leaks
 //
-// The CLI is also the control plane's security boundary: it accepts only an
-// approved repository, an exact revision and task text. It never accepts an
-// executable, a host path or an environment override.
+// The CLI and the API are the control plane's security boundary: they accept
+// only an approved repository, an exact revision and task text. They never
+// accept an executable, a host path or an environment override.
 package main
 
 import (
@@ -33,6 +38,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
+	"github.com/mitkox/esf/internal/console"
 	"github.com/mitkox/esf/internal/factory"
 	"github.com/mitkox/esf/internal/factoryartifacts"
 )
@@ -63,9 +69,12 @@ verification, one verified patch out.`,
 	root.AddCommand(
 		newVersionCommand(),
 		newConfigCommand(&configPath),
+		newVerifyCommand(),
 		newCredentialsCommand(),
 		newAgentsCommand(&configPath),
 		newConsoleCommand(&configPath),
+		newAPICommand(&configPath),
+		newConnectorCommand(&configPath),
 		newStorageCommand(&configPath),
 		newRetentionCommand(&configPath),
 		newRunCommand(&configPath),
@@ -540,7 +549,7 @@ func watchRunStatus(ctx context.Context, c client.Client, workflowID, runID stri
 			fmt.Printf("%s %-22s %-7s %s\n", time.Now().Format("15:04:05"), cond.Type, cond.Status, cond.Reason)
 		}
 		if status.State == factory.StatePaused {
-			fmt.Printf("%s %-22s %-7s %s\n", time.Now().Format("15:04:05"), "PAUSED", "", "awaiting `factory review "+runID+" --approve|--reject`")
+			fmt.Printf("%s %-22s %-7s %s\n", time.Now().Format("15:04:05"), "PAUSED", "", "awaiting `factory review "+console.ShellArg(runID)+" --approve|--reject`")
 		}
 		if isTerminalRunState(status.State) {
 			fmt.Printf("%s final state: %s\n", time.Now().Format("15:04:05"), status.State)
@@ -558,7 +567,8 @@ func watchRunStatus(ctx context.Context, c client.Client, workflowID, runID stri
 func isTerminalRunState(state factory.RunState) bool {
 	switch state {
 	case factory.StateAgentFailed, factory.StateVerificationFailed, factory.StateSucceeded,
-		factory.StateCancelled, factory.StateInfrastructureFailed, factory.StateInvalidRequest:
+		factory.StateCancelled, factory.StateInfrastructureFailed, factory.StateInvalidRequest,
+		factory.StateEvidenceFailed:
 		return true
 	default:
 		return false
@@ -767,6 +777,7 @@ func newDoctorCommand(configPath *string) *cobra.Command {
 	command.Flags().BoolVar(&offline, "offline", false, "validate configuration and harnesses without contacting CubeSandbox or Temporal")
 	command.Flags().StringVar(&profile, "profile", "", "diagnostic profile (production)")
 	command.Flags().StringVar(&output, "output", "", "output format (json)")
+	command.Flags().BoolVar(&doctorSkipConnectorHealth, "skip-connector-health", false, "skip the durable connector-health check in the production profile")
 	return command
 }
 

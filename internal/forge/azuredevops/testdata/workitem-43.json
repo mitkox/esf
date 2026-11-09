@@ -1,0 +1,27 @@
+{
+  "id": 43,
+  "rev": 2,
+  "fields": {
+    "System.Id": 43,
+    "System.TeamProject": "Payments",
+    "System.AreaPath": "Payments\\Bugs",
+    "System.WorkItemType": "Bug",
+    "System.State": "Active",
+    "System.Title": "Duplicate charge after timeout",
+    "System.Description": "<div>The retry path charges twice when the first response is lost.</div>",
+    "System.Tags": "repro",
+    "System.CreatedBy": {
+      "displayName": "Bob Kahn",
+      "id": "actor-bob",
+      "uniqueName": "bob@example.com",
+      "descriptor": "aad.bob-kahn"
+    },
+    "System.ChangedBy": {
+      "displayName": "Bob Kahn",
+      "id": "actor-bob",
+      "uniqueName": "bob@example.com",
+      "descriptor": "aad.bob-kahn"
+    }
+  },
+  "url": "https://dev.azure.com/acme/_apis/wit/workItems/43"
+}

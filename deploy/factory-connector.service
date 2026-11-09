@@ -1,0 +1,45 @@
+[Unit]
+Description=Factory connector intake (forge reconciliation and webhooks)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=factory
+Group=factory
+WorkingDirectory=/var/lib/factory
+StateDirectory=factory
+StateDirectoryMode=0750
+# Connector token files named by [connectors.<name>].token_file are owned by
+# this user with mode 0600. The private-file reader refuses group- or
+# other-readable files. The runtime also writes durable reconciliation
+# watermarks under the data directory.
+EnvironmentFile=/etc/factory/worker.env
+ExecStart=/usr/local/bin/factory connector --config /etc/factory/factory.toml
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+KillSignal=SIGTERM
+UMask=0027
+MemoryMax=2G
+TasksMax=512
+LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/factory
+
+[Install]
+WantedBy=multi-user.target

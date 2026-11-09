@@ -1,0 +1,17 @@
+{{- if .Values.api.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "esf.name" . }}-api
+  labels: {app.kubernetes.io/name: {{ include "esf.name" . }}, app.kubernetes.io/component: api}
+spec:
+  type: {{ default "ClusterIP" .Values.api.serviceType }}
+  selector:
+    app.kubernetes.io/name: {{ include "esf.name" . }}
+    app.kubernetes.io/component: api
+  ports:
+    - name: http
+      port: {{ .Values.api.port }}
+      targetPort: {{ .Values.api.port }}
+      protocol: TCP
+{{- end }}

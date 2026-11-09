@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/mitkox/esf/internal/agentharness"
 	"github.com/mitkox/esf/internal/factoryartifacts"
+	"github.com/mitkox/esf/internal/forge"
 	"github.com/mitkox/esf/internal/notify"
 	"github.com/mitkox/esf/internal/repository"
 	"github.com/mitkox/esf/internal/sandbox"
@@ -144,6 +146,8 @@ type Activities struct {
 	redactor        *Redactor
 	telemetry       *Telemetry
 	cfg             Config
+	connectors      map[string]forge.Connector
+	connectorsMu    sync.Mutex
 	log             *slog.Logger
 }
 
@@ -157,7 +161,11 @@ type ActivitiesOptions struct {
 	Redactor        *Redactor
 	Telemetry       *Telemetry
 	Config          Config
-	Logger          *slog.Logger
+	// Connectors replaces operator-built adapters for tests and for an
+	// embedding process that already owns them. A connector here still holds a
+	// host-side credential and never enters a sandbox.
+	Connectors map[string]forge.Connector
+	Logger     *slog.Logger
 }
 
 // NewActivities builds the activity set.
@@ -186,6 +194,12 @@ func NewActivities(opts ActivitiesOptions) (*Activities, error) {
 			return nil, err
 		}
 	}
+	connectors := make(map[string]forge.Connector, len(opts.Connectors))
+	for name, connector := range opts.Connectors {
+		if connector != nil {
+			connectors[name] = connector
+		}
+	}
 	return &Activities{
 		provider:        opts.Provider,
 		repos:           opts.Repositories,
@@ -195,8 +209,26 @@ func NewActivities(opts ActivitiesOptions) (*Activities, error) {
 		redactor:        opts.Redactor,
 		telemetry:       telemetry,
 		cfg:             opts.Config,
+		connectors:      connectors,
 		log:             log,
 	}, nil
+}
+
+// forgeConnector returns the host-side adapter for a connector. Injected
+// adapters win so tests and embedders can supply a fake without a credential.
+func (a *Activities) forgeConnector(name string) (forge.Connector, error) {
+	name = strings.TrimSpace(name)
+	a.connectorsMu.Lock()
+	defer a.connectorsMu.Unlock()
+	if connector, ok := a.connectors[name]; ok {
+		return connector, nil
+	}
+	connector, err := a.cfg.NewForgeConnector(name)
+	if err != nil {
+		return nil, err
+	}
+	a.connectors[name] = connector
+	return connector, nil
 }
 
 // ── Activity input/output types ──────────────────────────────────────────────
@@ -224,6 +256,12 @@ type ValidateOutput struct {
 	// code must never resolve a name, because a config change during a run
 	// would make Temporal replay non-deterministic.
 	Resources ResolvedResources `json:"resources"`
+	// Queued reports that the run passed every policy check but the scope's
+	// admission cap is full. The workflow waits and retries validation; the
+	// work is never dropped and no sandbox exists yet.
+	Queued bool `json:"queued,omitempty"`
+	// QueueReason explains why the run is waiting.
+	QueueReason string `json:"queue_reason,omitempty"`
 }
 
 // CreateSandboxInput creates the run's microVM.
@@ -237,6 +275,11 @@ type CreateSandboxInput struct {
 	// Network is the effective egress policy resolved from the run's named
 	// EgressPolicy. A zero value leaves the deployment default untouched.
 	Network sandbox.Network `json:"network,omitempty"`
+	// Repository and ForgeConnector let this activity add the connector's clone
+	// egress rule. The injected credential is created here, at the trusted
+	// boundary, and never enters workflow history, evidence, or the sandbox.
+	Repository     string `json:"repository,omitempty"`
+	ForgeConnector string `json:"forge_connector,omitempty"`
 	// Env is operator-approved environment injected at creation.
 	Env map[string]string `json:"env,omitempty"`
 }
@@ -572,9 +615,10 @@ func (a *Activities) ValidateRequest(ctx context.Context, in ValidateInput) (Val
 		"task_hash":            out.TaskHash,
 		"agent_harness":        req.AgentHarness,
 		"agent_model":          req.AgentModel,
-		"verification_profile": req.VerificationProfile,
+		"verification_profile": resolved.VerificationProfile,
 		"sandbox_template":     req.SandboxTemplate,
 		"scope":                resolved.Scope,
+		"work_item":            req.WorkItem,
 		"workspace":            resolved.Workspace,
 		"egress_policy":        resolved.EgressPolicy,
 		"model":                resolved.Model,
@@ -583,6 +627,26 @@ func (a *Activities) ValidateRequest(ctx context.Context, in ValidateInput) (Val
 	}
 	if err := a.writeJSON(store, ArtifactTask, record); err != nil {
 		return ValidateOutput{}, err
+	}
+	// Admission happens after every policy check and before any sandbox. A
+	// full scope returns a wait result instead of a rejection, so the workflow
+	// retries and the work item is never silently dropped.
+	if resolved.MaxConcurrentRuns > 0 {
+		claim, err := a.acquireScopeSlot(ctx, resolved.Scope, req.RunID, resolved.MaxConcurrentRuns)
+		if err != nil {
+			return ValidateOutput{}, fmt.Errorf("scope admission: %w", err)
+		}
+		if !claim.Granted {
+			out.Queued = true
+			out.QueueReason = fmt.Sprintf("scope %q is at its concurrency cap (%d active, limit %d)",
+				resolved.Scope, claim.Active, claim.Limit)
+			a.log.InfoContext(ctx, "run queued at scope concurrency cap",
+				slog.String("run.id", req.RunID),
+				slog.String("scope", resolved.Scope),
+				slog.Int("active", claim.Active),
+				slog.Int("limit", claim.Limit))
+			return out, nil
+		}
 	}
 	return out, nil
 }
@@ -595,6 +659,25 @@ func (a *Activities) CreateSandbox(ctx context.Context, in CreateSandboxInput) (
 	template := in.Template
 	if template == "" {
 		template = a.cfg.Cube.TemplateID
+	}
+	if err := a.cfg.AssertSandboxSecretIsolation(in.Env); err != nil {
+		return CreateSandboxOutput{}, err
+	}
+	network := in.Network
+	network.Rules = append([]sandbox.NetworkRule(nil), in.Network.Rules...)
+	if connector := strings.TrimSpace(in.ForgeConnector); connector != "" {
+		rules, err := a.cfg.connectorCloneEgressRules(connector, in.Repository)
+		if err != nil {
+			return CreateSandboxOutput{}, fmt.Errorf("resolve forge clone egress: %w", err)
+		}
+		for _, rule := range rules {
+			for _, injection := range rule.Action.Inject {
+				// A provider error may echo the submitted policy; register the
+				// injected value so tracing and persistence cannot leak it.
+				a.redactor.Add(injection.Secret)
+			}
+		}
+		network.Rules = append(network.Rules, rules...)
 	}
 	spec := sandbox.Spec{
 		Template: template,
@@ -610,7 +693,7 @@ func (a *Activities) CreateSandbox(ctx context.Context, in CreateSandboxInput) (
 		IdleTimeout: in.IdleTimeout,
 		Limits:      in.Limits,
 		Env:         in.Env,
-		Network:     in.Network,
+		Network:     network,
 	}
 
 	// Recover an acknowledged or ambiguously completed create by ownership.
@@ -644,8 +727,9 @@ func (a *Activities) CreateSandbox(ctx context.Context, in CreateSandboxInput) (
 	started := time.Now()
 	sb, err := a.provider.Create(ctx, spec)
 	if err != nil {
-		span.RecordError(err)
-		return CreateSandboxOutput{}, fmt.Errorf("create sandbox: %w", err)
+		safeErr := fmt.Errorf("create sandbox: %s", a.redactor.Redact(err.Error()))
+		span.RecordError(safeErr)
+		return CreateSandboxOutput{}, safeErr
 	}
 	out := CreateSandboxOutput{SandboxID: sb.ID(), Template: sb.Template(), Duration: time.Since(started)}
 
@@ -945,6 +1029,9 @@ func (a *Activities) RunAgent(ctx context.Context, in RunAgentInput) (RunAgentOu
 			return RunAgentOutput{}, fmt.Errorf("resolved model credential environment variable %s is empty", name)
 		}
 		env[name] = value
+	}
+	if err := a.cfg.AssertSandboxSecretIsolation(env); err != nil {
+		return RunAgentOutput{}, err
 	}
 
 	result, err := harness.Run(ctx, sb, agentharness.Task{
@@ -1275,7 +1362,7 @@ func (a *Activities) FinalizeResult(ctx context.Context, in FinalizeInput) (Fina
 		CubeVersion:             a.cfg.Cube.Version,
 		SandboxTemplate:         in.SandboxTemplate,
 		SandboxID:               in.SandboxID,
-		VerificationProfile:     in.Request.VerificationProfile,
+		VerificationProfile:     resolvedVerificationProfile(in),
 		StartedAt:               in.StartedAt,
 		CompletedAt:             in.CompletedAt,
 		Duration:                in.CompletedAt.Sub(in.StartedAt),
@@ -1308,6 +1395,7 @@ func (a *Activities) FinalizeResult(ctx context.Context, in FinalizeInput) (Fina
 		BudgetExceeded:          in.BudgetExceeded,
 		Hardening:               in.Hardening,
 		Intake:                  in.Intake,
+		WorkItem:                in.Request.WorkItem,
 		// HumanResult is the same value under its Phase-2 name: it drives the
 		// change lifecycle, where an approval closes the change and a rejection
 		// returns it to OPEN.
@@ -1349,6 +1437,15 @@ func (a *Activities) FinalizeResult(ctx context.Context, in FinalizeInput) (Fina
 		slog.String("verification.result", string(manifest.VerificationResult)),
 		slog.String("cleanup.result", string(manifest.CleanupResult.Outcome)))
 	return FinalizeOutput{Manifest: manifest}, nil
+}
+
+// resolvedVerificationProfile prefers the scope-resolved profile over the raw
+// request field, so the manifest records the profile the run actually used.
+func resolvedVerificationProfile(in FinalizeInput) string {
+	if profile := strings.TrimSpace(in.Resources.VerificationProfile); profile != "" {
+		return profile
+	}
+	return in.Request.VerificationProfile
 }
 
 // WriteEnvironment records the execution environment for reproducibility.

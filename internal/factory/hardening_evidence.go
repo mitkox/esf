@@ -59,11 +59,17 @@ type AlertRecord struct {
 
 // Alert kinds. They are stable strings so an operator can filter on them.
 const (
-	AlertQuarantine     = "run.quarantined"
-	AlertBlocked        = "run.blocked"
-	AlertGateTampered   = "run.gate_tampered"
-	AlertEgressViolated = "run.egress_violation"
-	AlertSandboxLeak    = "run.sandbox_leak"
+	AlertQuarantine           = "run.quarantined"
+	AlertBlocked              = "run.blocked"
+	AlertGateTampered         = "run.gate_tampered"
+	AlertEgressViolated       = "run.egress_violation"
+	AlertSandboxLeak          = "run.sandbox_leak"
+	AlertPublicationFailed    = "publication.failed"
+	AlertPublicationTampered  = "publication.tampered"
+	AlertAcceptanceDrift      = "acceptance.drift"
+	AlertAcceptanceUnresolved = "acceptance.unresolved"
+	AlertConnectorDegraded    = "connector.degraded"
+	AlertEvidenceFailed       = "evidence.failed"
 )
 
 // newNotifier builds the configured notifier. An empty webhook URL yields a Nop

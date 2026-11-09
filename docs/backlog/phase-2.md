@@ -163,17 +163,22 @@ the sandbox, proven by grepping the sandbox filesystem and environment.
 
 ## P2 — Platform
 
-| # | Item | Notes |
-| --- | --- | --- |
-| P2.1 | GitHub PR creation | First remote mutation. Requires a human-approval gate before creation. |
-| P2.2 | Azure DevOps support | Repository provider extension. |
-| P2.3 | GitLab support | Repository provider extension. |
-| P2.4 | OIDC / RBAC | Replaces the single-operator assumption; attaches identity to "who may request what". |
-| P2.5 | Vault integration | Short-lived, audited credentials replacing `pass_env` and `provider_files`. |
-| P2.6 | OPA policies | Expresses allowlists as reviewable policy instead of TOML. |
-| P2.7 | S3/MinIO artifact store | `ArtifactStore` is already domain-free, so this is an implementation, not a refactor. |
-| P2.8 | OpenTelemetry dashboards | Metrics and the trace shape already exist. |
-| P2.9 | Evaluation / history database | Ingests `run.json` across runs to answer the product questions. |
+| # | Item | Status | Notes |
+| --- | --- | --- | --- |
+| P2.1 | GitHub PR creation | Promoted | First remote mutation. Requires a human-approval gate before creation. |
+| P2.2 | Azure DevOps support | Promoted | Repository provider extension. |
+| P2.3 | GitLab support | Promoted | Repository provider extension. |
+| P2.4 | OIDC / RBAC | Promoted | Replaces the single-operator assumption; attaches identity to "who may request what". |
+| P2.5 | Vault integration | — | Short-lived, audited credentials replacing `pass_env` and `provider_files`. |
+| P2.6 | OPA policies | — | Expresses allowlists as reviewable policy instead of TOML. |
+| P2.7 | S3/MinIO artifact store | — | `ArtifactStore` is already domain-free, so this is an implementation, not a refactor. |
+| P2.8 | OpenTelemetry dashboards | — | Metrics and the trace shape already exist. |
+| P2.9 | Evaluation / history database | — | Ingests `run.json` across runs to answer the product questions. |
+
+P2.1-P2.4 were promoted into the 1.0 production-infrastructure contract:
+intake, publication, forge-native reviewer identity and verifiable evidence
+became part of the release scope. Promotion records that move into the product
+contract, not that every provider extension is already implemented.
 
 ---
 

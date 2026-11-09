@@ -302,6 +302,41 @@ type ChangeDetail struct {
 	Warnings    []string      `json:"warnings"`
 }
 
+// ── Connectors ──────────────────────────────────────────────────────────────
+
+// ConnectorQueueHealth is the pending work-item count for one operator scope.
+type ConnectorQueueHealth struct {
+	Scope string `json:"scope"`
+	Depth int    `json:"depth"`
+}
+
+// ConnectorHealthSummary is the read-only connector health projection.
+//
+// It is an explicit DTO: token-file paths, credential values, forge response
+// bodies, and adapter internals are deliberately absent.
+type ConnectorHealthSummary struct {
+	Name                string                 `json:"name"`
+	Kind                string                 `json:"kind,omitempty"`
+	BaseURL             string                 `json:"base_url,omitempty"`
+	Status              string                 `json:"status"`
+	Reason              string                 `json:"reason,omitempty"`
+	Detail              string                 `json:"detail,omitempty"`
+	LastSuccessfulSweep *time.Time             `json:"last_successful_sweep,omitempty"`
+	LastDelivery        *time.Time             `json:"last_delivery,omitempty"`
+	Subscription        string                 `json:"subscription"`
+	SubscriptionDetail  string                 `json:"subscription_detail,omitempty"`
+	Pipelines           []string               `json:"pipelines,omitempty"`
+	Scopes              []string               `json:"scopes,omitempty"`
+	Queues              []ConnectorQueueHealth `json:"queues,omitempty"`
+}
+
+// ConnectorsResponse is the connector health page payload.
+type ConnectorsResponse struct {
+	Connectors  []ConnectorHealthSummary `json:"connectors"`
+	GeneratedAt time.Time                `json:"generated_at"`
+	Warnings    []string                 `json:"warnings"`
+}
+
 // ── List responses ──────────────────────────────────────────────────────────
 
 // RunsResponse is the paginated run ledger.

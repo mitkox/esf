@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mitkox/esf/internal/factory"
+	"github.com/mitkox/esf/internal/forge"
 )
 
 // buildCubeInfo returns the non-secret Cube configuration. The API key is
@@ -431,4 +432,95 @@ func (s *Server) buildLiveSandboxes(runs []*runRecord, live liveSnapshot, snapsh
 		state.Sandboxes = state.Sandboxes[:100]
 	}
 	return state
+}
+
+// buildConnectors projects configured connectors and the durable liveness
+// snapshot into the read-only console view. The console never constructs a
+// connector or reads its credential, so the only connector fields it can expose
+// are the ones named in ConnectorHealthSummary.
+func (s *Server) buildConnectors() ConnectorsResponse {
+	response := ConnectorsResponse{
+		Connectors:  []ConnectorHealthSummary{},
+		GeneratedAt: s.now().UTC(),
+		Warnings:    []string{},
+	}
+	observed := map[string]forge.ConnectorHealth{}
+	snapshot, err := forge.LoadHealthSnapshot(s.root)
+	if err != nil {
+		response.Warnings = append(response.Warnings, "Connector health snapshot is unreadable: "+err.Error())
+	}
+	for _, report := range snapshot.Connectors {
+		if name := strings.TrimSpace(report.Connector); name != "" {
+			observed[name] = report
+		}
+	}
+
+	names := map[string]struct{}{}
+	for name := range s.cfg.Factory.Connectors {
+		names[name] = struct{}{}
+	}
+	for name := range observed {
+		names[name] = struct{}{}
+	}
+	ordered := make([]string, 0, len(names))
+	for name := range names {
+		ordered = append(ordered, name)
+	}
+	sort.Strings(ordered)
+
+	for _, name := range ordered {
+		summary := ConnectorHealthSummary{
+			Name:         name,
+			Status:       string(forge.HealthUnknown),
+			Reason:       "no_observations",
+			Detail:       "no connector liveness observation has been recorded",
+			Subscription: string(forge.SubscriptionUnknown),
+		}
+		if configured, ok := s.cfg.Factory.Connectors[name]; ok {
+			summary.Kind = strings.ToLower(strings.TrimSpace(configured.Kind))
+			summary.BaseURL = strings.TrimSpace(configured.BaseURL)
+		}
+		summary.Pipelines, summary.Scopes = s.connectorPipelines(name)
+		if health, ok := observed[name]; ok {
+			summary.Status = string(health.Status)
+			summary.Reason = health.Reason
+			summary.Detail = health.Detail
+			summary.LastSuccessfulSweep = health.LastSuccessfulSweep
+			summary.LastDelivery = health.LastDelivery
+			summary.Subscription = string(health.Subscription)
+			summary.SubscriptionDetail = health.SubscriptionDetail
+			for scope, depth := range health.QueueDepth {
+				summary.Queues = append(summary.Queues, ConnectorQueueHealth{Scope: scope, Depth: depth})
+			}
+			sort.Slice(summary.Queues, func(i, j int) bool { return summary.Queues[i].Scope < summary.Queues[j].Scope })
+		}
+		response.Connectors = append(response.Connectors, summary)
+	}
+	return response
+}
+
+// connectorPipelines returns the sorted pipeline names and scopes that map a
+// connector. It reads operator configuration only; no work-item payload is
+// involved.
+func (s *Server) connectorPipelines(connector string) ([]string, []string) {
+	pipelines := []string{}
+	scopes := map[string]struct{}{}
+	for name, pipeline := range s.cfg.Factory.Pipelines {
+		if strings.TrimSpace(pipeline.Connector) != connector {
+			continue
+		}
+		pipelines = append(pipelines, name)
+		for _, rule := range pipeline.Rules {
+			if scope := strings.TrimSpace(rule.Scope); scope != "" {
+				scopes[scope] = struct{}{}
+			}
+		}
+	}
+	sort.Strings(pipelines)
+	scopeNames := make([]string, 0, len(scopes))
+	for scope := range scopes {
+		scopeNames = append(scopeNames, scope)
+	}
+	sort.Strings(scopeNames)
+	return pipelines, scopeNames
 }

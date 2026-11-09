@@ -1,0 +1,107 @@
+{{- if .Values.connector.enabled }}
+{{- $name := include "esf.name" . -}}
+{{- $config := required "factory.configSecret is required" .Values.factory.configSecret -}}
+{{- if not .Values.factory.enabled }}
+{{- fail "factory.enabled must be true when the API or connector workload is enabled because all workloads share the factory ReadWriteOnce claim" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}-connector
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: connector}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: connector}
+    spec:
+      serviceAccountName: {{ $name }}-factory
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      nodeSelector:
+        {{- toYaml .Values.connector.nodeSelector | nindent 8 }}
+      # All workloads share one ReadWriteOnce claim; keep them on one node.
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: {app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/component: factory}
+              topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      {{- if .Values.factory.credentialSecret }}
+      initContainers:
+        - name: private-credentials
+          image: {{ include "esf.image" .Values.factory.image | quote }}
+          command: ["/usr/local/bin/factory"]
+          args: ["credentials", "stage", "--source", "/credential-source", "--destination", "/credential-stage/private"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: credentials-source, mountPath: /credential-source, readOnly: true}
+            - {name: credentials, mountPath: /credential-stage}
+      {{- end }}
+      containers:
+        - name: connector
+          image: {{ include "esf.image" .Values.factory.image | quote }}
+          imagePullPolicy: IfNotPresent
+          # The connector workload serves authenticated forge webhooks and runs
+          # their reconciliation sweeps. It shares configuration and the task
+          # queue with the worker, but it is not a second Temporal worker.
+          args: ["connector", "--config", "/etc/esf/factory.toml"]
+          resources:
+            {{- toYaml .Values.connector.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          startupProbe:
+            exec: {command: ["/usr/local/bin/factory", "doctor", "--config", "/etc/esf/factory.toml", "--profile", "production", "--output", "json", "--offline"]}
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            exec: {command: ["/usr/local/bin/factory", "doctor", "--config", "/etc/esf/factory.toml", "--profile", "production", "--output", "json", "--offline"]}
+            periodSeconds: 20
+          livenessProbe:
+            exec: {command: ["/usr/local/bin/factory", "version", "--json"]}
+            periodSeconds: 30
+          volumeMounts:
+            - {name: config, mountPath: /etc/esf/factory.toml, subPath: factory.toml, readOnly: true}
+            - {name: data, mountPath: /var/lib/esf/factory}
+            - {name: tmp, mountPath: /tmp}
+            {{- if .Values.factory.credentialSecret }}
+            - {name: credentials, mountPath: /etc/esf/credentials, subPath: private, readOnly: true}
+            {{- end }}
+            {{- if .Values.factory.agentClaim }}
+            - {name: agents, mountPath: /opt/esf/agents, readOnly: true}
+            {{- end }}
+      volumes:
+        - name: config
+          secret: {secretName: {{ $config | quote }}, defaultMode: 0440}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "esf.claim" . | quote }}
+        - name: tmp
+          emptyDir: {sizeLimit: 512Mi}
+        {{- if .Values.factory.credentialSecret }}
+        - name: credentials-source
+          secret: {secretName: {{ .Values.factory.credentialSecret | quote }}, defaultMode: 0440}
+        - name: credentials
+          emptyDir: {medium: Memory, sizeLimit: 2Mi}
+        {{- end }}
+        {{- if .Values.factory.agentClaim }}
+        - name: agents
+          persistentVolumeClaim: {claimName: {{ .Values.factory.agentClaim | quote }}}
+        {{- end }}
+{{- end }}

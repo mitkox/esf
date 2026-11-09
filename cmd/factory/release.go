@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,10 +17,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mitkox/esf/internal/evidence"
 	"github.com/mitkox/esf/internal/factory"
+	"github.com/mitkox/esf/internal/forge"
+	"github.com/mitkox/esf/internal/httpsecurity"
 	"github.com/mitkox/esf/internal/releaseinfo"
 	"github.com/mitkox/esf/internal/sandbox"
 	"github.com/mitkox/esf/internal/sandbox/cube"
+	"github.com/mitkox/esf/internal/secretfile"
 	"github.com/spf13/cobra"
 )
 
@@ -142,6 +147,14 @@ func newConfigCommand(configPath *string) *cobra.Command {
 			return err
 		}
 		if err := os.Rename(tmp.Name(), path); err != nil {
+			return err
+		}
+		dir, err := os.Open(filepath.Dir(path))
+		if err != nil {
+			return err
+		}
+		defer dir.Close()
+		if err := dir.Sync(); err != nil {
 			return err
 		}
 		fmt.Printf("migrated %s; backup: %s\n", path, backup)
@@ -278,6 +291,257 @@ type doctorCheck struct {
 	Detail string `json:"detail,omitempty"`
 }
 
+const (
+	doctorMaxAPITokenBytes   = 4096
+	doctorMaxSigningKeyBytes = 16 << 10
+)
+
+func passedCheck(name string) doctorCheck {
+	return doctorCheck{Name: name, Status: "ok"}
+}
+
+func failedCheck(name string, err error) doctorCheck {
+	return doctorCheck{Name: name, Status: "fail", Detail: err.Error()}
+}
+
+func skippedCheck(name, detail string) doctorCheck {
+	return doctorCheck{Name: name, Status: "skipped", Detail: detail}
+}
+
+// productionAPIListener checks the execution API posture without opening a
+// socket. It reads the bearer token through the private-file rules so a
+// group-readable or malformed token is reported before the API pod starts.
+func productionAPIListener(cfg factory.Config) doctorCheck {
+	const name = "api_listener"
+	if !cfg.API.Enabled {
+		return skippedCheck(name, "api.enabled is false")
+	}
+	tlsConfig, err := httpsecurity.LoadTLSConfig(cfg.API.TLSCertFile, cfg.API.TLSKeyFile)
+	if err != nil {
+		return failedCheck(name, fmt.Errorf("api: %w", err))
+	}
+	if err := httpsecurity.ValidateListen(cfg.API.Listen, tlsConfig != nil); err != nil {
+		return failedCheck(name, fmt.Errorf("api: %w", err))
+	}
+	body, err := secretfile.Read(cfg.API.TokenFile, doctorMaxAPITokenBytes)
+	if err != nil {
+		return failedCheck(name, fmt.Errorf("api.token_file: %w", err))
+	}
+	token := strings.TrimSpace(string(body))
+	if len(token) < 32 || !httpsecurity.ValidBearerToken(token) {
+		return failedCheck(name, fmt.Errorf("api.token_file: the bearer token must contain at least 32 characters from the ASCII bearer token alphabet"))
+	}
+	return passedCheck(name)
+}
+
+// productionConnectorConfiguration reads each connector through the same path
+// the worker uses, so an invalid kind, base URL, or private token file fails
+// the production posture check.
+func productionConnectorConfiguration(cfg factory.Config) doctorCheck {
+	const name = "connector_configuration"
+	if len(cfg.Connectors) == 0 {
+		return skippedCheck(name, "no connectors configured")
+	}
+	names := make([]string, 0, len(cfg.Connectors))
+	for connectorName := range cfg.Connectors {
+		names = append(names, connectorName)
+	}
+	sort.Strings(names)
+	var problems []string
+	for _, connectorName := range names {
+		if _, err := cfg.Connector(connectorName); err != nil {
+			problems = append(problems, err.Error())
+			continue
+		}
+		connectorConfig := cfg.Connectors[connectorName]
+		if connectorConfig.WebhookConfigured() {
+			if _, err := cfg.ConnectorWebhook(connectorName); err != nil {
+				problems = append(problems, err.Error())
+			}
+		}
+		tlsConfig, err := httpsecurity.LoadTLSConfig(connectorConfig.WebhookTLSCertFile, connectorConfig.WebhookTLSKeyFile)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("connector %q: webhook TLS: %v", connectorName, err))
+			continue
+		}
+		if err := httpsecurity.ValidateListen(connectorConfig.WebhookListenAddress(), tlsConfig != nil); err != nil {
+			problems = append(problems, fmt.Sprintf("connector %q: webhook_listen: %v", connectorName, err))
+		}
+	}
+	if len(problems) > 0 {
+		return failedCheck(name, errors.New(strings.Join(problems, "; ")))
+	}
+	return passedCheck(name)
+}
+
+// productionConnectorHealth reads the durable connector-health snapshot the
+// connector writes after every sweep and delivery. The stored status is the
+// last observation, so a connector that stopped after a healthy report would
+// otherwise keep reading as healthy: freshness is re-evaluated at read time
+// against the configured sweep interval, and a configured connector with no
+// snapshot entry fails because nothing has proven its intake path.
+func productionConnectorHealth(cfg factory.Config, now time.Time) doctorCheck {
+	const name = "connector_health"
+	if len(cfg.Connectors) == 0 {
+		return skippedCheck(name, "no connectors configured")
+	}
+	snapshot, err := forge.LoadHealthSnapshot(cfg.Storage.DataDir)
+	if err != nil {
+		return failedCheck(name, err)
+	}
+	observed := make(map[string]forge.ConnectorHealth, len(snapshot.Connectors))
+	for _, report := range snapshot.Connectors {
+		if connector := strings.TrimSpace(report.Connector); connector != "" {
+			observed[connector] = report
+		}
+	}
+	names := make([]string, 0, len(cfg.Connectors))
+	for connectorName := range cfg.Connectors {
+		names = append(names, connectorName)
+	}
+	sort.Strings(names)
+	unexpected := make([]string, 0)
+	for connectorName := range observed {
+		if _, configured := cfg.Connectors[connectorName]; !configured {
+			unexpected = append(unexpected, connectorName)
+		}
+	}
+	sort.Strings(unexpected)
+	var problems, summaries []string
+	for _, connectorName := range names {
+		report, ok := observed[connectorName]
+		if !ok {
+			problems = append(problems, fmt.Sprintf("connector %q: no durable health snapshot (the connector has not reported)", connectorName))
+			continue
+		}
+		status, reason := report.Status, report.Reason
+		if status == forge.HealthHealthy {
+			// Recompute liveness from the recorded timestamps. The snapshot's
+			// status was evaluated when it was written; a dead connector leaves
+			// it frozen at healthy.
+			fresh := forge.EvaluateHealth(now, forge.HealthObservation{
+				Connector:           connectorName,
+				SweepInterval:       cfg.Connectors[connectorName].SweepIntervalOrDefault(),
+				LastSuccessfulSweep: healthTime(report.LastSuccessfulSweep),
+				LastDelivery:        healthTime(report.LastDelivery),
+				Subscription:        report.Subscription,
+				SubscriptionDetail:  report.SubscriptionDetail,
+				QueueDepth:          report.QueueDepth,
+			})
+			if fresh.Status != forge.HealthHealthy {
+				status, reason = fresh.Status, fresh.Reason
+			} else {
+				reason = fresh.Reason
+			}
+		}
+		summary := fmt.Sprintf("connector %q: %s", connectorName, status)
+		if reason != "" {
+			summary += " (" + reason + ")"
+		}
+		if staleness := healthStaleness(now, report); staleness != "" {
+			summary += "; " + staleness
+		}
+		summaries = append(summaries, summary)
+		if status != forge.HealthHealthy {
+			problems = append(problems, summary)
+		}
+	}
+	if len(problems) > 0 {
+		return failedCheck(name, errors.New(strings.Join(problems, "; ")))
+	}
+	if len(unexpected) > 0 {
+		summaries = append(summaries, "health snapshot also contains unconfigured connectors: "+strings.Join(unexpected, ", "))
+	}
+	return doctorCheck{Name: name, Status: "ok", Detail: strings.Join(summaries, "; ")}
+}
+
+func healthTime(value *time.Time) time.Time {
+	if value == nil {
+		return time.Time{}
+	}
+	return *value
+}
+
+// healthStaleness describes how long ago a connector last proved its sweep and
+// delivery paths. A never-observed connector has no staleness to report.
+func healthStaleness(now time.Time, report forge.ConnectorHealth) string {
+	var parts []string
+	if report.LastSuccessfulSweep != nil {
+		parts = append(parts, "last successful sweep "+healthAge(now, *report.LastSuccessfulSweep))
+	}
+	if report.LastDelivery != nil {
+		parts = append(parts, "last authenticated delivery "+healthAge(now, *report.LastDelivery))
+	}
+	if len(parts) == 0 {
+		return "no successful sweep or delivery recorded"
+	}
+	return strings.Join(parts, ", ")
+}
+
+func healthAge(now, at time.Time) string {
+	age := now.Sub(at)
+	if age < 0 {
+		age = 0
+	}
+	return age.Round(time.Second).String() + " ago"
+}
+
+// productionTokenFiles checks every bearer token the appliance reads: the API
+// token and each connector token. Reading through the shared private-file
+// rules rejects symlinks, special files, and group/other access.
+func productionTokenFiles(cfg factory.Config) doctorCheck {
+	const name = "token_file_permissions"
+	var problems []string
+	checked := 0
+	if cfg.API.Enabled {
+		checked++
+		if _, err := secretfile.Read(cfg.API.TokenFile, doctorMaxAPITokenBytes); err != nil {
+			problems = append(problems, fmt.Sprintf("api.token_file: %v", err))
+		}
+	}
+	names := make([]string, 0, len(cfg.Connectors))
+	for connectorName := range cfg.Connectors {
+		names = append(names, connectorName)
+	}
+	sort.Strings(names)
+	for _, connectorName := range names {
+		checked++
+		if _, err := forge.ReadCredential(cfg.Connectors[connectorName].TokenFile); err != nil {
+			problems = append(problems, fmt.Sprintf("connector %q token_file: %v", connectorName, err))
+		}
+	}
+	if checked == 0 {
+		return skippedCheck(name, "no token files configured")
+	}
+	if len(problems) > 0 {
+		return failedCheck(name, errors.New(strings.Join(problems, "; ")))
+	}
+	return passedCheck(name)
+}
+
+// productionEvidenceSigningKey requires the host-held signing key publication
+// depends on and verifies it is a readable, private, PKCS#8 ed25519 key.
+func productionEvidenceSigningKey(cfg factory.Config) doctorCheck {
+	const name = "evidence_signing_key"
+	path := strings.TrimSpace(cfg.Evidence.SigningKeyFile)
+	if path == "" {
+		return failedCheck(name, fmt.Errorf("evidence.signing_key_file is required for production publication; mount a 0600 PKCS#8 ed25519 key outside every Cube sandbox"))
+	}
+	body, err := secretfile.Read(path, doctorMaxSigningKeyBytes)
+	if err != nil {
+		return failedCheck(name, fmt.Errorf("evidence.signing_key_file: %w", err))
+	}
+	if _, err := evidence.ParsePrivateKey(body); err != nil {
+		return failedCheck(name, fmt.Errorf("evidence.signing_key_file: %w", err))
+	}
+	return passedCheck(name)
+}
+
+// doctorSkipConnectorHealth selects the configuration-only production checks
+// the workload probes need. The --skip-connector-health flag sets it; operator
+// pre-flight keeps the durable connector-health check.
+var doctorSkipConnectorHealth bool
+
 func runStructuredDoctor(ctx context.Context, configPath, profile, output string, offline bool) error {
 	if profile != "" && profile != "production" {
 		return fmt.Errorf("unsupported doctor profile %q", profile)
@@ -300,6 +564,17 @@ func runStructuredDoctor(ctx context.Context, configPath, profile, output string
 	}
 	add("configuration", cfg.Validate())
 	if profile == "production" {
+		checks = append(checks,
+			productionAPIListener(cfg),
+			productionConnectorConfiguration(cfg),
+		)
+		if !doctorSkipConnectorHealth {
+			checks = append(checks, productionConnectorHealth(cfg, time.Now().UTC()))
+		}
+		checks = append(checks,
+			productionTokenFiles(cfg),
+			productionEvidenceSigningKey(cfg),
+		)
 		add("storage_local", checkSQLiteFilesystem(cfg.Storage.DataDir))
 		if len(cfg.Sandbox.BasePackages) != 0 {
 			add("sandbox_template_tools", fmt.Errorf("versioned Cube templates must provide prerequisites without sandbox.base_packages"))

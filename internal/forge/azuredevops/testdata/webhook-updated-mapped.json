@@ -1,0 +1,37 @@
+{
+  "id": "event-0001",
+  "notificationId": 1001,
+  "eventType": "workitem.updated",
+  "publisherId": "tfs",
+  "scope": "all",
+  "message": {
+    "text": "Bug #42 updated by Mallory",
+    "html": "Bug #42 updated by Mallory"
+  },
+  "resource": {
+    "id": 42,
+    "workItemId": 42,
+    "rev": 6,
+    "revisedBy": {
+      "id": "actor-mallory",
+      "displayName": "Mallory",
+      "uniqueName": "mallory@example.com"
+    },
+    "fields": {
+      "System.State": {
+        "oldValue": "New",
+        "newValue": "Active"
+      }
+    },
+    "revision": {
+      "id": 42,
+      "rev": 6,
+      "fields": {
+        "System.State": "Active",
+        "System.Title": "Forged title from the delivery payload"
+      }
+    }
+  },
+  "resourceVersion": "1.0",
+  "createdDate": "2026-11-07T22:00:00.000Z"
+}

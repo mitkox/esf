@@ -8,3 +8,6 @@
 {{- end -}}
 {{- printf "%s@%s" .repository $digest -}}
 {{- end -}}
+{{- define "esf.claim" -}}
+{{- default (printf "%s-factory" (include "esf.name" .)) .Values.factory.storage.existingClaim -}}
+{{- end -}}

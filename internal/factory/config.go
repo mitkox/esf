@@ -10,9 +10,12 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/mitkox/esf/internal/agentharness"
+	"github.com/mitkox/esf/internal/evidence"
 	artifacts "github.com/mitkox/esf/internal/factoryartifacts"
+	"github.com/mitkox/esf/internal/httpsecurity"
 	"github.com/mitkox/esf/internal/repository"
 	"github.com/mitkox/esf/internal/sandbox/cube"
+	"github.com/mitkox/esf/internal/secretfile"
 	"github.com/mitkox/esf/internal/tomlx"
 	"github.com/mitkox/esf/internal/verification"
 )
@@ -75,6 +78,91 @@ type Config struct {
 	Repositories RepositoriesConfig `toml:"repositories"`
 
 	Observability ObservabilityConfig `toml:"observability"`
+
+	// API is the public execution listener. It is disabled unless the operator
+	// enables it, and it never widens the caller inputs the CLI accepts.
+	API APIConfig `toml:"api"`
+
+	// Evidence configures host-side signing of the change-evidence bundle.
+	// Signing is disabled unless a key file is configured.
+	Evidence EvidenceConfig `toml:"evidence"`
+
+	// Connectors are host-side forge adapters, keyed by connector name. An
+	// empty map is valid: the execution API keeps working without a pipeline.
+	Connectors map[string]ConnectorConfig `toml:"connectors"`
+
+	// Pipelines are operator-only work-item mappings, keyed by pipeline name.
+	Pipelines map[string]PipelineConfig `toml:"pipelines"`
+}
+
+// EvidenceConfig configures host-side evidence signing.
+//
+// The signing key is operator-owned and host-local. It is read through the
+// private-file rules: a regular file, no symlink, owner-only permissions and a
+// bounded size. It never enters a sandbox or workflow history.
+type EvidenceConfig struct {
+	// SigningKeyFile is a PKCS#8 PEM ed25519 private key. Empty disables
+	// signing.
+	SigningKeyFile string `toml:"signing_key_file"`
+}
+
+// configured reports whether evidence signing is enabled.
+func (c EvidenceConfig) configured() bool {
+	return strings.TrimSpace(c.SigningKeyFile) != ""
+}
+
+func (c EvidenceConfig) validate() error {
+	if !c.configured() {
+		return nil
+	}
+	body, err := secretfile.Read(c.SigningKeyFile, maxEvidenceSigningKeyBytes)
+	if err != nil {
+		return fmt.Errorf("evidence.signing_key_file: %w", err)
+	}
+	if _, err := evidence.ParsePrivateKey(body); err != nil {
+		return fmt.Errorf("evidence.signing_key_file: %w", err)
+	}
+	return nil
+}
+
+// APIConfig configures the public execution listener.
+type APIConfig struct {
+	// Enabled serves the API. Disabled is the default: an unused network
+	// surface is not kept open by accident.
+	Enabled bool `toml:"enabled"`
+	// Listen is the bound address. A non-loopback address requires native TLS.
+	Listen string `toml:"listen"`
+	// TokenFile is the operator-owned bearer token file. Its contents are never
+	// logged and it is read through the private-file rules at startup.
+	TokenFile string `toml:"token_file"`
+	// TLSCertFile and TLSKeyFile enable native HTTPS. Both are required
+	// together; otherwise the API is loopback-only behind a TLS proxy.
+	TLSCertFile string `toml:"tls_cert_file"`
+	TLSKeyFile  string `toml:"tls_key_file"`
+}
+
+// validate accumulates every API problem so an operator fixes the section in
+// one pass instead of discovering one issue per restart.
+func (c APIConfig) validate() error {
+	if !c.Enabled {
+		return nil
+	}
+	var problems []string
+	if strings.TrimSpace(c.TokenFile) == "" {
+		problems = append(problems, "token_file is required when the API is enabled")
+	}
+	cert := strings.TrimSpace(c.TLSCertFile)
+	key := strings.TrimSpace(c.TLSKeyFile)
+	if (cert == "") != (key == "") {
+		problems = append(problems, "tls_cert_file and tls_key_file must be set together")
+	}
+	if err := httpsecurity.ValidateListen(c.Listen, cert != "" && key != ""); err != nil {
+		problems = append(problems, err.Error())
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("api: %s", strings.Join(problems, "; "))
+	}
+	return nil
 }
 
 // SandboxConfig controls factory-owned sandbox preparation.
@@ -321,6 +409,12 @@ func Default() Config {
 			OTLPEndpoint: envOr("FACTORY_OTEL_ENDPOINT", ""),
 			ServiceName:  "factory",
 		},
+		API: APIConfig{
+			Enabled: false,
+			Listen:  "127.0.0.1:8090",
+		},
+		Connectors: map[string]ConnectorConfig{},
+		Pipelines:  map[string]PipelineConfig{},
 	}
 }
 
@@ -381,6 +475,15 @@ func (c Config) Validate() error {
 	}
 	if err := c.Observability.validate(); err != nil {
 		problems = append(problems, "observability: "+err.Error())
+	}
+	if err := c.API.validate(); err != nil {
+		problems = append(problems, err.Error())
+	}
+	if err := c.Evidence.validate(); err != nil {
+		problems = append(problems, err.Error())
+	}
+	if err := c.validateSecretIsolationConfig(); err != nil {
+		problems = append(problems, err.Error())
 	}
 	if err := c.Intake.Validate(); err != nil {
 		problems = append(problems, "intake: "+err.Error())
@@ -511,7 +614,16 @@ func (c Config) Validate() error {
 				problems = append(problems, fmt.Sprintf("scope %q: unknown harness %q", name, h))
 			}
 		}
+		if profile := strings.TrimSpace(scope.VerificationProfile); profile != "" {
+			if _, ok := c.Verification[profile]; !ok {
+				problems = append(problems, fmt.Sprintf("scope %q: unknown verification profile %q", name, profile))
+			}
+		}
+		if scope.MaxConcurrentRuns < 0 || scope.MaxConcurrentRuns > maxScopeConcurrency {
+			problems = append(problems, fmt.Sprintf("scope %q: max_concurrent_runs must be between 0 and %d", name, maxScopeConcurrency))
+		}
 	}
+	problems = append(problems, c.validateForge()...)
 	if c.Review.Timeout < 0 {
 		problems = append(problems, "review.timeout must not be negative")
 	}

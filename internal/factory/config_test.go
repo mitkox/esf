@@ -437,6 +437,106 @@ func TestWorkflowIDRoundTrip(t *testing.T) {
 	}
 }
 
+func TestAPIConfigValidation(t *testing.T) {
+	t.Parallel()
+
+	base := func() Config {
+		return Config{
+			Cube:     cube.Config{APIURL: "http://127.0.0.1:4000", TemplateID: "tpl", IdleTimeout: tomlx.FromStd(time.Minute), RequestTimeout: tomlx.FromStd(time.Minute)},
+			Temporal: TemporalConfig{HostPort: "127.0.0.1:7233", TaskQueue: "factory"},
+			Storage:  StorageConfig{DataDir: ".factory"},
+			Harnesses: map[string]HarnessConfig{
+				"a": {Type: "generic", Executable: "a", Timeout: tomlx.FromStd(time.Minute)},
+			},
+			Verification: defaultVerificationProfiles(),
+			Limits:       LimitsConfig{AgentTimeout: tomlx.FromStd(time.Minute), TotalTimeout: tomlx.FromStd(time.Hour)},
+			Hardening:    HardeningConfig{AcknowledgeOpenEgress: true},
+			API:          APIConfig{Enabled: true, Listen: "127.0.0.1:8090", TokenFile: "/run/secrets/api.token"},
+		}
+	}
+
+	cases := []struct {
+		name    string
+		mutate  func(*Config)
+		wantErr string
+	}{
+		{"valid", func(*Config) {}, ""},
+		{"disabled with no values", func(c *Config) {
+			c.API = APIConfig{}
+		}, ""},
+		{"remote plaintext", func(c *Config) {
+			c.API.Listen = "0.0.0.0:8090"
+		}, "requires TLS"},
+		{"missing token file", func(c *Config) {
+			c.API.TokenFile = ""
+		}, "token_file is required"},
+		{"certificate without key", func(c *Config) {
+			c.API.TLSCertFile = "/etc/esf/api.crt"
+		}, "tls_cert_file and tls_key_file"},
+		{"accumulates problems", func(c *Config) {
+			c.API.Listen = "0.0.0.0:8090"
+			c.API.TokenFile = ""
+		}, "token_file is required"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := base()
+			tc.mutate(&cfg)
+			err := cfg.Validate()
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Validate: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("Validate = %v, want error containing %q", err, tc.wantErr)
+			}
+			if tc.name == "accumulates problems" && !strings.Contains(err.Error(), "requires TLS") {
+				t.Fatalf("Validate dropped the listener problem: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadConfigAPISection(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "factory.toml")
+	body := `
+[api]
+enabled = true
+listen = "127.0.0.1:8090"
+token_file = "/run/secrets/api.token"
+tls_cert_file = "/etc/esf/api.crt"
+tls_key_file = "/etc/esf/api.key"
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if !cfg.API.Enabled || cfg.API.Listen != "127.0.0.1:8090" || cfg.API.TokenFile != "/run/secrets/api.token" {
+		t.Fatalf("api = %#v", cfg.API)
+	}
+	if cfg.API.TLSCertFile != "/etc/esf/api.crt" || cfg.API.TLSKeyFile != "/etc/esf/api.key" {
+		t.Fatalf("api TLS = %#v", cfg.API)
+	}
+
+	unknownPath := filepath.Join(t.TempDir(), "factory.toml")
+	if err := os.WriteFile(unknownPath, []byte("[api]\nsurprise_option = true\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := LoadConfig(unknownPath); err == nil {
+		t.Fatal("an unknown [api] key must be rejected")
+	}
+}
+
 // hardenedDefaults returns the development defaults with the open-egress risk
 // acknowledged.
 //
@@ -452,4 +552,129 @@ func hardenedDefaults() Config {
 	cfg.Hardening.AcknowledgeOpenEgress = true
 	cfg.Hardening.EgressProbe = boolPtr(false)
 	return cfg
+}
+
+func TestLoadConfigEvidenceSection(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "factory.toml")
+	body := "[evidence]\nsigning_key_file = \"/run/secrets/evidence-signing-key.pem\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Evidence.SigningKeyFile != "/run/secrets/evidence-signing-key.pem" {
+		t.Fatalf("evidence = %#v", cfg.Evidence)
+	}
+
+	unknownPath := filepath.Join(t.TempDir(), "factory.toml")
+	if err := os.WriteFile(unknownPath, []byte("[evidence]\nsurprise_option = true\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := LoadConfig(unknownPath); err == nil {
+		t.Fatal("an unknown [evidence] key must be rejected")
+	}
+}
+
+// TestScopeConfigValidation pins the per-scope policy fields: an unknown
+// verification profile and an out-of-range concurrency cap fail at startup.
+func TestScopeConfigValidation(t *testing.T) {
+	t.Parallel()
+
+	base := func() Config {
+		cfg := hardenedDefaults()
+		cfg.Cube = cube.Config{
+			APIURL: "http://127.0.0.1:4000", TemplateID: "tpl",
+			IdleTimeout: tomlx.FromStd(time.Minute), RequestTimeout: tomlx.FromStd(time.Minute),
+		}
+		cfg.Scopes = map[string]ScopeConfig{"payments": {}}
+		return cfg
+	}
+	cases := []struct {
+		name    string
+		mutate  func(*Config)
+		wantErr string
+	}{
+		{
+			name: "valid cap and profile",
+			mutate: func(c *Config) {
+				c.Scopes["payments"] = ScopeConfig{VerificationProfile: "default", MaxConcurrentRuns: 2}
+			},
+		},
+		{
+			name: "unknown verification profile",
+			mutate: func(c *Config) {
+				c.Scopes["payments"] = ScopeConfig{VerificationProfile: "missing"}
+			},
+			wantErr: "unknown verification profile",
+		},
+		{
+			name: "negative concurrency cap",
+			mutate: func(c *Config) {
+				c.Scopes["payments"] = ScopeConfig{MaxConcurrentRuns: -1}
+			},
+			wantErr: "max_concurrent_runs",
+		},
+		{
+			name: "concurrency cap above the ceiling",
+			mutate: func(c *Config) {
+				c.Scopes["payments"] = ScopeConfig{MaxConcurrentRuns: maxScopeConcurrency + 1}
+			},
+			wantErr: "max_concurrent_runs",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := base()
+			tc.mutate(&cfg)
+			err := cfg.Validate()
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Validate: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("Validate() = %v, want an error mentioning %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestEvidenceConfigValidation(t *testing.T) {
+	t.Setenv("CUBE_API_URL", "http://127.0.0.1:4000")
+	t.Setenv("CUBE_TEMPLATE_ID", "tpl-test")
+
+	cfg := hardenedDefaults()
+	if cfg.Evidence.configured() {
+		t.Fatal("evidence signing must be disabled without a key file")
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("disabled evidence signing must not invalidate the configuration: %v", err)
+	}
+
+	cfg.Evidence = EvidenceConfig{SigningKeyFile: filepath.Join(t.TempDir(), "missing.pem")}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "evidence.signing_key_file") {
+		t.Fatalf("missing signing key = %v, want a named validation error", err)
+	}
+
+	keyPath, _ := writeSigningKey(t)
+	cfg.Evidence = EvidenceConfig{SigningKeyFile: keyPath}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("a valid signing key must be accepted: %v", err)
+	}
+
+	badPath := filepath.Join(t.TempDir(), "not-a-key.pem")
+	if err := os.WriteFile(badPath, []byte("not a private key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Evidence = EvidenceConfig{SigningKeyFile: badPath}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "evidence.signing_key_file") {
+		t.Fatalf("invalid signing key = %v, want a named validation error", err)
+	}
 }

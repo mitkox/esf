@@ -432,6 +432,17 @@ func TestPatchAndArtifactEndpoints(t *testing.T) {
 		t.Fatalf("artifact = %+v", artifact)
 	}
 
+	// Signed evidence is part of the run's artifact tree and must be readable
+	// through the same allow-listed endpoint as the other evidence.
+	writeTextFile(t, filepath.Join(root, "runs", "run-success", "evidence", "bundle.json"), "{}\n")
+	writeTextFile(t, filepath.Join(root, "runs", "run-success", "evidence", "signature.json"), "{}\n")
+	for _, path := range []string{"evidence%2Fbundle.json", "evidence%2Fsignature.json"} {
+		status, body, _ = request(t, server, http.MethodGet, "/api/v1/console/runs/run-success/artifacts?path="+path, testToken)
+		if status != http.StatusOK {
+			t.Fatalf("artifact %q status = %d: %s", path, status, body)
+		}
+	}
+
 	for _, path := range []string{"..%2F..%2Fetc%2Fpasswd", "hardening%2F..%2F..%2Frun.json", "run.json%00.txt"} {
 		status, _, _ = request(t, server, http.MethodGet, "/api/v1/console/runs/run-success/artifacts?path="+path, testToken)
 		if status == http.StatusOK {
@@ -838,14 +849,23 @@ func TestQueryAndFacetBounds(t *testing.T) {
 }
 
 func TestShellArgQuotesUnsafeRunIDs(t *testing.T) {
-	if got := shellArg("run-safe_1.2"); got != "run-safe_1.2" {
-		t.Fatalf("safe id should stay readable, got %q", got)
+	cases := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "safe characters", value: "run-123/a:b_c.d+e=f", want: "run-123/a:b_c.d+e=f"},
+		{name: "empty", value: "", want: "''"},
+		{name: "space", value: "id with space", want: "'id with space'"},
+		{name: "single quote", value: "id'quote", want: `'id'\''quote'`},
+		{name: "semicolon", value: "id;rm -rf /", want: "'id;rm -rf /'"},
+		{name: "command substitution", value: "id$(id)", want: "'id$(id)'"},
+		{name: "backticks", value: "id`id`", want: "'id`id`'"},
+		{name: "newline", value: "id\nnext", want: "'id\nnext'"},
 	}
-	unsafe := []string{"id with space", "id;rm -rf /", "id$(id)", "id'quote"}
-	for _, value := range unsafe {
-		got := shellArg(value)
-		if !strings.HasPrefix(got, "'") || !strings.HasSuffix(got, "'") {
-			t.Fatalf("shellArg(%q) = %q, want a single-quoted argument", value, got)
+	for _, tc := range cases {
+		if got := ShellArg(tc.value); got != tc.want {
+			t.Errorf("ShellArg(%q) = %q, want %q", tc.value, got, tc.want)
 		}
 	}
 	actions := runActions("demo$(id)", factory.StateRunning)

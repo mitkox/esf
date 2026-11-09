@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mitkox/esf/internal/factoryartifacts"
+	"github.com/mitkox/esf/internal/forge"
 	"github.com/mitkox/esf/internal/repository"
 )
 
@@ -63,6 +64,13 @@ type Change struct {
 	LastResult RunState `json:"last_result,omitempty"`
 	// ReworkNote is the human instruction that triggered the latest rework.
 	ReworkNote string `json:"rework_note,omitempty"`
+
+	// PullRequest is the forge pull request this change published. It is
+	// absent until a run passes every gate and publication succeeds.
+	PullRequest *PullRequestIdentity `json:"pull_request,omitempty"`
+	// Acceptance is the forge-native merge state observed for PullRequest.
+	// ESF never writes it except from a read of the forge.
+	Acceptance *AcceptanceRecord `json:"acceptance,omitempty"`
 }
 
 // ChangeStatus is the lifecycle of a Change.
@@ -412,6 +420,87 @@ func (s *ChangeStore) RecordRun(manifest RunManifest) (Change, error) {
 	change.TotalCostUSD, change.TotalTokens = recompute.cost, recompute.tokens
 
 	change.Status = deriveChangeStatus(change, manifest)
+	if err := s.save(change); err != nil {
+		return Change{}, err
+	}
+	return change, nil
+}
+
+// RecordPullRequest records a successful publication on the change.
+//
+// A publication is not an acceptance: the change moves to IN_REVIEW and only a
+// merged pull request observed from the forge can move it to DONE.
+func (s *ChangeStore) RecordPullRequest(changeID string, pullRequest PullRequestIdentity, now time.Time) (Change, error) {
+	unlock, err := s.lockChange(changeID)
+	if err != nil {
+		return Change{}, err
+	}
+	defer unlock()
+	change, err := s.Load(changeID)
+	if err != nil {
+		return Change{}, err
+	}
+	pr := pullRequest
+	change.PullRequest = &pr
+	if change.Status != ChangeDone && change.Status != ChangeAbandoned {
+		change.Status = ChangeInReview
+	}
+	change.UpdatedAt = now
+	if err := s.save(change); err != nil {
+		return Change{}, err
+	}
+	return change, nil
+}
+
+// RecordPullRequestFailure makes a failed publication visible on the change.
+// A successful run that never reached the forge must not read as in review.
+func (s *ChangeStore) RecordPullRequestFailure(changeID string, now time.Time) (Change, error) {
+	unlock, err := s.lockChange(changeID)
+	if err != nil {
+		return Change{}, err
+	}
+	defer unlock()
+	change, err := s.Load(changeID)
+	if err != nil {
+		return Change{}, err
+	}
+	if change.Status != ChangeDone && change.Status != ChangeAbandoned {
+		change.Status = ChangeOpen
+	}
+	change.UpdatedAt = now
+	if err := s.save(change); err != nil {
+		return Change{}, err
+	}
+	return change, nil
+}
+
+// RecordAcceptance stores an observed forge merge state.
+//
+// The caller decides whether the observation is an acceptance (a merged pull
+// request whose tree matches) or a close that returns the change to rework.
+func (s *ChangeStore) RecordAcceptance(changeID string, acceptance AcceptanceRecord, now time.Time) (Change, error) {
+	unlock, err := s.lockChange(changeID)
+	if err != nil {
+		return Change{}, err
+	}
+	defer unlock()
+	change, err := s.Load(changeID)
+	if err != nil {
+		return Change{}, err
+	}
+	record := acceptance
+	change.Acceptance = &record
+	switch acceptance.State {
+	case forge.AcceptanceMerged:
+		change.Status = ChangeDone
+		change.ReworkNote = ""
+	case forge.AcceptanceClosed:
+		change.Status = ChangeOpen
+		if strings.TrimSpace(acceptance.Note) != "" {
+			change.ReworkNote = strings.TrimSpace(acceptance.Note)
+		}
+	}
+	change.UpdatedAt = now
 	if err := s.save(change); err != nil {
 		return Change{}, err
 	}

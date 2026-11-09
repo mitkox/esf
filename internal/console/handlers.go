@@ -531,6 +531,8 @@ var allowedArtifactExact = map[string]bool{
 	factory.ArtifactPatchScan:          true,
 	factory.ArtifactGateIntegrity:      true,
 	factory.ArtifactAudit:              true,
+	factory.ArtifactEvidenceBundle:     true,
+	factory.ArtifactEvidenceSignature:  true,
 }
 
 var allowedArtifactPrefixes = []string{"verification/", "hardening/"}
@@ -978,6 +980,10 @@ func (s *Server) handleSecurity(response http.ResponseWriter, request *http.Requ
 
 func (s *Server) handleOperations(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusOK, s.buildOperations(request.Context()))
+}
+
+func (s *Server) handleConnectors(response http.ResponseWriter, _ *http.Request) {
+	writeJSON(response, http.StatusOK, s.buildConnectors())
 }
 
 func (s *Server) handleCatalog(response http.ResponseWriter, _ *http.Request) {

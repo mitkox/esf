@@ -1,0 +1,45 @@
+[Unit]
+Description=ESF public execution API
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=factory
+Group=factory
+WorkingDirectory=/var/lib/factory
+StateDirectory=factory
+StateDirectoryMode=0750
+# The bearer token named by [api].token_file is owned by this user with mode
+# 0600. The private-file reader refuses group- or other-readable files.
+# This is the same environment file the worker and connector read, including
+# TEMPORAL_API_KEY for Temporal API-key authentication.
+EnvironmentFile=/etc/factory/worker.env
+ExecStart=/usr/local/bin/factory api --config /etc/factory/factory.toml
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0027
+MemoryMax=1G
+TasksMax=256
+LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/factory
+
+[Install]
+WantedBy=multi-user.target

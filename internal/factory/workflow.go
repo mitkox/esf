@@ -62,6 +62,12 @@ type RunStatus struct {
 	// Conditions are the per-step outcomes observed so far. A watcher can
 	// follow them without waiting for the final manifest.
 	Conditions []Condition `json:"conditions,omitempty"`
+	// Repository, Revision and TaskHash are the validated request identity.
+	// They let an API resubmission compare a new payload with the running
+	// activation instead of echoing the submitted request.
+	Repository string `json:"repository,omitempty"`
+	Revision   string `json:"revision,omitempty"`
+	TaskHash   string `json:"task_hash,omitempty"`
 }
 
 // workflowState is the deterministic state carried across workflow steps.
@@ -190,6 +196,11 @@ func softwareChangeWorkflow(ctx workflow.Context, req RunRequest) (RunManifest, 
 		return RunManifest{}, err
 	}
 
+	// A scope admission lease, when one was acquired, is held through cleanup.
+	// It is registered before the cleanup defer so cleanup runs first, and the
+	// release uses a disconnected context so cancellation cannot strand a slot.
+	defer func() { releaseScopeSlot(ctx, acts, state) }()
+
 	// Cleanup is registered BEFORE the sandbox exists, so it runs on every exit
 	// path: success, agent failure, verification failure, timeout and
 	// cancellation. A leaked microVM counts as a failed integration test, so
@@ -250,6 +261,11 @@ func softwareChangeWorkflow(ctx workflow.Context, req RunRequest) (RunManifest, 
 	// changes` and in the worker log.
 	state.changeRecorded = recordChange(ctx, acts, state)
 
+	manifest, err = signCompletedRun(ctx, acts, state, req, manifest)
+	if err != nil {
+		return manifest, err
+	}
+
 	state.status.State = manifest.FactoryResult
 	state.status.AgentOutcome = manifest.AgentResult
 	state.status.VerifyOutcome = manifest.VerificationResult
@@ -293,6 +309,66 @@ func recordChange(ctx workflow.Context, acts *Activities, state *workflowState) 
 	return true
 }
 
+// signCompletedRun writes the signed evidence for a run that passed every gate.
+//
+// The step is version-gated because histories recorded before it must replay
+// without it. Signing is deliberately after the manifest is durable: the bundle
+// describes the finalized record, not a value that only exists in workflow
+// memory. A signing failure is terminal and distinct, so no publication can
+// follow a change whose evidence is missing.
+func signCompletedRun(
+	ctx workflow.Context,
+	acts *Activities,
+	state *workflowState,
+	req RunRequest,
+	manifest RunManifest,
+) (RunManifest, error) {
+	if workflow.GetVersion(ctx, evidenceSigningVersion, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return manifest, nil
+	}
+	if state.status.State != StateSucceeded {
+		return manifest, nil
+	}
+
+	state.status.CurrentStep = "evidence.sign"
+	disconnected, _ := workflow.NewDisconnectedContext(ctx)
+	actx := workflow.WithActivityOptions(disconnected, workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumAttempts:    3,
+		},
+	})
+
+	var signed SignEvidenceOutput
+	if err := workflow.ExecuteActivity(actx, acts.SignEvidence, SignEvidenceInput{RunID: req.RunID}).Get(disconnected, &signed); err != nil {
+		signingErr := fmt.Errorf("evidence signing failed: %w", err)
+		state.status.Error = appendError(state.status.Error, signingErr.Error())
+		state.status.State = StateEvidenceFailed
+		state.setCondition(ctx, ConditionEvidenceSigned, ConditionFalse, "SignFailed", signingErr.Error())
+
+		var revised FinalizeOutput
+		if err := workflow.ExecuteActivity(actx, acts.RecordEvidenceFailure, RecordEvidenceFailureInput{
+			RunID:      req.RunID,
+			Error:      signingErr.Error(),
+			Conditions: state.status.Conditions,
+		}).Get(disconnected, &revised); err != nil {
+			return manifest, fmt.Errorf("record evidence failure: %w", err)
+		}
+		state.changeRecorded = recordChange(disconnected, acts, state)
+		return revised.Manifest, nil
+	}
+	if !signed.Configured {
+		state.setCondition(ctx, ConditionEvidenceSigned, ConditionUnknown, "NotConfigured",
+			"evidence signing is not configured")
+		return manifest, nil
+	}
+	state.setCondition(ctx, ConditionEvidenceSigned, ConditionTrue, "Signed",
+		"bundle="+signed.BundleArtifact)
+	return manifest, nil
+}
+
 // run executes the workflow body, recording outcome state as it proceeds.
 func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunRequest) error {
 	// ── 1. Validate ─────────────────────────────────────────────────────────
@@ -300,14 +376,39 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	// will be rejected again.
 	s.status.CurrentStep = "validate"
 	var validated ValidateOutput
-	if err := executeActivity(ctx, acts.ValidateRequest, noRetry(), ValidateInput{Request: req}).Get(ctx, &validated); err != nil {
-		s.status.State = StateInvalidRequest
-		s.setCondition(ctx, ConditionValidated, ConditionFalse, "PolicyRejected", err.Error())
-		return fmt.Errorf("request rejected: %w", err)
+	for {
+		// Reset before every attempt: a queued result and an admitted result
+		// are decoded into the same value, and the admitted result omits the
+		// empty queue fields.
+		validated = ValidateOutput{}
+		if err := executeActivity(ctx, acts.ValidateRequest, noRetry(), ValidateInput{Request: req}).Get(ctx, &validated); err != nil {
+			s.status.State = StateInvalidRequest
+			s.setCondition(ctx, ConditionValidated, ConditionFalse, "PolicyRejected", err.Error())
+			return fmt.Errorf("request rejected: %w", err)
+		}
+		if !validated.Queued {
+			break
+		}
+		// The scope is at its admission cap. Waiting is a durable workflow
+		// decision: the work is retried rather than rejected or dropped, and no
+		// sandbox exists while it waits.
+		s.status.CurrentStep = "validate.queued"
+		s.setCondition(ctx, ConditionValidated, ConditionUnknown, "Queued", validated.QueueReason)
+		if err := workflow.Sleep(ctx, scopeQueuePollInterval); err != nil {
+			return err
+		}
 	}
 	s.validate = validated
 	s.resources = validated.Resources
 	s.reviewPorts = validated.Resources.PreviewPorts
+	s.status.Scope = validated.Resources.Scope
+	s.status.Repository = validated.Repository
+	s.status.Revision = validated.Revision
+	s.status.TaskHash = validated.TaskHash
+	req.Scope = validated.Resources.Scope
+	if validated.Resources.VerificationProfile != "" {
+		req.VerificationProfile = validated.Resources.VerificationProfile
+	}
 	s.setCondition(ctx, ConditionValidated, ConditionTrue, "PolicyAccepted",
 		"scope="+s.resources.Scope)
 	req.AgentTimeout = validated.AgentTimeout
@@ -350,12 +451,14 @@ func (s *workflowState) run(ctx workflow.Context, acts *Activities, req RunReque
 	}
 	var created CreateSandboxOutput
 	if err := executeActivity(ctx, acts.CreateSandbox, infraRetry(), CreateSandboxInput{
-		ExecutionID: s.executionID,
-		RunID:       req.RunID,
-		Template:    template,
-		Harness:     req.AgentHarness,
-		IdleTimeout: req.TotalTimeout,
-		Network:     s.resources.Egress,
+		ExecutionID:    s.executionID,
+		RunID:          req.RunID,
+		Template:       template,
+		Harness:        req.AgentHarness,
+		IdleTimeout:    req.TotalTimeout,
+		Network:        s.resources.Egress,
+		Repository:     req.Repository,
+		ForgeConnector: req.ForgeConnector,
 	}).Get(ctx, &created); err != nil {
 		s.status.State = StateInfrastructureFailed
 		s.setCondition(ctx, ConditionSandboxReady, ConditionFalse, "CreateFailed", err.Error())
@@ -1260,6 +1363,35 @@ func finalizeRun(
 }
 
 // ── activity options ──────────────────────────────────────────────────────
+
+// scopeQueuePollInterval bounds how long a run waits between scope admission
+// attempts. The retry is a workflow timer, so it survives a worker restart.
+const scopeQueuePollInterval = 5 * time.Second
+
+// releaseScopeSlot returns the run's scope admission lease, if it holds one.
+//
+// It runs from a deferred call with a disconnected context: cancellation is
+// exactly when a stranded lease would block a team, so release must not depend
+// on the workflow context remaining alive.
+func releaseScopeSlot(ctx workflow.Context, acts *Activities, state *workflowState) {
+	if state == nil || state.resources.MaxConcurrentRuns <= 0 {
+		return
+	}
+	disconnected, _ := workflow.NewDisconnectedContext(ctx)
+	actx := workflow.WithActivityOptions(disconnected, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumAttempts:    3,
+		},
+	})
+	in := ScopeSlotInput{Scope: state.resources.Scope, RunID: state.status.RunID}
+	if err := workflow.ExecuteActivity(actx, acts.ReleaseScopeSlot, in).Get(disconnected, nil); err != nil {
+		workflow.GetLogger(ctx).Warn("scope concurrency lease was not released",
+			"run_id", state.status.RunID, "scope", state.resources.Scope, "error", err)
+	}
+}
 
 // noRetry disables retries for deterministic operations.
 func noRetry() workflow.ActivityOptions {

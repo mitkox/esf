@@ -54,11 +54,11 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: {drop: [ALL]}
           startupProbe:
-            exec: {command: ["/usr/local/bin/factory", "doctor", "--config", "/etc/esf/factory.toml", "--profile", "production", "--output", "json", "--offline"]}
+            exec: {command: ["/usr/local/bin/factory", "doctor", "--config", "/etc/esf/factory.toml", "--profile", "production", "--output", "json", "--offline", "--skip-connector-health"]}
             periodSeconds: 10
             failureThreshold: 30
           readinessProbe:
-            exec: {command: ["/usr/local/bin/factory", "doctor", "--config", "/etc/esf/factory.toml", "--profile", "production", "--output", "json", "--offline"]}
+            exec: {command: ["/usr/local/bin/factory", "doctor", "--config", "/etc/esf/factory.toml", "--profile", "production", "--output", "json", "--offline", "--skip-connector-health"]}
             periodSeconds: 20
           livenessProbe:
             exec: {command: ["/usr/local/bin/factory", "version", "--json"]}
@@ -78,7 +78,7 @@ spec:
           secret: {secretName: {{ $config | quote }}, defaultMode: 0440}
         - name: data
           persistentVolumeClaim:
-            claimName: {{ default (printf "%s-factory" $name) .Values.factory.storage.existingClaim | quote }}
+            claimName: {{ include "esf.claim" . | quote }}
         - name: tmp
           emptyDir: {sizeLimit: 512Mi}
         {{- if .Values.factory.credentialSecret }}

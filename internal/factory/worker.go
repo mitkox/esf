@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
 	"github.com/mitkox/esf/internal/agentharness"
 	"github.com/mitkox/esf/internal/factoryartifacts"
@@ -234,6 +235,7 @@ func (r *Runtime) RunWorker(ctx context.Context) error {
 	})
 
 	w.RegisterWorkflowWithOptions(SoftwareChangeWorkflow, workflowRegistrationOptions())
+	w.RegisterWorkflowWithOptions(WorkItemWorkflow, workflow.RegisterOptions{Name: WorkItemWorkflowName})
 
 	// RegisterActivity panics on a bad method set, so it has no error return.
 	w.RegisterActivity(acts)
