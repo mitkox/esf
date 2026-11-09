@@ -404,12 +404,14 @@ func (r *Runtime) runSweep(ctx context.Context, spec Spec) {
 
 // observeWebhook records the delivery outcome after the handler has answered.
 //
-// A request the handler rejects before authentication is not a delivery
-// attempt: any unauthenticated client could otherwise write a durable degraded
-// state and fail the connector readiness probe. The handler's own rejection
-// counters keep that traffic visible. A 5xx answer is a delivery-path failure;
-// a filtered or rejected delivery still proves the subscription reached the
-// receiver.
+// The receiver checks the method and then the credentials, both before it
+// examines the delivery, so 405 and 401 are pre-authentication rejections and
+// not delivery attempts: counting either as successful would let unrelated
+// unauthenticated traffic advance LastDelivery and mask a stalled subscription
+// as recent_delivery. The handler's own rejection counters keep that traffic
+// visible. A post-authentication rejection (400 or 413) still proves the
+// subscription reached the receiver and remains a successful observation. A 5xx
+// answer is a delivery-path failure.
 func (r *Runtime) observeWebhook(spec Spec, next http.Handler) http.Handler {
 	if spec.Observe == nil {
 		return next
@@ -417,7 +419,10 @@ func (r *Runtime) observeWebhook(spec Spec, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		recorder := &webhookStatusRecorder{ResponseWriter: response, status: http.StatusOK}
 		next.ServeHTTP(recorder, request)
-		if recorder.status == http.StatusUnauthorized {
+		// Exclude only the handler's pre-authentication rejections. The method
+		// check runs before the credential check, so neither status means the
+		// subscription was reached.
+		if recorder.status == http.StatusUnauthorized || recorder.status == http.StatusMethodNotAllowed {
 			return
 		}
 		successful := recorder.status < http.StatusInternalServerError

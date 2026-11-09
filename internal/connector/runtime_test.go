@@ -867,10 +867,11 @@ func newRealWebhookHandler(t *testing.T) http.Handler {
 	return webhook
 }
 
-// TestRuntimeIgnoresUnauthenticatedWebhookForHealth proves a credential-less
-// POST rejected by the real receiver is not a delivery attempt and leaves the
-// connector healthy, while an authenticated delivery whose handler fails still
-// degrades it.
+// TestRuntimeIgnoresUnauthenticatedWebhookForHealth proves a request the real
+// receiver rejects before authentication is not a delivery attempt: a
+// credential-less POST and a GET turned away by the method check both leave the
+// connector healthy with no delivery recorded, while an authenticated delivery
+// whose handler fails still degrades it.
 func TestRuntimeIgnoresUnauthenticatedWebhookForHealth(t *testing.T) {
 	t.Parallel()
 
@@ -930,6 +931,26 @@ func TestRuntimeIgnoresUnauthenticatedWebhookForHealth(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 
+	// The receiver checks the method before the credentials, so a GET never
+	// reaches authentication. It must not count as a delivery either.
+	get, err := http.NewRequest(http.MethodGet, "http://"+address.String()+"/hooks/azuredevops", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = http.DefaultClient.Do(get)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("GET status = %d, want 405 from the receiver's method check", response.StatusCode)
+	}
+	select {
+	case observation := <-observations:
+		t.Fatalf("a method-rejected webhook produced a health observation: %#v", observation)
+	case <-time.After(200 * time.Millisecond):
+	}
+
 	body := `{"id":"event-0001","eventType":"workitem.updated","publisherId":"tfs","resource":{"workItemId":42,"rev":6,"fields":{"System.State":"Active"}}}`
 	authenticated, err := http.NewRequest(http.MethodPost, "http://"+address.String()+"/hooks/azuredevops", strings.NewReader(body))
 	if err != nil {
@@ -948,6 +969,9 @@ func TestRuntimeIgnoresUnauthenticatedWebhookForHealth(t *testing.T) {
 	failed := nextObservation(t, observations)
 	if failed.Event != HealthEventDelivery || failed.Successful {
 		t.Fatalf("observation = %#v, want a failed delivery", failed)
+	}
+	if !failed.LastDelivery.IsZero() {
+		t.Fatalf("a pre-authentication rejection advanced last delivery to %s", failed.LastDelivery)
 	}
 	if !strings.Contains(failed.Detail, "502") {
 		t.Fatalf("failed delivery detail = %q, want the handler status", failed.Detail)
