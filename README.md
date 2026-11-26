@@ -55,7 +55,7 @@ migration steps, security validation and outstanding GA gates.
 
 ## Quick start
 
-Requirements for v1.0.0-rc.1 development: Go 1.27.3, Node.js 26.13.0 (console,
+Requirements for v1.0.0-rc.2 development: Go 1.27.4, Node.js 26.13.1 (console,
 agent and Pi packaging), Git, an existing CubeSandbox 0.7.3 deployment with a
 READY template, and Temporal. Python tools use the frozen `uv.lock`; they are
 optional. Docker Compose can run the included local Temporal stack.

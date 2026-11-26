@@ -12,7 +12,7 @@ not open public issues for unpatched vulnerabilities.
 ESF is under active development. Security fixes apply to the latest release —
 currently the ESF 1.0.0 release-candidate line, `1.0.0-rc.1` — and to the latest commit on
 `master`. Earlier 0.7.x and 0.6.x releases are historical and unsupported. Go
-1.27.3 is the pinned supported toolchain. Dependency and toolchain minimums may
+1.27.4 is the pinned supported toolchain. Dependency and toolchain minimums may
 increase when a security fix requires it.
 
 ## Trust model

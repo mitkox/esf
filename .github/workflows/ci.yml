@@ -26,14 +26,14 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: 1.27.3
+          go-version: 1.27.4
           cache: true
       - name: Confirm toolchain
-        run: test "$(go env GOVERSION)" = "go1.27.3"
+        run: test "$(go env GOVERSION)" = "go1.27.4"
       - name: Scan source for secrets
         run: go run github.com/zricethezav/gitleaks/v8@v8.30.1 dir --redact --no-banner .
       - name: Check Go vulnerabilities
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
       - name: Check Go formatting
         shell: bash
         run: |
@@ -60,7 +60,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 26.13.0
+          node-version: 26.13.1
           cache: npm
           cache-dependency-path: internal/console/web/package-lock.json
       - name: Test issue triage
@@ -95,7 +95,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 26.13.0
+          node-version: 26.13.1
           cache: npm
           cache-dependency-path: agents/pi/package-lock.json
       - name: Build and test pinned Pi runner
@@ -118,8 +118,8 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: 0.13.7
-          checksum: c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83
+          version: 0.13.10
+          checksum: bf65ac1a0af10f92c522d91ac096c7c0a39657647b155577e7836c2cbbb4526c
           enable-cache: true
           cache-suffix: v2
           cache-python: true
@@ -162,10 +162,10 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: 1.27.3
+          go-version: 1.27.4
           cache: true
       - name: Confirm toolchain
-        run: test "$(go env GOVERSION)" = "go1.27.3"
+        run: test "$(go env GOVERSION)" = "go1.27.4"
       - name: Run Go tests with the race detector
         run: go test -race ./...
       - name: Build factory

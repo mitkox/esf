@@ -1,7 +1,7 @@
-# ESF v1.0.0-rc.1 Helm chart
+# ESF v1.0.0-rc.2 Helm chart
 
 This chart runs one factory worker. CubeSandbox 0.7.3, Temporal 1.32.2, and
-PostgreSQL 18.6 are operator-managed dependencies. The chart deliberately has
+PostgreSQL 18.7 are operator-managed dependencies. The chart deliberately has
 no public UI or Service: the factory is driven by the `factory` CLI. If the
 operator runs Temporal's UI, it provides workflow-state visibility; it does not
 replace the removed console's evidence view.
@@ -63,4 +63,4 @@ restore drill in an isolated namespace and storage set before production use.
 
 Production qualification needs the matching attested companion manifest,
 including Kubernetes acceptance, restore, performance, and 24-hour soak
-evidence. See [the release procedure](../../../docs/release-v1.0.0-rc.1.md).
+evidence. See [the release procedure](../../../docs/release-v1.0.0-rc.2.md).

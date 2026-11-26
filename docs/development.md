@@ -2,8 +2,8 @@
 
 ## Requirements
 
-- Go 1.27.3, pinned in `.mise.toml`
-- Node.js 26.13.0 for the optional Pi runner and agent packaging
+- Go 1.27.4, pinned in `.mise.toml`
+- Node.js 26.13.1 for the optional Pi runner and agent packaging
 - Python 3.15.2 for the optional intake and brief lab tests
 - CubeSandbox and Temporal only for integration or live execution checks
 

@@ -1,0 +1,211 @@
+{
+  "baseline": "e5567fbfb12e98996b52178bdb4fb1f66b39566d",
+  "candidate": "v1.0.0-rc.2 component refresh (binary version 1.0.0)",
+  "held": {
+    "cubesandbox": {
+      "latest": "0.8.0",
+      "pinned": "0.7.3 (server and Go SDK)",
+      "reason": "the local host stack is 0.7.3; upgrading the installed CubeMaster/Cubelet services needs administrator rights (sudo requires a password in this session), and internal/sandbox/cube/create_compat.go gates create options on 0.7.2/0.7.3, so a paired server+SDK upgrade plus template and lifecycle requalification is required"
+    },
+    "dspy": {
+      "latest": "3.5.0",
+      "pinned": "3.4.1",
+      "reason": "dspy 3.5.0 removed dspy.experimental.TypeSafe, which tools/intake/esf_intake/decision.py imports for typed decisions; the migration is an intake behaviour change, not a pin refresh"
+    }
+  },
+  "queried_at": "2026-11-26T21:00:00Z",
+  "schema": "esf-component-upgrade-audit/v1",
+  "sources": {
+    "docker_hub": "docker buildx imagetools inspect (index digest)",
+    "ghcr": "ghcr.io v2 tags/list and manifest HEAD",
+    "github": "https://api.github.com/repos/<owner>/<repo>/releases/latest",
+    "go_download": "https://go.dev/dl/?mode=json",
+    "go_proxy": "https://proxy.golang.org/<module>/@latest",
+    "kubernetes_release": "https://dl.k8s.io/release/stable.txt",
+    "node_dist": "https://nodejs.org/dist/index.json",
+    "npm": "https://registry.npmjs.org dist-tags.latest",
+    "pypi": "https://pypi.org/pypi/<name>/json info.version"
+  },
+  "unchanged": [
+    "unreal 0.3.1",
+    "grpc 1.85.0",
+    "OpenTelemetry 1.47.0",
+    "protobuf 1.36.12",
+    "cube base image 2026.16",
+    "react/react-dom 19.3.1",
+    "esbuild 0.28.2",
+    "clsx 2.1.1",
+    "gitleaks 8.30.1"
+  ],
+  "upgrades": {
+    "claude": {
+      "archive_sha256": "cab5bc60de00f7238b7974d281db4c177385490744ee44b329f6509e1606ca3c",
+      "archive_url": "https://github.com/anthropics/claude-code/releases/download/v2.1.332/claude-linux-x64.tar.gz",
+      "binary_sha256": "a2df1f41bb00250992926420d0063f89b127cb81abdd284dbefb80c50ff1d026",
+      "candidate": "2.1.332",
+      "notes": "archive digest matches the published SHASUMS256.txt entry; sig file not verified in this session",
+      "previous": "2.1.318",
+      "sha256sums_sha256": "1137efd10bed77d80eb17958f3942e80feabbb9ab1aa3f33e7d167aadbe87a5e"
+    },
+    "codex": {
+      "archive_sha256": "a2342a8f7f68f088be30620ccfe9cb84162c93a6b56177855961cda3ed6be392",
+      "archive_url": "https://github.com/openai/codex/releases/download/rust-v0.172.0/codex-x86_64-unknown-linux-musl.tar.gz",
+      "binary_sha256": "ad83b94c093f0cdd8176a6bc8005a461bdf23a759863e157d40f562b8a9d664d",
+      "candidate": "0.172.0",
+      "notes": "release publishes no checksum file for this asset; archive digest recorded from the downloaded asset",
+      "previous": "0.166.0"
+    },
+    "console": {
+      "@tailwindcss/vite": {
+        "candidate": "4.3.5",
+        "previous": "4.3.4"
+      },
+      "@vitejs/plugin-react": {
+        "candidate": "6.3.0",
+        "previous": "6.2.1"
+      },
+      "lucide-react": {
+        "candidate": "1.81.0",
+        "previous": "1.67.0"
+      },
+      "tailwindcss": {
+        "candidate": "4.3.5",
+        "previous": "4.3.4"
+      },
+      "vite": {
+        "candidate": "8.4.0",
+        "previous": "8.3.5"
+      }
+    },
+    "esf_release": {
+      "candidate": "v1.0.0-rc.2",
+      "note": "distribution label only; binary, chart and pyproject version stay 1.0.0",
+      "previous": "v1.0.0-rc.1"
+    },
+    "go": {
+      "builder": "docker.io/library/golang@sha256:5f1b98fa02fe396ebce2a0227a0e08309e11792915b9dd2e1f71053d7e7e6666",
+      "candidate": "1.27.4",
+      "previous": "1.27.3"
+    },
+    "node": {
+      "candidate": "26.13.1",
+      "image": "docker.io/library/node@sha256:abe7e5a82b61a8ef67b315b85497c9e65173387ccf2f4a029248184b8e020be5",
+      "node_binary_sha256": "d931c649850ffa7155b8ceffb400dc916ef325866e509cc52ae36e33e8fbb9a9",
+      "previous": "26.13.0"
+    },
+    "opencode": {
+      "candidate": "2.4.2",
+      "linux_amd64_binary_sha256": "523b1502d1d556998b0904235cef65eb1d8cf8362b4e2faa7ae7a170c9a44cd4",
+      "linux_amd64_npm_integrity": "sha512-MrvUZ8Utg/kKpsIIRu7NrShw20CLbibw482lprMHwJtTLLJfoRqrq9n12eV4LFe7iTtD35GkA/q4pn4/zIpWzw==",
+      "npm_integrity": "sha512-vOtiROdieAsC4fuvJiLxkjJwZ+osO6u1nxwOyal1VFzy9wOJTQrqBmfrGQy3vz0fzxkCXrNluhN2Pum9+C0EBQ==",
+      "previous": "2.2.5"
+    },
+    "pi": {
+      "candidate": "1.6.1",
+      "catalog_sha256": "a242d1cba9e54d0d3c69ae35f586452fc9c60959cb2b83e00fe7accda4020388",
+      "git_commit": "ef4a1cfcca62b77ad3558337ff3e1c7f6beeadfe",
+      "notes": "v1.6.0 breaking changes are coding-agent extension APIs; pi-durable watch/submit contract unchanged",
+      "packages": [
+        "@earendil-works/pi-durable",
+        "@earendil-works/pi-ai",
+        "@earendil-works/chord"
+      ],
+      "previous": "1.5.0",
+      "runner_sha256": "2e19e629f068b27ab46240e4ffe5f7de8fe026217fa1b5445f85f4bd290abefb"
+    },
+    "postgresql": {
+      "candidate": "18.7-alpine",
+      "index_digest": "sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71",
+      "previous": "18.6-alpine"
+    },
+    "python_lock": {
+      "boto3": {
+        "candidate": "1.44.12",
+        "previous": "1.43.123"
+      },
+      "botocore": {
+        "candidate": "1.44.12",
+        "previous": "1.43.123"
+      },
+      "cachetools": {
+        "candidate": "8.0.3",
+        "previous": "7.2.8"
+      },
+      "certifi": {
+        "candidate": "2026.11.20",
+        "previous": "2026.10.23"
+      },
+      "filelock": {
+        "candidate": "4.3.1",
+        "previous": "4.2.9"
+      },
+      "litellm": {
+        "candidate": "1.111.0",
+        "previous": "1.103.10"
+      },
+      "notes": "openai 3.x and litellm >=1.111 now resolve; python-dateutil stays 2.9.0.post0 via botocore",
+      "openai": {
+        "candidate": "3.60.0",
+        "previous": "2.54.0"
+      },
+      "pydantic-settings": {
+        "candidate": "2.16.3",
+        "previous": "2.16.2"
+      }
+    },
+    "temporal_admin_tools": {
+      "candidate": "1.32.2",
+      "index_digest": "sha256:4a95866efba29d7e17ab012df5232795e8b0ad0f7d5f9d1ec4df321f7792a754",
+      "notes": "local dev stack moved 1.32.1 -> 1.32.2 to match the pin",
+      "previous": "1.32.2"
+    },
+    "temporal_go_api": {
+      "candidate": "1.64.3",
+      "previous": "1.64.1"
+    },
+    "temporal_go_sdk": {
+      "candidate": "1.52.0",
+      "previous": "1.50.0"
+    },
+    "temporal_server": {
+      "candidate": "1.32.2",
+      "index_digest": "sha256:7bf69188a6232fea14869b9cef3d94aa82a1601d99517f7e86c71f22da4e0670",
+      "notes": "no newer release",
+      "previous": "1.32.2"
+    },
+    "temporal_ui": {
+      "candidate": "2.58.1",
+      "index_digest": "sha256:ac3c13eddb4547d830991bb5eee93a5d97140134522b7297fdb2be1fe25ef925",
+      "previous": "2.58.0"
+    },
+    "toolchains": {
+      "gitleaks": {
+        "candidate": "8.30.1",
+        "previous": "8.30.1"
+      },
+      "govulncheck": {
+        "candidate": "1.10.0",
+        "previous": "1.9.0"
+      },
+      "helm": {
+        "candidate": "4.3.2",
+        "previous": "4.3.1"
+      },
+      "kubectl": {
+        "candidate": "1.37.3",
+        "previous": "1.37.2"
+      }
+    },
+    "uv": {
+      "asset": "uv-x86_64-unknown-linux-gnu.tar.gz",
+      "bundle_checksum": "bf65ac1a0af10f92c522d91ac096c7c0a39657647b155577e7836c2cbbb4526c",
+      "candidate": "0.13.10",
+      "notes": "checksum matches the release .sha256 and sha256.sum; the CI setup-uv checksum input was refreshed to this value",
+      "previous": "0.13.7"
+    },
+    "x_net": {
+      "candidate": "0.63.0",
+      "previous": "0.62.0"
+    }
+  }
+}

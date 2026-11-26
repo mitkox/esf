@@ -6,10 +6,10 @@
 # python-* package chain. The uv.lock closure is unchanged and installed with
 # --locked. Keep the pinned uv version equal to release/inventory.json
 # toolchains.uv.
-ARG GO_BUILDER=docker.io/library/golang@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b
+ARG GO_BUILDER=docker.io/library/golang@sha256:5f1b98fa02fe396ebce2a0227a0e08309e11792915b9dd2e1f71053d7e7e6666
 # Build-only interpreter used to run uv; the shipped image does not contain it.
-ARG PYTHON_BUILDER=docker.io/library/python@sha256:4b777652b7ca0a1fae98a847e83e538605d0fb8de3812f3403076aca74368e74
-ARG ALPINE_BASE=docker.io/library/alpine@sha256:ff7f0c727dd796aa36787bfcd9a64bf35a6ce72a73451b3359fde849b6703d63
+ARG PYTHON_BUILDER=docker.io/library/python@sha256:63bb298d2b7b88f176f51b5189f54ce6535c997682ea70885d2132f5d473a8a5
+ARG ALPINE_BASE=docker.io/library/alpine@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 FROM --platform=$BUILDPLATFORM ${GO_BUILDER} AS build
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -31,7 +31,7 @@ COPY tools/intake tools/intake
 COPY tools/brief_lab tools/brief_lab
 ENV UV_PYTHON_INSTALL_DIR=/opt/python \
     UV_PYTHON_PREFERENCE=only-managed
-RUN python -m pip install --no-cache-dir uv==0.13.7 && \
+RUN python -m pip install --no-cache-dir uv==0.13.10 && \
     uv python install 3.15.2 && \
     uv sync --locked --python 3.15.2 --no-install-project && \
     .venv/bin/python -c 'import sys; assert sys.version_info[:3] == (3,15,2), sys.version'

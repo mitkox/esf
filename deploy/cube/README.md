@@ -5,7 +5,7 @@ inventory. See [Pi installation and qualification](../../docs/harness-pi.md).
 
 `Dockerfile` builds the Linux/amd64 ESF v1.0.0-rc.1 template from a pinned
 CubeSandbox base (`cubesandbox-base` 2026.16). It includes Git, CA certificates,
-Python, the command-output limiter tools, OpenCode 2.2.5, and Unreal 0.3.1.
+Python, the command-output limiter tools, OpenCode 2.4.2, and Unreal 0.3.1.
 The Docker build verifies the portable glibc x64-baseline OpenCode package and
 every executable digest against the release inventory. Provider credentials
 are absent from the image; CubeEgress injects them at runtime.
@@ -14,15 +14,15 @@ The pinned vendor base ships `envd` built with Go 1.25.4, and the published
 Unreal agent runner is built with Go 1.27.0. Both carry Go Standard Library
 advisories that have fixes only in newer toolchains. Because no newer
 `cubesandbox-base` tag exists, this recipe rebuilds both binaries from their
-pinned upstream sources with the pinned Go 1.27.3 toolchain and copies the
+pinned upstream sources with the pinned Go 1.27.4 toolchain and copies the
 rebuilt static binaries over the vendor payload. Every source archive and
 resulting binary is checksum-pinned in `Dockerfile`; the rebuild does not
 modify the rest of the vendor layer. Provenance:
 
 | Payload | Upstream source | Rebuilt with |
 | --- | --- | --- |
-| `envd` | `github.com/e2b-dev/infra` tag `2026.16`, commit `b8ca332f…` | Go 1.27.3, `CGO_ENABLED=0` |
-| `unreal-agent-runner` | `github.com/unreallabsai/unreal-agent` tag `v0.3.1`, commit `55747f5f…` | Go 1.27.3, `CGO_ENABLED=0` |
+| `envd` | `github.com/e2b-dev/infra` tag `2026.16`, commit `b8ca332f…` | Go 1.27.4, `CGO_ENABLED=0` |
+| `unreal-agent-runner` | `github.com/unreallabsai/unreal-agent` tag `v0.3.1`, commit `55747f5f…` | Go 1.27.4, `CGO_ENABLED=0` |
 
 The upstream Unreal release archive/binary pins remain authoritative for the
 operator install path (`scripts/install-agents.sh`); the template payload uses

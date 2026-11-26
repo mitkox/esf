@@ -34,9 +34,9 @@ Start with the [factory overview](FACTORY.md), then use the
 
 ## Releases
 
-- [ESF 1.0.0-rc.1 release notes](release-v1.0.0-rc.1.md) (current release candidate
-  candidate)
-- Historical: [0.7.3](release-v0.7.3.md), [0.7.2](release-v0.7.2.md),
+- [ESF 1.0.0-rc.2 release notes](release-v1.0.0-rc.2.md) (current release candidate)
+- Historical: [1.0.0-rc.1](release-v1.0.0-rc.1.md), [0.7.3](release-v0.7.3.md),
+  [0.7.2](release-v0.7.2.md),
   [0.7.1](release-v0.7.1.md), [0.7.0](release-v0.7.0.md),
   [0.6.2](release-v0.6.2.md), [0.6.1](release-v0.6.1.md),
   [0.6.0](release-v0.6.0.md), [0.5.0](release-v0.5.0.md)

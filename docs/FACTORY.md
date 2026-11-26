@@ -56,10 +56,10 @@ An agent saying it succeeded is never enough.
 | Requirement | Notes |
 | --- | --- |
 | **An existing, running CubeSandbox** | Discovered, never installed or modified by this project |
-| Go | `go 1.27.3` (auto-downloaded by `GOTOOLCHAIN=auto`) |
+| Go | `go 1.27.4` (auto-downloaded by `GOTOOLCHAIN=auto`) |
 | Docker + Compose | For Temporal and PostgreSQL only |
 | Git | For repository preparation inside sandboxes |
-| A coding agent | `opencode2` with pinned `@opencode/cli` v2.2.5; **a model credential is required** (see below) |
+| A coding agent | `opencode2` with pinned `@opencode/cli` v2.4.2; **a model credential is required** (see below) |
 
 ## Setup
 

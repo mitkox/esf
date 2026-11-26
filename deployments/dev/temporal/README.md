@@ -34,11 +34,11 @@ fails before contacting PostgreSQL.
 
 | Service | Image | Host binding | Purpose |
 | --- | --- | --- | --- |
-| `postgresql` | `postgres:18.6-alpine` | `127.0.0.1:5433` | Temporal persistence + visibility store |
+| `postgresql` | `postgres:18.7-alpine` | `127.0.0.1:5433` | Temporal persistence + visibility store |
 | `temporal-admin-tools` | `temporalio/admin-tools:1.32.2` | — | one-shot schema setup |
 | `temporal` | `temporalio/server:1.32.2` | `127.0.0.1:7233` | gRPC frontend |
 | `temporal-create-namespace` | `temporalio/admin-tools:1.32.2` | — | one-shot namespace creation |
-| `temporal-ui` | `temporalio/ui:2.58.0` | `127.0.0.1:8233` | web UI |
+| `temporal-ui` | `temporalio/ui:2.58.1` | `127.0.0.1:8233` | web UI |
 
 ### Deliberate deviations from upstream
 
@@ -106,7 +106,7 @@ and a workflow can actually execute — not merely that a container is running.
 
 PostgreSQL 18 uses a fresh `factory-temporal-postgresql-data-v18` volume mounted
 at `/var/lib/postgresql`. Existing PostgreSQL 16 volumes are preserved. Back up
-the Temporal database and visibility store, restore them into the new 18.6
+the Temporal database and visibility store, restore them into the new 18.7
 instance, and validate Temporal schema/replay before switching an existing
 installation. Do not run `docker compose down -v` during this migration.
 
