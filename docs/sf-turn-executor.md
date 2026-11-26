@@ -20,8 +20,8 @@ service directly as a browser API. sf uses `SF_ESF_URL` and `SF_ESF_TOKEN`.
 The template needs Python 3 and the provider's existing output-limiter tools.
 Claude can be preinstalled or staged from an operator-owned file with a pinned
 SHA-256; client requests cannot select a file, command, template or credential.
-The pinned native Claude 2.1.318 Linux x64 binary has SHA-256
-`708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd`; the earlier
+The pinned native Claude 2.1.332 Linux x64 binary has SHA-256
+`a2df1f41bb00250992926420d0063f89b127cb81abdd284dbefb80c50ff1d026`; the earlier
 2.1.272 local qualification used `d81396a668eb76fbddb49a2a5841f1b5d7af96b4c1f6500ced92f2c988f5bcd4`.
 
 Example operator profile (replace the template and secret *reference*, not with
@@ -33,7 +33,7 @@ secret values in this file):
     "template": "READY_TEMPLATE_ID",
     "command": ["/tmp/esf-harness", "-p", "--verbose", "--output-format", "stream-json", "--permission-mode", "default", "--setting-sources", "", "--model", "minimax-m3"],
     "harness": "claude-code",
-    "harness_artifact": {"file": "/opt/esf/claude/2.1.318/claude", "sha256": "708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd"},
+    "harness_artifact": {"file": "/opt/esf/claude/2.1.332/claude", "sha256": "a2df1f41bb00250992926420d0063f89b127cb81abdd284dbefb80c50ff1d026"},
     "model_base_url": "https://opencode.ai/inference/go",
     "env_refs": {"ANTHROPIC_API_KEY": "OPENCODE_GO_API_KEY"},
     "network": {"allow_internet": true},

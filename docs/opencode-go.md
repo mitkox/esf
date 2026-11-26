@@ -42,7 +42,7 @@ egress = "opencode-go"
 [harnesses.opencode2]
 type = "opencode"
 binary = "/opt/esf/agents/opencode2"
-binary_sha256 = "8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050"
+binary_sha256 = "523b1502d1d556998b0904235cef65eb1d8cf8362b4e2faa7ae7a170c9a44cd4"
 preinstalled = true
 packages = []
 pass_env = []

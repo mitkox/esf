@@ -1,8 +1,8 @@
 # Pi harness v1 candidate
 
 Select Pi explicitly with `factory run --agent pi`. OpenCode remains the
-automatic default. Pi 1.5.0 has an experimental API; this adapter pins its
-published packages, dependency graph, ESF bundle, and Node 26.13.0 runtime.
+automatic default. Pi 1.6.1 has an experimental API; this adapter pins its
+published packages, dependency graph, ESF bundle, and Node 26.13.1 runtime.
 The candidate is opt-in until the model-backed acceptance matrix passes.
 
 ## Template and installation
@@ -26,7 +26,7 @@ factory run. For offline template staging,
 installs the verified Node binary and committed bundle.
 
 Rebuild the bundle and catalog in a Cube development microVM, using Node
-26.13.0 and the committed lockfile:
+26.13.1 and the committed lockfile:
 
 ```sh
 cd agents/pi
@@ -56,9 +56,9 @@ template in `[cube]`, and append:
 type = "pi"
 preinstalled = true
 binary = "/opt/esf/agents/pi-runner.mjs"
-binary_sha256 = "2f2b5191139a564050c98f0784e9be63893d47685abc6ac8a4049a942b201993"
+binary_sha256 = "2e19e629f068b27ab46240e4ffe5f7de8fe026217fa1b5445f85f4bd290abefb"
 runtime_binary = "/opt/esf/agents/node"
-runtime_sha256 = "0adde40d1b7dfa57c8bc83cbc319758c3ec6ebba21363bb2fa752ea6b267ad1b"
+runtime_sha256 = "d931c649850ffa7155b8ceffb400dc916ef325866e509cc52ae36e33e8fbb9a9"
 provider = "local"
 base_url = "http://192.168.0.14:8000/v1"
 model = "<operator-approved-model-id>"
@@ -70,7 +70,7 @@ timeout = "30m"
 ```
 
 `api` supports `openai-completions` (default for the local gateway) and
-`openai-responses`. A model in the embedded Pi 1.5.0 catalog can omit
+`openai-responses`. A model in the embedded Pi 1.6.1 catalog can omit
 `catalog_cache`; its provider, model ID, and API must match. Custom gateways
 must supply a strict offline JSON model definition with explicit context and
 output limits. Do not guess these limits from a model name.

@@ -1,0 +1,53 @@
+{
+  "container_scan": {
+    "findings": 0,
+    "history": "pre-patch image had 2 HIGH os-pkgs (apt CVE-2026-109518) and 10 HIGH golang.org/x/crypto advisories reported for /usr/bin/envd; both fixed in the candidate (apt/libapt-pkg 2.4.15ubuntu0.1, envd rebuilt with x/crypto v0.55.0)",
+    "image": "127.0.0.1:32001/esf-native-pi:rc2b-native-20261126",
+    "severity": "HIGH,CRITICAL",
+    "tool": "trivy 0.76.2"
+  },
+  "continuous_security": {
+    "reason": "the OpenCode/OpenCyber model endpoint (192.168.0.14:8000) is unreachable from this session; scanner evidence above is deterministic tooling and does not replace that coverage",
+    "status": "AI-assisted source audit not run"
+  },
+  "go_module_graph": {
+    "result": "clean; x/net 0.63.0, temporal api 1.64.3, sdk 1.52.0, grpc 1.85.0, otel 1.47.0"
+  },
+  "go_vulnerabilities": {
+    "command": "go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...",
+    "result": "No vulnerabilities found.",
+    "tool": "govulncheck 1.10.0"
+  },
+  "npm_audit": {
+    "command": "npm audit --audit-level=low",
+    "console": 0,
+    "opencode": 0,
+    "pi": 0
+  },
+  "python_audit": {
+    "finding_details": [
+      {
+        "fixed": null,
+        "id": "PYSEC-2026-2447",
+        "package": "diskcache",
+        "status": "unfixed upstream; documented trusted-cache mitigation retained",
+        "version": "5.6.3"
+      }
+    ],
+    "other_packages": "no findings",
+    "tool": "pip-audit (uvx) against uv export"
+  },
+  "sandbox_isolation": {
+    "cube_smoke_cleanup": "verified",
+    "factory_sandboxes_after_runs": 0,
+    "note": "each run destroys its own sandbox; ownership attribution stays unknown rather than assuming leaks"
+  },
+  "scanned_at": "2026-11-26T20:42:45Z",
+  "schema": "esf-security-baseline/v1",
+  "source_secret_scan": {
+    "exit_code": 0,
+    "findings": 0,
+    "scope": "tracked candidate source pack (8.39 MB) inside Cube sandbox 0db91ca07be249248135c37161ddd23e",
+    "tool": "gitleaks 8.30.1"
+  }
+}

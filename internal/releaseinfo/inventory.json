@@ -2,7 +2,7 @@
   "release": "v1.0.0",
   "release_profile": "binary-preview",
   "qualification_mode": "companion-manifest",
-  "baseline": "051062b47060c684b3bd52a8aeb4e9d958b83333",
+  "baseline": "e5567fbfb12e98996b52178bdb4fb1f66b39566d",
   "dependencies": {
     "cubesandbox": {
       "release": "0.7.3",
@@ -12,20 +12,20 @@
     "temporal": {
       "server": "1.32.2",
       "admin_tools": "1.32.2",
-      "ui": "2.58.0",
-      "go_sdk": "1.50.0",
-      "api": "1.64.1",
+      "ui": "2.58.1",
+      "go_sdk": "1.52.0",
+      "api": "1.64.3",
       "qualification": "candidate; replay and deployment validation pending"
     },
     "opencode": {
       "package": "@opencode/cli",
-      "version": "2.2.5",
-      "npm_integrity": "sha512-sJAwrwuVa5b+pA3O1UOiSDcC9DgdPVmtkWv6aF6q3+rOiOTCqrE41tkz1kyyE2O8BYPs4eOvBuzkQ6oEm8w5Mw==",
-      "linux_amd64_binary_sha256": "8d060e1d2fbb9bb44cf09ae6ed1f3f6a7cff070b5227e2f90970132b23a92050",
+      "version": "2.4.2",
+      "npm_integrity": "sha512-vOtiROdieAsC4fuvJiLxkjJwZ+osO6u1nxwOyal1VFzy9wOJTQrqBmfrGQy3vz0fzxkCXrNluhN2Pum9+C0EBQ==",
+      "linux_amd64_binary_sha256": "523b1502d1d556998b0904235cef65eb1d8cf8362b4e2faa7ae7a170c9a44cd4",
       "license": "MIT",
       "qualification": "candidate; refreshed package integrity verified; Cube and provider validation recorded separately",
       "linux_amd64_package": "@opencode/cli-linux-x64-baseline",
-      "linux_amd64_npm_integrity": "sha512-oPOT+EMmdz56HnSFPRVwZ0QTVL5defhOacnwzazu0XOuCWUtEKh8icIn323SdCLtqZtzjuU1mt6p2/13V93WWg=="
+      "linux_amd64_npm_integrity": "sha512-MrvUZ8Utg/kKpsIIRu7NrShw20CLbibw482lprMHwJtTLLJfoRqrq9n12eV4LFe7iTtD35GkA/q4pn4/zIpWzw=="
     },
     "unreal": {
       "release": "0.3.1",
@@ -39,41 +39,41 @@
         "tag": "v0.3.1",
         "commit": "55747f5f449c07cf76b3a0747370b5817aa52d5b",
         "source_archive_sha256": "5d734ef8129979a5238959320ba649840b49c69a1b4ebcb14b24863017f3ba93",
-        "binary_sha256": "056c3492d2eeec1ad21cb75728a85acbf01657447710da4176fc524c70ce8dd9",
-        "go": "1.27.3",
+        "binary_sha256": "8ca5bac4cafb48720ed2d251ac315192c7b4becf04c550c2bda10619874971c1",
+        "go": "1.27.4",
         "integration": "rebuilt from pinned upstream source for the Cube template payload; upstream release pins remain authoritative for install-agents.sh"
       }
     },
     "grpc": "1.85.0",
     "otel": "1.47.0",
     "dspy": "3.4.1",
-    "postgresql": "18.6",
-    "x_net": "0.62.0",
+    "postgresql": "18.7",
+    "x_net": "0.63.0",
     "envd": {
       "source_repo": "https://github.com/e2b-dev/infra",
       "tag": "2026.16",
       "commit": "b8ca332f435370397bf42be614b2a5b620d65d39",
       "source_archive_sha256": "0d8523b35f7bdee50668496f88411c0af75714653cd2e569c761259b95273b80",
-      "binary_sha256": "de39ec5aa736f47288644397b673efc34519bacbe2dc0a375867b5973c434fe1",
-      "go": "1.27.3",
+      "binary_sha256": "a90f5dc798a5138c927f03c85ba98babfbe33c28617e2519e37db247afc9ae06",
+      "go": "1.27.4",
       "integration": "rebuilt from pinned upstream source in the Cube template recipe; replaces the vulnerable vendor base payload"
     }
   },
   "toolchains": {
-    "go": "1.27.3",
-    "node": "26.13.0",
+    "go": "1.27.4",
+    "node": "26.13.1",
     "python_optional": "3.15.2",
-    "kubernetes_qualification": "1.37.2",
-    "helm_qualification": "4.3.1",
-    "uv": "0.13.7"
+    "kubernetes_qualification": "1.37.3",
+    "helm_qualification": "4.3.2",
+    "uv": "0.13.10"
   },
   "build_bases": {
-    "go": "docker.io/library/golang@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b",
-    "runtime": "gcr.io/distroless/static-debian13@sha256:448810357cc8e67b7208988abdba0f5ec3d3aebee0a5b13eb624979792cffc0f",
-    "python": "docker.io/library/python@sha256:4b777652b7ca0a1fae98a847e83e538605d0fb8de3812f3403076aca74368e74",
-    "node": "docker.io/library/node@sha256:e4db4c914bf8ad241bd24804fc25d272d89bad97e68cdc8a1414862790a02c39",
+    "go": "docker.io/library/golang@sha256:5f1b98fa02fe396ebce2a0227a0e08309e11792915b9dd2e1f71053d7e7e6666",
+    "runtime": "gcr.io/distroless/static-debian13@sha256:4c2cd1dee442c9a99924a378c7c126fac8fef14771579ef567c3f2bdd7a5122a",
+    "python": "docker.io/library/python@sha256:63bb298d2b7b88f176f51b5189f54ce6535c997682ea70885d2132f5d473a8a5",
+    "node": "docker.io/library/node@sha256:abe7e5a82b61a8ef67b315b85497c9e65173387ccf2f4a029248184b8e020be5",
     "cube": "ghcr.io/tencentcloud/cubesandbox-base@sha256:a1dd972a4eef85448f967daed3bda42c6be2b7f42bf64c1f4d38e63b3e935472",
-    "alpine": "docker.io/library/alpine@sha256:ff7f0c727dd796aa36787bfcd9a64bf35a6ce72a73451b3359fde849b6703d63"
+    "alpine": "docker.io/library/alpine@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf"
   },
   "images": {
     "factory": null,
@@ -84,7 +84,7 @@
     "postgresql": null
   },
   "templates": {
-    "recipe_sha256": "c4c9126761bb6c1c04f3d7f306c75fb341bafc24340d4b1578221397925799eb",
+    "recipe_sha256": "d5bb483d2dbb600c1c152a7f5de329a7cf88062bceec8b1b8d57b4545aafac30",
     "architecture": "linux/amd64",
     "git_package": null,
     "ca_certificates_package": null,
@@ -110,33 +110,33 @@
     "claude": {
       "type": "claude",
       "credential_mode": "cube_egress",
-      "tested_cli_version": "2.1.318",
+      "tested_cli_version": "2.1.332",
       "installation": "operator-provisioned standalone binary or complete runtime in a pinned Cube template",
       "qualification": "candidate; official archive digest verified; CLI startup verified in Cube; provider qualification pending",
-      "linux_amd64_binary_sha256": "708c77b204db30086ff6f1ed34577bda03e1be74ced80557cbf7b54249ebf0bd",
-      "archive_url": "https://github.com/anthropics/claude-code/releases/download/v2.1.318/claude-linux-x64.tar.gz",
-      "archive_sha256": "e6d426ca0c123f61fad58a361da0329f2a93cd206bc87040ed8d9576dd9eb583",
-      "sha256sums_sha256": "fdf91f973d12ef87258e9d4c0fa0189e33f2172dab66861349947452dc299b8e"
+      "linux_amd64_binary_sha256": "a2df1f41bb00250992926420d0063f89b127cb81abdd284dbefb80c50ff1d026",
+      "archive_url": "https://github.com/anthropics/claude-code/releases/download/v2.1.332/claude-linux-x64.tar.gz",
+      "archive_sha256": "cab5bc60de00f7238b7974d281db4c177385490744ee44b329f6509e1606ca3c",
+      "sha256sums_sha256": "1137efd10bed77d80eb17958f3942e80feabbb9ab1aa3f33e7d167aadbe87a5e"
     },
     "codex": {
       "type": "codex",
       "credential_mode": "cube_egress",
-      "tested_cli_version": "0.166.0",
+      "tested_cli_version": "0.172.0",
       "installation": "operator-provisioned standalone binary or complete runtime in a pinned Cube template",
       "qualification": "candidate; official archive digest verified; CLI startup verified in Cube; provider qualification pending",
-      "linux_amd64_binary_sha256": "b8a11fedf24b2dfb59a70c9e52b030f9a508dcd49cd2dd0d41956f4c785156b8",
-      "archive_url": "https://github.com/openai/codex/releases/download/rust-v0.166.0/codex-x86_64-unknown-linux-musl.tar.gz",
-      "archive_sha256": "a0bf572d2f93f056c6712a6da348e96078dc84f3885fd7be67807ef389cb3978"
+      "linux_amd64_binary_sha256": "ad83b94c093f0cdd8176a6bc8005a461bdf23a759863e157d40f562b8a9d664d",
+      "archive_url": "https://github.com/openai/codex/releases/download/rust-v0.172.0/codex-x86_64-unknown-linux-musl.tar.gz",
+      "archive_sha256": "a2342a8f7f68f088be30620ccfe9cb84162c93a6b56177855961cda3ed6be392"
     }
   },
   "service_images": {
     "temporal": "docker.io/temporalio/server@sha256:7bf69188a6232fea14869b9cef3d94aa82a1601d99517f7e86c71f22da4e0670",
     "temporal-admin": "docker.io/temporalio/admin-tools@sha256:4a95866efba29d7e17ab012df5232795e8b0ad0f7d5f9d1ec4df321f7792a754",
-    "temporal-ui": "docker.io/temporalio/ui@sha256:d36185e811d0ce1720b8d3ca4d9ac4dac504b67181e9b5e3d3ca72b2294f3590",
-    "postgresql": "docker.io/library/postgres@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5"
+    "temporal-ui": "docker.io/temporalio/ui@sha256:ac3c13eddb4547d830991bb5eee93a5d97140134522b7297fdb2be1fe25ef925",
+    "postgresql": "docker.io/library/postgres@sha256:0115267ab5a509022df9319c77be365cef335adb71556c75f60f5360ee247e71"
   },
   "security_tools": {
-    "govulncheck": "1.9.0",
+    "govulncheck": "1.10.0",
     "gitleaks": "8.30.1"
   }
 }

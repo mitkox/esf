@@ -1,0 +1,136 @@
+{
+  "all_exit_zero": true,
+  "binaries": [
+    {
+      "binary": "cmd_factory.test",
+      "duration": "26.885396ms",
+      "exit_code": 0,
+      "sha256": "e133a6a6fcc0672a894f0c8334841df884b56ca31d088b2161d3a353df196ae9"
+    },
+    {
+      "binary": "cmd_turn-executor.test",
+      "duration": "19.199223ms",
+      "exit_code": 0,
+      "sha256": "957cf0a92cc263951f5f4bd1b8d8635ab94ec08933672c635a66a661c96daf9b"
+    },
+    {
+      "binary": "internal_agentharness.test",
+      "duration": "16.595764ms",
+      "exit_code": 0,
+      "sha256": "7cbd14af59b9239fd7763cd90825dd4a7802ab48600551587c97ba857f3829f3"
+    },
+    {
+      "binary": "internal_console.test",
+      "duration": "189.327645ms",
+      "exit_code": 0,
+      "sha256": "bf7486a78b645e03ab0304ba7ddc809bf2c32e69244266594cf53af576679947"
+    },
+    {
+      "binary": "internal_factoryartifacts.test",
+      "duration": "89.404034ms",
+      "exit_code": 0,
+      "sha256": "864225d38cc37458b46023324d1e6d8db7849a2e8e17c496d6cde0fc9b563384"
+    },
+    {
+      "binary": "internal_factory.test",
+      "duration": "3.078667051s",
+      "exit_code": 0,
+      "sha256": "d270718754fca0844e685fff703052dee5b50fed55209697518ee7ff3c4a8b02"
+    },
+    {
+      "binary": "internal_httpsecurity.test",
+      "duration": "12.291237ms",
+      "exit_code": 0,
+      "sha256": "8b3e428e0c6e73428fc70e561d2d5bae208a06a1edd9b1ee568e160645556d60"
+    },
+    {
+      "binary": "internal_notify.test",
+      "duration": "138.69517ms",
+      "exit_code": 0,
+      "sha256": "95ab9c1b0d96e22af673d86832da9638ad76ac21ecdc885a80466d9d89a510f5"
+    },
+    {
+      "binary": "internal_repository.test",
+      "duration": "52.414335ms",
+      "exit_code": 0,
+      "sha256": "9535c6f4bc534481f3745a5d7920cd4a4f769616650993c691fee9e9c84b2333"
+    },
+    {
+      "binary": "internal_sandbox_cube.test",
+      "duration": "46.193344ms",
+      "exit_code": 0,
+      "sha256": "4590a62b425e550b9b0d1567fee5c9605b3fea46a5d4381cf8593fe06c401889"
+    },
+    {
+      "binary": "internal_sandbox.test",
+      "duration": "11.747491ms",
+      "exit_code": 0,
+      "sha256": "00ffc48b739a852e76c9881b265e9d0cce1cf145a3aee088af34d2b22592b4ec"
+    },
+    {
+      "binary": "internal_secretfile.test",
+      "duration": "11.861617ms",
+      "exit_code": 0,
+      "sha256": "dc64a2fdb6e5784355dcdd3f098583af909b8fd294a0e27a0423e1856ff8774a"
+    },
+    {
+      "binary": "internal_threatmon.test",
+      "duration": "18.537215ms",
+      "exit_code": 0,
+      "sha256": "0b793f2144b5ec8a49c43865f0e341ffdea91b9e14bfe875d6bb08efa1f667a6"
+    },
+    {
+      "binary": "internal_turnexec.test",
+      "duration": "1.489971076s",
+      "exit_code": 0,
+      "sha256": "a6802da8b33f0c10d2ec92bc49f61588bff54d31819ba9f02e387e0eeafe13dd"
+    },
+    {
+      "binary": "internal_verification.test",
+      "duration": "10.709896ms",
+      "exit_code": 0,
+      "sha256": "56e9552b2682cf0d4ac672e5603faa8da4048da4fecec2789f369f19f48d578f"
+    }
+  ],
+  "binary_count": 15,
+  "check_count": 2,
+  "checks": [
+    {
+      "check": [
+        "/workspace/python-runtime/bin/python3.12",
+        "scripts/verify-release-inventory.py"
+      ],
+      "duration": "168.921035ms",
+      "exit_code": 0
+    },
+    {
+      "check": [
+        "/workspace/python-runtime/bin/python3.12",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/tests",
+        "-p",
+        "test_*.py"
+      ],
+      "duration": "208.330828ms",
+      "exit_code": 0
+    }
+  ],
+  "cleanup_verified": true,
+  "completed_at": "2026-11-26T20:27:42.487021122Z",
+  "python_runtime_sha256": "d9acbacec955c54642e52b7c06bec2983f0687c59acb08815b59d01797808e18",
+  "remaining_owned": 0,
+  "sandbox_id": "a48a2195333f4267af7cac1fee241f31",
+  "scanner_sha256": "88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509",
+  "schema": "esf-cube-test/v1",
+  "secret_scan": {
+    "exit_code": 0,
+    "findings": 0
+  },
+  "source_commit": "e5567fbfb12e98996b52178bdb4fb1f66b39566d",
+  "source_sha256": "b947643c755bf0e1cc5607034bcd6cb28d038a951e7abd9b09fd504cc3a916da",
+  "started_at": "2026-11-26T20:27:34.45704258Z",
+  "template": "tpl-1f8854d780e7427da2d505c6"
+}

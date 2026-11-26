@@ -1,0 +1,264 @@
+{
+  "command": "FACTORY_AGENT=conformance ./scripts/factory-run-demo.sh",
+  "leak_check": "No live sandboxes after the suite; 0 remaining owned sandboxes (factory sandboxes and the demo leakage check)",
+  "runs": {
+    "final": {
+      "agent_exit_code": 0,
+      "agent_harness": "conformance",
+      "agent_result": "SUCCESS",
+      "baseline_sha": "0b6786564342e500441021d0b42eb3ee93efbf72",
+      "cleanup": {
+        "attempted": true,
+        "duration": 296318969,
+        "finished_at": "2026-11-26T20:29:10.055642796Z",
+        "outcome": "SUCCESS",
+        "remaining_sandboxes": 0,
+        "sandbox_id": "c84d784ea2fc47a08d075a7f32f766c8",
+        "verified": true
+      },
+      "completed_at": "2026-11-26T20:29:10.081914877Z",
+      "conditions": [
+        {
+          "last_transition_time": "2026-11-26T20:29:07.988288795Z",
+          "message": "scope=default",
+          "reason": "PolicyAccepted",
+          "status": "True",
+          "type": "Validated"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:29:08.737798761Z",
+          "message": "sandbox=c84d784ea2fc47a08d075a7f32f766c8 template=tpl-1f8854d780e7427da2d505c6",
+          "reason": "Created",
+          "status": "True",
+          "type": "SandboxReady"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:29:08.760884453Z",
+          "message": "workspace= digest=",
+          "reason": "Provisioned",
+          "status": "True",
+          "type": "WorkspacePrepared"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:29:09.017015381Z",
+          "message": "sha=0b6786564342e500441021d0b42eb3ee93efbf72",
+          "reason": "CheckedOut",
+          "status": "True",
+          "type": "RepositoryPrepared"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:29:09.063617196Z",
+          "message": "path=/workspace/.factory/inventory.json digest=sha256:1a343ec81b7ffafb54a634c98936e06b8b984e020bb8cc1a2fb4be0e3a846a7b",
+          "reason": "Published",
+          "status": "True",
+          "type": "InventoryWritten"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:29:09.192865986Z",
+          "message": "expect_deny=false internet=reachable metadata=unknown uid=0",
+          "reason": "ProbeInconclusive",
+          "status": "Unknown",
+          "type": "EgressVerified"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:29:09.354340864Z",
+          "reason": "NotBlocked",
+          "status": "False",
+          "type": "AgentBlocked"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:29:09.354340864Z",
+          "message": "attempt=1 duration=50.816503ms",
+          "reason": "ExitZero",
+          "status": "True",
+          "type": "AgentCompleted"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:29:09.747302579Z",
+          "message": "drift=false",
+          "reason": "PostVerification",
+          "status": "True",
+          "type": "ArtifactsCollected"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:29:09.498014996Z",
+          "message": "method=tree-hash gates=3",
+          "reason": "Unmodified",
+          "status": "True",
+          "type": "GateIntegrity"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:29:09.528580803Z",
+          "message": "no findings",
+          "reason": "Clean",
+          "status": "True",
+          "type": "BehaviorScanned"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:29:09.747302579Z",
+          "reason": "AllGatesPassed",
+          "status": "True",
+          "type": "Verified"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:29:09.747302579Z",
+          "reason": "WithinBudget",
+          "status": "False",
+          "type": "BudgetExceeded"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:29:10.081914877Z",
+          "message": "remaining=0",
+          "reason": "NoSandboxesRemain",
+          "status": "True",
+          "type": "CleanupVerified"
+        }
+      ],
+      "cube_version_if_available": "0.7.3",
+      "duration": 2129477726,
+      "egress_policy": "local-model",
+      "egress_summary": "internet=allowed",
+      "factory_result": "SUCCEEDED",
+      "factory_version": "1.0.0",
+      "run_id": "run-570f5265eca3742617d1313e",
+      "sandbox_id": "c84d784ea2fc47a08d075a7f32f766c8",
+      "sandbox_provider": "cubesandbox",
+      "sandbox_template": "tpl-1f8854d780e7427da2d505c6",
+      "scope": "default",
+      "started_at": "2026-11-26T20:29:07.952437151Z",
+      "verification_mutated_tree": false,
+      "verification_profile": "default",
+      "verification_result": "SUCCESS"
+    },
+    "pre_temporal_upgrade": {
+      "agent_exit_code": 0,
+      "agent_harness": "conformance",
+      "agent_result": "SUCCESS",
+      "baseline_sha": "5305a905e8ce4686b77c355c15f6d5268ecdaf8a",
+      "cleanup": {
+        "attempted": true,
+        "duration": 80745748,
+        "finished_at": "2026-11-26T20:27:55.147785695Z",
+        "outcome": "SUCCESS",
+        "remaining_sandboxes": 0,
+        "sandbox_id": "6634571be08a4708a1e7a4104bffe2d7",
+        "verified": true
+      },
+      "completed_at": "2026-11-26T20:27:55.177346877Z",
+      "conditions": [
+        {
+          "last_transition_time": "2026-11-26T20:27:53.279545942Z",
+          "message": "scope=default",
+          "reason": "PolicyAccepted",
+          "status": "True",
+          "type": "Validated"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:27:54.026321728Z",
+          "message": "sandbox=6634571be08a4708a1e7a4104bffe2d7 template=tpl-1f8854d780e7427da2d505c6",
+          "reason": "Created",
+          "status": "True",
+          "type": "SandboxReady"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:27:54.046436277Z",
+          "message": "workspace= digest=",
+          "reason": "Provisioned",
+          "status": "True",
+          "type": "WorkspacePrepared"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:27:54.309492028Z",
+          "message": "sha=5305a905e8ce4686b77c355c15f6d5268ecdaf8a",
+          "reason": "CheckedOut",
+          "status": "True",
+          "type": "RepositoryPrepared"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:27:54.358837626Z",
+          "message": "path=/workspace/.factory/inventory.json digest=sha256:f69e53b720a092094786a0862e093c913a5fb3e62b782f46566ba6e2b8e603f8",
+          "reason": "Published",
+          "status": "True",
+          "type": "InventoryWritten"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:27:54.496533062Z",
+          "message": "expect_deny=false internet=reachable metadata=unknown uid=0",
+          "reason": "ProbeInconclusive",
+          "status": "Unknown",
+          "type": "EgressVerified"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:27:54.640687116Z",
+          "reason": "NotBlocked",
+          "status": "False",
+          "type": "AgentBlocked"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:27:54.640687116Z",
+          "message": "attempt=1 duration=45.400099ms",
+          "reason": "ExitZero",
+          "status": "True",
+          "type": "AgentCompleted"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:27:55.056507386Z",
+          "message": "drift=false",
+          "reason": "PostVerification",
+          "status": "True",
+          "type": "ArtifactsCollected"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:27:54.79119481Z",
+          "message": "method=tree-hash gates=3",
+          "reason": "Unmodified",
+          "status": "True",
+          "type": "GateIntegrity"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:27:54.820528022Z",
+          "message": "no findings",
+          "reason": "Clean",
+          "status": "True",
+          "type": "BehaviorScanned"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:27:55.056507386Z",
+          "reason": "AllGatesPassed",
+          "status": "True",
+          "type": "Verified"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:27:55.056507386Z",
+          "reason": "WithinBudget",
+          "status": "False",
+          "type": "BudgetExceeded"
+        },
+        {
+          "last_transition_time": "2026-11-26T20:27:55.177346877Z",
+          "message": "remaining=0",
+          "reason": "NoSandboxesRemain",
+          "status": "True",
+          "type": "CleanupVerified"
+        }
+      ],
+      "cube_version_if_available": "0.7.3",
+      "duration": 1926724074,
+      "egress_policy": "local-model",
+      "egress_summary": "internet=allowed",
+      "factory_result": "SUCCEEDED",
+      "factory_version": "1.0.0",
+      "run_id": "run-47e74746b23a150a2e99ccb6",
+      "sandbox_id": "6634571be08a4708a1e7a4104bffe2d7",
+      "sandbox_provider": "cubesandbox",
+      "sandbox_template": "tpl-1f8854d780e7427da2d505c6",
+      "scope": "default",
+      "started_at": "2026-11-26T20:27:53.250622803Z",
+      "verification_mutated_tree": false,
+      "verification_profile": "default",
+      "verification_result": "SUCCESS"
+    }
+  },
+  "schema": "esf-acceptance/v1",
+  "verdict": "PHASE 1 ACCEPTANCE TEST: PASSED"
+}

@@ -1,0 +1,75 @@
+{
+  "built_at": "2026-11-26T20:42:45Z",
+  "images": {
+    "native_cli_overlay": {
+      "digest": "sha256:d873387e5c6da4266a2584a3346fc96d070e4cfd46fb47201651ab7e03abc399",
+      "note": "operator overlay adding digest-verified Claude Code 2.1.332 and Codex 0.172.0 for local acceptance",
+      "reference": "127.0.0.1:32001/esf-native-pi:rc2b-native-20261126"
+    },
+    "pi_enabled": {
+      "digest": "sha256:d2f4e4589b156bb49a48bd49133998704b1fedf6be06a01e22126341bdd54005",
+      "reference": "127.0.0.1:32001/esf-native-pi:rc2b-20261126"
+    }
+  },
+  "payload_sha256": {
+    "claude": "a2df1f41bb00250992926420d0063f89b127cb81abdd284dbefb80c50ff1d026",
+    "codex": "ad83b94c093f0cdd8176a6bc8005a461bdf23a759863e157d40f562b8a9d664d",
+    "envd": "a90f5dc798a5138c927f03c85ba98babfbe33c28617e2519e37db247afc9ae06",
+    "node": "d931c649850ffa7155b8ceffb400dc916ef325866e509cc52ae36e33e8fbb9a9",
+    "opencode2": "523b1502d1d556998b0904235cef65eb1d8cf8362b4e2faa7ae7a170c9a44cd4",
+    "pi_runner": "2e19e629f068b27ab46240e4ffe5f7de8fe026217fa1b5445f85f4bd290abefb",
+    "unreal_agent_runner": "8ca5bac4cafb48720ed2d251ac315192c7b4becf04c550c2bda10619874971c1"
+  },
+  "pi_recipe_sha256": "e9b8f7537884ffe6aa1891a564946b664fe00074e5dda194fe69640f161ee8ce",
+  "recipe_sha256": "d5bb483d2dbb600c1c152a7f5de329a7cf88062bceec8b1b8d57b4545aafac30",
+  "repo_rebuilds": {
+    "envd": {
+      "reproducible": "two --no-cache rebuilds produced identical digests",
+      "security_patch": "golang.org/x/crypto v0.55.0 + x/mod v0.38.0 + x/net v0.57.0 + x/sync v0.22.0 + x/text v0.41.0 + x/tools v0.48.0",
+      "source": "github.com/e2b-dev/infra 2026.16 b8ca332f",
+      "toolchain": "go1.27.4"
+    },
+    "unreal": {
+      "reproducible": "two --no-cache rebuilds produced identical digests",
+      "source": "github.com/unreallabsai/unreal-agent v0.3.1 55747f5f",
+      "toolchain": "go1.27.4"
+    }
+  },
+  "schema": "esf-template-build/v1",
+  "templates": {
+    "final": {
+      "alias": "esf-rc2b-native-20261126",
+      "artifact_id": "rfs-1a7b3ea1b1b13f2140e68e1a-e1407cda",
+      "dns": "1.1.1.1",
+      "exposed_ports": [
+        49999,
+        49983
+      ],
+      "image": "127.0.0.1:32001/esf-native-pi@sha256:d873387e5c6da4266a2584a3346fc96d070e4cfd46fb47201651ab7e03abc399",
+      "inject_envd": false,
+      "job_id": "90b7896d-6c07-42a2-8d1d-3eda419d3565",
+      "probe_port": 49983,
+      "status": "READY",
+      "template_id": "tpl-1f8854d780e7427da2d505c6"
+    },
+    "superseded": [
+      {
+        "alias": "esf-rc2-native-20261126",
+        "reason": "pre-security-patch envd/apt",
+        "template_id": "tpl-79bb339a34804cc5a936ae0d"
+      },
+      {
+        "alias": "esf-rc2-native-20261126",
+        "reason": "native overlay on the pre-patch base",
+        "template_id": "tpl-3a9f7a5a161942cdb408d29b"
+      }
+    ]
+  },
+  "ubuntu_security_pins": [
+    "openssl=3.0.2-0ubuntu1.30",
+    "libssl3=3.0.2-0ubuntu1.30",
+    "libbrotli1=1.0.9-2ubuntu0.1",
+    "apt=2.4.15ubuntu0.1",
+    "libapt-pkg6.0=2.4.15ubuntu0.1"
+  ]
+}

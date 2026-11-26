@@ -39,7 +39,7 @@ body:
     attributes:
       label: Environment
       description: Include the operating system and relevant Go, Git, and agent CLI versions.
-      placeholder: Ubuntu 24.04, Go 1.27.3, Git 2.x, Codex 0.x
+      placeholder: Ubuntu 24.04, Go 1.27.4, Git 2.x, Codex 0.x
     validations:
       required: true
   - type: textarea
