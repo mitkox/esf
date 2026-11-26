@@ -202,6 +202,18 @@ Two findings were accepted without change:
   able to relax the digest gate. The recipe keeps literals; drift is caught by
   `scripts/verify-release-inventory.py` and the payload digest pin.
 
+## Publication
+
+- Candidate commit: `4c725c68` on `release/v1.0.0-rc.2` (130 files).
+- Pull request: [#75](https://github.com/mitkox/esf/pull/75), CI run
+  `45893242135` — Go, frontend, Pi runner, Python, macOS and the aggregate check
+  all passed.
+- Merged to `master` as `35f8dc8a`.
+- Not performed: the `v1.0.0-rc.2` tag and the tag-triggered Release workflow.
+  That workflow publishes archives, images and attestations, which is a separate
+  authorisation; `git tag v1.0.0-rc.2 \&\& git push origin v1.0.0-rc.2` starts it when
+  an operator decides to publish.
+
 ## Remaining qualification
 
 Model-backed acceptance for the refreshed Claude, Codex, OpenCode and Pi clients;
